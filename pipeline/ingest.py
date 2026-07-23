@@ -4,7 +4,7 @@ import hashlib
 import chromadb
 import ollama
 
-from chunk import chunk_markdown
+from chunker import chunk_markdown
 
 
 CANON_ROOT = Path("canon")
@@ -99,12 +99,13 @@ def ingest_file(collection, path: Path):
         text = chunk["text"]
 
         metadata = {
-            "source": relative,
-            "filename": path.name,
-            "document_type": document_type(path),
-            "chunk_index": index,
-            "file_hash": digest,
-        }
+    "source": relative,
+    "filename": path.name,
+    "document_type": document_type(path),
+    "chunk_index": index,
+    "scene_index": chunk["scene_index"],
+    "file_hash": digest,
+}
 
         if chunk["heading"]:
             metadata["heading"] = chunk["heading"]
