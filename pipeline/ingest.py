@@ -4,7 +4,7 @@ import hashlib
 import chromadb
 import ollama
 
-from chunker import chunk_markdown
+from pipeline.chunker import chunk_markdown
 
 
 CANON_ROOT = Path("canon")
@@ -25,7 +25,9 @@ def embed(text: str):
 
 
 def file_hash(path: Path):
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    return hashlib.sha256(
+        path.read_bytes()
+    ).hexdigest()
 
 
 def chunk_id(relative_path: str, index: int, text: str):
@@ -74,10 +76,16 @@ def indexed_sources(collection):
 
 
 def ingest_file(collection, path: Path):
-    relative = str(path.relative_to(CANON_ROOT))
+    relative = str(
+        path.relative_to(CANON_ROOT)
+    )
+
     digest = file_hash(path)
 
-    old_hash = existing_hash(collection, relative)
+    old_hash = existing_hash(
+        collection,
+        relative,
+    )
 
     if old_hash == digest:
         print(f"SKIP     {relative}")
@@ -90,30 +98,58 @@ def ingest_file(collection, path: Path):
 
     chunks = chunk_markdown(path)
 
-    # Remove stale chunks from previous version.
+    # Remove stale chunks belonging to the
+    # previous version of this document.
     collection.delete(
         where={"source": relative}
     )
 
     for index, chunk in enumerate(chunks):
+
         text = chunk["text"]
 
         metadata = {
-    "source": relative,
-    "filename": path.name,
-    "document_type": document_type(path),
-    "chunk_index": index,
-    "scene_index": chunk["scene_index"],
-    "file_hash": digest,
-}
+            "source": relative,
+            "filename": path.name,
+            "document_type": document_type(path),
+            "chunk_index": index,
+            "scene_index": chunk["scene_index"],
+            "file_hash": digest,
+        }
 
+        # Copy document frontmatter into Chroma metadata.
+        #
+        # Example:
+        #
+        # chapter: 1
+        #
+        # becomes:
+        #
+        # doc_chapter: "1"
+        #
+        frontmatter = chunk.get(
+            "frontmatter",
+            {}
+        )
+
+        for key, value in frontmatter.items():
+            if value is not None:
+                metadata[f"doc_{key}"] = str(value)
+
+        # Preserve the nearest Markdown heading.
         if chunk["heading"]:
             metadata["heading"] = chunk["heading"]
 
         vector = embed(text)
 
         collection.upsert(
-            ids=[chunk_id(relative, index, text)],
+            ids=[
+                chunk_id(
+                    relative,
+                    index,
+                    text,
+                )
+            ],
             documents=[text],
             embeddings=[vector],
             metadatas=[metadata],
@@ -124,12 +160,20 @@ def ingest_file(collection, path: Path):
     return len(chunks), "indexed"
 
 
-def remove_deleted_files(collection, disk_sources):
-    stored_sources = indexed_sources(collection)
+def remove_deleted_files(
+    collection,
+    disk_sources,
+):
+    stored_sources = indexed_sources(
+        collection
+    )
 
-    deleted = stored_sources - disk_sources
+    deleted = (
+        stored_sources - disk_sources
+    )
 
     for source in sorted(deleted):
+
         print(f"DELETE   {source}")
 
         collection.delete(
@@ -140,6 +184,7 @@ def remove_deleted_files(collection, disk_sources):
 
 
 def main():
+
     client = chromadb.HttpClient(
         host=CHROMA_HOST,
         port=CHROMA_PORT,
@@ -149,7 +194,9 @@ def main():
         name=COLLECTION_NAME
     )
 
-    files = sorted(CANON_ROOT.rglob("*.md"))
+    files = sorted(
+        CANON_ROOT.rglob("*.md")
+    )
 
     disk_sources = {
         str(path.relative_to(CANON_ROOT))
@@ -157,13 +204,16 @@ def main():
     }
 
     print("\n=== STARFUR INGESTION ===\n")
-    print(f"Found {len(files)} Markdown files.\n")
+    print(
+        f"Found {len(files)} Markdown files.\n"
+    )
 
     indexed = 0
     unchanged = 0
     generated_chunks = 0
 
     for path in files:
+
         chunks, status = ingest_file(
             collection,
             path,
@@ -171,6 +221,7 @@ def main():
 
         if status == "unchanged":
             unchanged += 1
+
         else:
             indexed += 1
             generated_chunks += chunks
@@ -181,12 +232,24 @@ def main():
     )
 
     print("\n=== COMPLETE ===")
-    print(f"Documents found:   {len(files)}")
-    print(f"Indexed/updated:   {indexed}")
-    print(f"Unchanged/skipped: {unchanged}")
-    print(f"Deleted:           {deleted}")
-    print(f"Chunks embedded:   {generated_chunks}")
-    print(f"Collection size:   {collection.count()}")
+    print(
+        f"Documents found:   {len(files)}"
+    )
+    print(
+        f"Indexed/updated:   {indexed}"
+    )
+    print(
+        f"Unchanged/skipped: {unchanged}"
+    )
+    print(
+        f"Deleted:           {deleted}"
+    )
+    print(
+        f"Chunks embedded:   {generated_chunks}"
+    )
+    print(
+        f"Collection size:   {collection.count()}"
+    )
 
 
 if __name__ == "__main__":
