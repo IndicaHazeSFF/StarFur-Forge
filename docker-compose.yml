@@ -10,5 +10,15 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: chromadb
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma-data:/data
+
 volumes:
   open-webui-data:
+  chroma-data:
