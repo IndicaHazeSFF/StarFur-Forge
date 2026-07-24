@@ -273,3 +273,66 @@ def database_stats():
             stats[table] = count
 
     return stats
+def clear_source_appearances(source):
+    """
+    Remove source-derived appearance records for one document.
+
+    Confirmed entities themselves are never removed.
+    """
+    with connect() as connection:
+        cursor = connection.execute(
+            """
+            DELETE FROM appearances
+            WHERE source = ?
+            """,
+            (source,),
+        )
+
+        connection.commit()
+
+        return cursor.rowcount
+
+
+def clear_pending_source_proposals(source):
+    """
+    Remove unresolved proposals generated from an older
+    version of a source document.
+
+    Approved and rejected proposals are preserved as
+    human-review history.
+    """
+    with connect() as connection:
+        cursor = connection.execute(
+            """
+            DELETE FROM proposals
+            WHERE source = ?
+              AND status = 'pending'
+            """,
+            (source,),
+        )
+
+        connection.commit()
+
+        return cursor.rowcount
+
+
+def clear_source_derived_memory(source):
+    """
+    Clear rebuildable structured memory associated with
+    a source before that source is re-analyzed.
+
+    This function should grow as StarFur gains additional
+    source-derived memory types.
+    """
+    appearances = clear_source_appearances(
+        source
+    )
+
+    proposals = clear_pending_source_proposals(
+        source
+    )
+
+    return {
+        "appearances": appearances,
+        "pending_proposals": proposals,
+    }

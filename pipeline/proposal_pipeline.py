@@ -1,9 +1,10 @@
 from pathlib import Path
-
+from pipeline.paths import canonical_source
 from pipeline.chunker import chunk_markdown
 from pipeline.annotator import annotate
 from pipeline.db import (
     add_appearance,
+    clear_source_derived_memory,
     create_proposal,
     get_entity_by_name,
     get_pending_proposals,
@@ -37,7 +38,29 @@ def proposal_exists(
 def analyze_document(path: Path):
     chunks = chunk_markdown(path)
 
-    source = str(path)
+    source = canonical_source(path)
+    
+    cleanup = clear_source_derived_memory(
+        source
+    )
+
+    if (
+        cleanup["appearances"]
+        or cleanup["pending_proposals"]
+    ):
+        print(
+            "\nCleared stale source memory:"
+        )
+
+        print(
+            f"  Appearances: "
+            f"{cleanup['appearances']}"
+        )
+
+        print(
+            f"  Pending proposals: "
+            f"{cleanup['pending_proposals']}"
+        )
 
     print("\n=== STARFUR LORE ANALYSIS ===")
     print(f"Source: {source}")
