@@ -249,3 +249,29 @@ SQLite and Chroma should ultimately be rebuildable from:
     canon/
 
 plus StarFur source/configuration.
+
+## Sync
+
+Synchronize StarFur's canon, semantic memory, and structured memory:
+
+    python starfur.py sync
+
+Sync automatically skips unchanged manuscript files and embeddings.
+
+
+## RAG Testing
+
+Start the interactive StarFur canon RAG:
+
+    python -m pipeline.rag
+
+
+## Performance Testing
+
+Time an annotation test:
+
+    time python -m pipeline.inspect_annotations
+
+Planned: automatic performance logging and:
+
+    python starfur.py perf
