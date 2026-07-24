@@ -5,7 +5,7 @@ from pipeline.chunker import chunk_markdown
 from pipeline.annotator import annotate
 
 
-SOURCE = Path("canon/manuscript/entity-test.md")
+SOURCE = Path("canon/manuscript/chapter-prologue.md")
 
 
 def main():
