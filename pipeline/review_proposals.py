@@ -5,6 +5,8 @@ from pipeline.db import (
     get_pending_proposals,
 )
 
+from pipeline.canon_writer import create_entity_file
+
 
 def mark_proposal(proposal_id, status):
     with connect() as connection:
@@ -22,6 +24,7 @@ def mark_proposal(proposal_id, status):
 
 def approve_proposal(proposal):
     name = proposal["proposed_name"]
+
     entity_type = (
         proposal["proposed_entity_type"]
         or "unknown"
@@ -36,6 +39,21 @@ def approve_proposal(proposal):
             f"({existing['entity_type']})."
         )
 
+        result = create_entity_file(
+            canonical_name=existing["canonical_name"],
+            entity_type=existing["entity_type"],
+            description=existing["description"],
+        )
+
+        if result["created"]:
+            print(
+                f"CANON FILE: {result['path']}"
+            )
+        else:
+            print(
+                f"CANON FILE EXISTS: {result['path']}"
+            )
+
         mark_proposal(
             proposal["id"],
             "approved",
@@ -49,6 +67,29 @@ def approve_proposal(proposal):
         description=proposal["description"],
     )
 
+    try:
+        result = create_entity_file(
+            canonical_name=name,
+            entity_type=entity_type,
+            description=proposal["description"],
+        )
+
+    except Exception:
+        # Don't leave SQLite thinking the entity was
+        # successfully confirmed if canon persistence failed.
+        with connect() as connection:
+            connection.execute(
+                """
+                DELETE FROM entities
+                WHERE id = ?
+                """,
+                (entity_id,),
+            )
+
+            connection.commit()
+
+        raise
+
     mark_proposal(
         proposal["id"],
         "approved",
@@ -60,6 +101,14 @@ def approve_proposal(proposal):
         f" -> entity #{entity_id}"
     )
 
+    if result["created"]:
+        print(
+            f"CANON FILE: {result['path']}"
+        )
+    else:
+        print(
+            f"CANON FILE EXISTS: {result['path']}"
+        )
 
 def edit_proposal(proposal):
     print("\nLeave blank to keep current value.\n")

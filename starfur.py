@@ -1,12 +1,16 @@
 from pathlib import Path
 import argparse
 
+from pipeline.sync import run_sync
+
 from pipeline.db import (
     connect,
     database_stats,
     get_entity_by_name,
+    get_entities,
 )
 from pipeline.proposal_pipeline import analyze_document
+from pipeline.canon_writer import export_entities
 
 
 def show_status():
@@ -168,6 +172,40 @@ def show_entity(name):
         print("  None recorded")
 
 
+def export_canon():
+    entities = get_entities()
+
+    if not entities:
+        print("\nNo confirmed entities to export.")
+        return
+
+    print("\n=== STARFUR CANON EXPORT ===\n")
+
+    created = 0
+    existing = 0
+
+    for result in export_entities(entities):
+
+        if result["created"]:
+            print(
+                f"CREATE   {result['name']} "
+                f"-> {result['path']}"
+            )
+            created += 1
+
+        else:
+            print(
+                f"EXISTS   {result['name']} "
+                f"-> {result['path']}"
+            )
+            existing += 1
+
+    print("\n=== EXPORT COMPLETE ===")
+    print(f"Created:  {created}")
+    print(f"Existing: {existing}")
+    print(f"Total:    {len(entities)}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="StarFur Forge"
@@ -177,10 +215,18 @@ def main():
         dest="command"
     )
 
+    # -------------------------
+    # STATUS
+    # -------------------------
+
     subparsers.add_parser(
         "status",
         help="Show StarFur memory status",
     )
+
+    # -------------------------
+    # ANALYZE
+    # -------------------------
 
     analyze_parser = subparsers.add_parser(
         "analyze",
@@ -192,6 +238,10 @@ def main():
         help="Path to Markdown document",
     )
 
+    # -------------------------
+    # ENTITY
+    # -------------------------
+
     entity_parser = subparsers.add_parser(
         "entity",
         help="Show a canon entity",
@@ -201,6 +251,19 @@ def main():
         "name",
         help="Canonical name or alias",
     )
+
+    # -------------------------
+    # EXPORT
+    # -------------------------
+
+    subparsers.add_parser(
+        "sync",
+        help="Synchronize canon with StarFur memory",
+)
+
+    # -------------------------
+    # DISPATCH
+    # -------------------------
 
     args = parser.parse_args()
 
@@ -212,6 +275,12 @@ def main():
 
     elif args.command == "entity":
         show_entity(args.name)
+
+    elif args.command == "export":
+        export_canon()
+        
+    elif args.command == "sync":
+        run_sync()
 
     else:
         parser.print_help()
