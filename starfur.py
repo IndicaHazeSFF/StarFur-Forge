@@ -2,7 +2,7 @@ from pathlib import Path
 import argparse
 
 from pipeline.sync import run_sync
-
+from pipeline.rag import ask_starfur
 from pipeline.db import (
     connect,
     database_stats,
@@ -301,7 +301,21 @@ def main():
         "name",
         help="Canonical name or alias",
     )
+    # -------------------------
+    # ASK
+    # -------------------------
 
+    ask_parser = subparsers.add_parser(
+        "ask",
+        help="Ask StarFur a canon question",
+    )
+
+    ask_parser.add_argument(
+        "question",
+        nargs="?",
+        help="Question to ask about canon",
+    )
+    
     # -------------------------
     # EXPORT
     # -------------------------
@@ -312,7 +326,7 @@ def main():
     subparsers.add_parser(
         "sync",
         help="Synchronize canon with StarFur memory",
-)
+    )
 
     # -------------------------
     # DISPATCH
@@ -328,7 +342,15 @@ def main():
 
     elif args.command == "entity":
         show_entity(args.name)
+        
+    elif args.command == "ask":
+        question = args.question
 
+    if not question:
+        question = input("Ask StarFur: ")
+
+        ask_starfur(question)
+        
     elif args.command == "export":
         export_canon()
         

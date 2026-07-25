@@ -5,7 +5,10 @@ import subprocess
 import sys
 
 from pipeline.canon_writer import export_entities
-from pipeline.db import get_entities
+from pipeline.db import (
+    get_all_entity_facts,
+    get_entities,
+)
 from pipeline.proposal_pipeline import analyze_document
 
 
@@ -17,7 +20,7 @@ DATA_ROOT = PROJECT_ROOT / "data"
 MANIFEST_PATH = DATA_ROOT / "sync_manifest.json"
 
 SYNC_VERSION = 1
-ANNOTATOR_VERSION = 2
+ANNOTATOR_VERSION = 3
 CHUNKER_VERSION = 2
 
 
@@ -176,34 +179,50 @@ def run_ingestion():
 
 def export_canon():
     """
-    Ensure every confirmed entity has a Markdown file.
+    Synchronize confirmed entities and structured facts
+    into canonical Markdown files.
     """
     print("\n=== CANON EXPORT ===\n")
 
     entities = get_entities()
+    facts_by_entity = get_all_entity_facts()
 
     created = 0
-    existing = 0
+    updated = 0
+    unchanged = 0
 
-    for result in export_entities(entities):
+    results = export_entities(
+        entities,
+        facts_by_entity=facts_by_entity,
+    )
 
-        if result["created"]:
+    for result in results:
+
+        if result["action"] == "created":
             print(
-                f"CREATE   {result['name']} "
+                f"CREATE     {result['name']} "
                 f"-> {result['path']}"
             )
             created += 1
 
+        elif result["action"] == "updated":
+            print(
+                f"UPDATE     {result['name']} "
+                f"-> {result['path']}"
+            )
+            updated += 1
+
         else:
-            existing += 1
+            print(
+                f"UNCHANGED  {result['name']} "
+                f"-> {result['path']}"
+            )
+            unchanged += 1
 
-    print(
-        f"\nCanon files created: {created}"
-    )
-    print(
-        f"Canon files existing: {existing}"
-    )
-
+    print("\nCanon export:")
+    print(f"Created:   {created}")
+    print(f"Updated:   {updated}")
+    print(f"Unchanged: {unchanged}")
 
 def run_sync():
     print("\n" + "=" * 70)
@@ -237,11 +256,6 @@ def run_sync():
             "forcing manuscript re-analysis."
         )
 
-    # ---------------------------------
-    # CHROMA
-    # ---------------------------------
-
-    run_ingestion()
 
     # ---------------------------------
     # STRUCTURED LORE ANALYSIS
@@ -284,7 +298,13 @@ def run_sync():
     # ---------------------------------
 
     export_canon()
+    
+    # ---------------------------------
+    # SEMANTIC MEMORY
+    # ---------------------------------
 
+    run_ingestion()
+    
     # ---------------------------------
     # UPDATE MANIFEST
     # ---------------------------------
