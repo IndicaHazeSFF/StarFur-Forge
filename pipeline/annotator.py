@@ -1,6 +1,7 @@
 import json
 import ollama
-
+import time
+from pipeline.perf import record_llm_performance
 from pipeline.db import get_entities
 
 
@@ -349,6 +350,8 @@ Prefer correct classification over extracting more items.
 
 
 def annotate(text: str):
+    started = time.perf_counter()
+
     response = ollama.chat(
         model=ANNOTATION_MODEL,
         messages=[
@@ -365,6 +368,16 @@ def annotate(text: str):
         options={
             "temperature": 0,
         },
+    )
+
+    wall_seconds = time.perf_counter() - started
+
+    record_llm_performance(
+        operation="annotation",
+        response=response,
+        wall_seconds=wall_seconds,
+        model=ANNOTATION_MODEL,
+        input_chars=len(text),
     )
 
     raw = response["message"]["content"]
