@@ -346,8 +346,8 @@ def main():
     elif args.command == "ask":
         question = args.question
 
-    if not question:
-        question = input("Ask StarFur: ")
+        if not question:
+            question = input("Ask StarFur: ")
 
         ask_starfur(question)
         
