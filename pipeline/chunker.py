@@ -157,11 +157,28 @@ def chunk_scene(
     for unit in units:
 
         if unit.startswith("#"):
-            current_heading = (
-                unit
-                .lstrip("#")
-                .strip()
-            )
+
+            # Finish the previous chunk so the heading
+            # stays attached to the section it introduces.
+            if current:
+                chunks.append(
+                    {
+                        "text": "\n\n".join(current),
+                        "heading": current_heading,
+                        "scene_index": scene_index,
+                    }
+                )
+        current = []
+        if overlap_paragraphs > 0:
+            current = current[-overlap_paragraphs:]
+        else:
+            current = []
+    
+        current_heading = (
+            unit
+            .lstrip("#")
+            .strip()
+        )
 
         candidate = "\n\n".join(
             current + [unit]
