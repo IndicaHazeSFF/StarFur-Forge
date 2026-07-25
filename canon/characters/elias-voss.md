@@ -14,7 +14,11 @@ Anthropomorphic white-furred character appearing in the Prologue.
 
 ## Canon Facts
 
-_No structured facts recorded yet._
+<!-- STARFUR:FACTS:START -->
+- Elias Voss has bright, luminescent white fur that softens ambient light rather than reflecting it.
+- Elias Voss has nearly pupil-less dark eyes that absorb more than they reveal.
+- Elias's white fur interacts with altered illumination, creating an electric halo effect.
+<!-- STARFUR:FACTS:END -->
 
 ## Relationships
 

@@ -14,7 +14,9 @@ A named individual introduced in a non- incidental context
 
 ## Canon Facts
 
+<!-- STARFUR:FACTS:START -->
 _No structured facts recorded yet._
+<!-- STARFUR:FACTS:END -->
 
 ## Relationships
 

@@ -8,6 +8,7 @@ from pipeline.db import (
     database_stats,
     get_entity_by_name,
     get_entities,
+    get_all_entity_facts,
 )
 from pipeline.proposal_pipeline import analyze_document
 from pipeline.canon_writer import export_entities
@@ -26,7 +27,7 @@ def show_status():
     print(f"Relationships: {stats['relationships']}")
     print(f"Events:        {stats['events']}")
     print(f"Proposals:     {stats['proposals']}")
-
+    print(f"Facts:         {stats['entity_facts']}")
 
 def analyze(path_string):
     path = Path(path_string)
@@ -58,7 +59,21 @@ def show_entity(name):
             """,
             (entity_id,),
         ).fetchall()
-
+        facts = connection.execute(
+            """
+            SELECT
+                fact,
+                evidence,
+                source,
+                scene_index,
+                chunk_index,
+                status
+            FROM entity_facts
+            WHERE entity_id = ?
+            ORDER BY source, scene_index, chunk_index, id
+            """,
+            (entity_id,),
+        ).fetchall()
         appearances = connection.execute(
             """
             SELECT
@@ -123,7 +138,28 @@ def show_entity(name):
             print(f"  - {alias['alias']}")
     else:
         print("  None")
+    print("\nFacts:")
 
+    if facts:
+        for fact in facts:
+            print(
+                f"  - {fact['fact']}"
+            )
+
+            print(
+                f"    Source: {fact['source']} "
+                f"| scene {fact['scene_index']} "
+                f"| chunk {fact['chunk_index']} "
+                f"| {fact['status']}"
+            )
+
+            if fact["evidence"]:
+                print(
+                    f"    Evidence: "
+                    f"{fact['evidence']}"
+                )
+    else:
+        print("  None recorded")
     print("\nAppearances:")
 
     if appearances:
@@ -179,33 +215,47 @@ def export_canon():
         print("\nNo confirmed entities to export.")
         return
 
+    facts_by_entity = get_all_entity_facts()
+
     print("\n=== STARFUR CANON EXPORT ===\n")
 
     created = 0
-    existing = 0
+    updated = 0
+    unchanged = 0
 
-    for result in export_entities(entities):
+    results = export_entities(
+        entities,
+        facts_by_entity=facts_by_entity,
+    )
 
-        if result["created"]:
+    for result in results:
+
+        if result["action"] == "created":
             print(
-                f"CREATE   {result['name']} "
+                f"CREATE     {result['name']} "
                 f"-> {result['path']}"
             )
             created += 1
 
-        else:
+        elif result["action"] == "updated":
             print(
-                f"EXISTS   {result['name']} "
+                f"UPDATE     {result['name']} "
                 f"-> {result['path']}"
             )
-            existing += 1
+            updated += 1
+
+        else:
+            print(
+                f"UNCHANGED  {result['name']} "
+                f"-> {result['path']}"
+            )
+            unchanged += 1
 
     print("\n=== EXPORT COMPLETE ===")
-    print(f"Created:  {created}")
-    print(f"Existing: {existing}")
-    print(f"Total:    {len(entities)}")
-
-
+    print(f"Created:   {created}")
+    print(f"Updated:   {updated}")
+    print(f"Unchanged: {unchanged}")
+    print(f"Total:     {len(entities)}")
 def main():
     parser = argparse.ArgumentParser(
         description="StarFur Forge"
@@ -255,7 +305,10 @@ def main():
     # -------------------------
     # EXPORT
     # -------------------------
-
+    subparsers.add_parser(
+        "export",
+        help="Export structured memory to canon Markdown",
+    )
     subparsers.add_parser(
         "sync",
         help="Synchronize canon with StarFur memory",

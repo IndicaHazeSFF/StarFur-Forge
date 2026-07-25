@@ -257,6 +257,7 @@ def database_stats():
             "entities",
             "aliases",
             "appearances",
+            "entity_facts",
             "relationships",
             "events",
             "proposals",
@@ -314,6 +315,26 @@ def clear_pending_source_proposals(source):
         connection.commit()
 
         return cursor.rowcount
+        
+def clear_source_entity_facts(source):
+    """
+    Delete rebuildable extracted entity facts associated
+    with a source.
+
+    Confirmed facts are preserved.
+    """
+
+    with connect() as conn:
+        cursor = conn.execute(
+            """
+            DELETE FROM entity_facts
+            WHERE source = ?
+              AND status = 'extracted'
+            """,
+            (source,),
+        )
+
+        return cursor.rowcount
 
 
 def clear_source_derived_memory(source):
@@ -321,9 +342,9 @@ def clear_source_derived_memory(source):
     Clear rebuildable structured memory associated with
     a source before that source is re-analyzed.
 
-    This function should grow as StarFur gains additional
-    source-derived memory types.
+    Confirmed memory is preserved.
     """
+
     appearances = clear_source_appearances(
         source
     )
@@ -332,7 +353,114 @@ def clear_source_derived_memory(source):
         source
     )
 
+    entity_facts = clear_source_entity_facts(
+        source
+    )
+
     return {
         "appearances": appearances,
         "pending_proposals": proposals,
+        "entity_facts": entity_facts,
     }
+def add_entity_fact(
+    entity_id,
+    fact,
+    evidence,
+    source,
+    scene_index=None,
+    chunk_index=None,
+    status="extracted",
+):
+    """
+    Record a source-derived fact about an entity.
+
+    Duplicate facts from the same source/chunk are ignored.
+    """
+
+    with connect() as conn:
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO entity_facts (
+                entity_id,
+                fact,
+                evidence,
+                source,
+                scene_index,
+                chunk_index,
+                status
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                entity_id,
+                fact,
+                evidence,
+                source,
+                scene_index,
+                chunk_index,
+                status,
+            ),
+        )
+def get_entity_facts(entity_id):
+    """
+    Return all recorded facts for an entity.
+    """
+
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                id,
+                fact,
+                evidence,
+                source,
+                scene_index,
+                chunk_index,
+                status,
+                created_at,
+                updated_at
+            FROM entity_facts
+            WHERE entity_id = ?
+            ORDER BY source, scene_index, chunk_index, id
+            """,
+            (entity_id,),
+        ).fetchall()
+
+    return rows
+def get_all_entity_facts():
+    """
+    Return entity facts grouped by entity ID.
+    """
+
+    with connect() as connection:
+        rows = connection.execute(
+            """
+            SELECT
+                entity_id,
+                fact,
+                evidence,
+                source,
+                scene_index,
+                chunk_index,
+                status
+            FROM entity_facts
+            ORDER BY
+                entity_id,
+                source,
+                scene_index,
+                chunk_index,
+                id
+            """
+        ).fetchall()
+
+    facts_by_entity = {}
+
+    for row in rows:
+        entity_id = row["entity_id"]
+
+        facts_by_entity.setdefault(
+            entity_id,
+            [],
+        ).append(row)
+
+    return facts_by_entity

@@ -4,6 +4,7 @@ from pipeline.chunker import chunk_markdown
 from pipeline.annotator import annotate
 from pipeline.db import (
     add_appearance,
+    add_entity_fact,
     clear_source_derived_memory,
     create_proposal,
     get_entity_by_name,
@@ -47,6 +48,7 @@ def analyze_document(path: Path):
     if (
         cleanup["appearances"]
         or cleanup["pending_proposals"]
+        or cleanup["entity_facts"]
     ):
         print(
             "\nCleared stale source memory:"
@@ -61,13 +63,17 @@ def analyze_document(path: Path):
             f"  Pending proposals: "
             f"{cleanup['pending_proposals']}"
         )
-
+        print(
+            f"  Entity facts: "
+            f"{cleanup['entity_facts']}"
+        )
     print("\n=== STARFUR LORE ANALYSIS ===")
     print(f"Source: {source}")
     print(f"Chunks: {len(chunks)}\n")
 
     proposals_created = 0
     appearances_recorded = 0
+    facts_recorded = 0
 
     for chunk_index, chunk in enumerate(chunks):
 
@@ -118,7 +124,51 @@ def analyze_document(path: Path):
             )
 
             appearances_recorded += 1
+        # ---------------------------------
+        # ENTITY FACTS
+        # ---------------------------------
 
+        entity_facts = annotation.get(
+            "entity_facts",
+            [],
+        )
+
+        for entity_fact in entity_facts:
+
+            name = entity_fact.get("entity")
+            fact = entity_fact.get("fact")
+
+            if not name or not fact:
+                continue
+
+            entity = get_entity_by_name(name)
+
+            if not entity:
+                print(
+                    f"  WARNING  Fact entity "
+                    f"not found: {name}"
+                )
+                continue
+
+            add_entity_fact(
+                entity_id=entity["id"],
+                fact=fact,
+                evidence=entity_fact.get(
+                    "evidence"
+                ),
+                source=source,
+                scene_index=chunk[
+                    "scene_index"
+                ],
+                chunk_index=chunk_index,
+            )
+
+            print(
+                f"  FACT     "
+                f"{entity['canonical_name']}"
+            )
+
+            facts_recorded += 1
         # ---------------------------------
         # NEW ENTITY PROPOSALS
         # ---------------------------------
@@ -180,6 +230,10 @@ def analyze_document(path: Path):
     print(
         f"Appearances processed: "
         f"{appearances_recorded}"
+    )
+    print(
+        f"Facts processed: "
+        f"{facts_recorded}"
     )
     print(
         f"New proposals: "

@@ -14,7 +14,11 @@ Exhibits autonomous authority and initiates contact with the group
 
 ## Canon Facts
 
-_No structured facts recorded yet._
+<!-- STARFUR:FACTS:START -->
+- The System can adjust environmental controls and access permissions without visible signals.
+- The System's environment features filtered, precision-tuned air absent of error.
+- The System's interface employs faint responsive fields beneath perception.
+<!-- STARFUR:FACTS:END -->
 
 ## Relationships
 

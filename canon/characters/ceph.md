@@ -14,7 +14,11 @@ Character appearing alongside Elias Voss and Maeve in the Prologue.
 
 ## Canon Facts
 
-_No structured facts recorded yet._
+<!-- STARFUR:FACTS:START -->
+- Ceph has structural inlays along his temples and neck that are infrastructural rather than decorative.
+- Ceph has structural inlays along his temples and neck that are infrastructural rather than decorative.
+- Ceph compares the door to a junction waiting to resolve traffic.
+<!-- STARFUR:FACTS:END -->
 
 ## Relationships
 
