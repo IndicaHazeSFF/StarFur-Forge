@@ -1,4 +1,5 @@
 import json
+import logging
 import ollama
 import time
 from pipeline.perf import record_llm_performance
@@ -6,6 +7,9 @@ from pipeline.db import get_entities
 
 
 ANNOTATION_MODEL = "qwen3:8b"
+
+
+logger = logging.getLogger(__name__)
 
 
 def build_registry():
@@ -349,52 +353,102 @@ Prefer correct classification over extracting more items.
 """
 
 
+class AnnotationParseError(RuntimeError):
+    """Raised when the model never returns a valid annotation object."""
+
+    def __init__(self, attempts, reason):
+        self.attempts = attempts
+        self.reason = reason
+        super().__init__(
+            f"Annotation output remained invalid after {attempts} attempts: {reason}"
+        )
+
+
+ANNOTATION_MAX_ATTEMPTS = 3
+
+
 def annotate(text: str):
-    started = time.perf_counter()
+    """Annotate one chunk, retrying malformed model output only."""
+    for attempt in range(1, ANNOTATION_MAX_ATTEMPTS + 1):
+        started = time.perf_counter()
 
-    response = ollama.chat(
-        model=ANNOTATION_MODEL,
-        messages=[
-            {
-                "role": "system",
-                "content": build_system_prompt(),
+        response = ollama.chat(
+            model=ANNOTATION_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": build_system_prompt(),
+                },
+                {
+                    "role": "user",
+                    "content": text,
+                },
+            ],
+            format="json",
+            options={
+                "temperature": 0,
             },
-            {
-                "role": "user",
-                "content": text,
-            },
-        ],
-        format="json",
-        options={
-            "temperature": 0,
-        },
-    )
+        )
 
-    wall_seconds = time.perf_counter() - started
+        wall_seconds = time.perf_counter() - started
 
-    record_llm_performance(
-        operation="annotation",
-        response=response,
-        wall_seconds=wall_seconds,
-        model=ANNOTATION_MODEL,
-        input_chars=len(text),
-    )
+        record_llm_performance(
+            operation="annotation",
+            response=response,
+            wall_seconds=wall_seconds,
+            model=ANNOTATION_MODEL,
+            input_chars=len(text),
+        )
 
-    raw = response["message"]["content"]
+        raw = None
+        reason = "missing message content"
 
-    try:
-        annotation = json.loads(raw)
+        try:
+            raw = response["message"]["content"]
 
-    except json.JSONDecodeError:
-        print("\n=== INVALID JSON FROM MODEL ===\n")
-        print(raw)
-        raise
+            if not isinstance(raw, str) or not raw.strip():
+                reason = "empty message content"
+                raise ValueError(reason)
 
-    # Ensure expected fields always exist.
-    annotation.setdefault("known_entities", [])
-    annotation.setdefault("new_entity_candidates", [])
-    annotation.setdefault("entity_facts", [])
-    annotation.setdefault("events", [])
-    annotation.setdefault("worldbuilding", [])
+            annotation = json.loads(raw)
 
-    return annotation
+            if not isinstance(annotation, dict):
+                reason = "top-level JSON value is not an object"
+                raise ValueError(reason)
+
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+            if isinstance(error, json.JSONDecodeError):
+                reason = "malformed JSON"
+            elif isinstance(error, KeyError):
+                reason = "missing message content"
+            elif isinstance(error, TypeError):
+                reason = "invalid message content"
+            elif not reason or reason == "missing message content":
+                reason = str(error)
+
+            preview = repr(raw)[:300]
+            logger.warning(
+                "Invalid annotation output on attempt %d/%d (%s): %s",
+                attempt,
+                ANNOTATION_MAX_ATTEMPTS,
+                reason,
+                preview,
+            )
+
+            if attempt < ANNOTATION_MAX_ATTEMPTS:
+                continue
+
+            raise AnnotationParseError(
+                attempts=attempt,
+                reason=reason,
+            ) from error
+
+        # Ensure expected fields always exist.
+        annotation.setdefault("known_entities", [])
+        annotation.setdefault("new_entity_candidates", [])
+        annotation.setdefault("entity_facts", [])
+        annotation.setdefault("events", [])
+        annotation.setdefault("worldbuilding", [])
+
+        return annotation
+

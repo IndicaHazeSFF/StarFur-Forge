@@ -14,14 +14,15 @@ from pipeline.proposal_pipeline import analyze_document
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CANON_ROOT = PROJECT_ROOT / "canon"
-MANUSCRIPT_ROOT = CANON_ROOT / "manuscript"
+RAW_MANUSCRIPT_ROOT = CANON_ROOT / "manuscript"
+ANALYSIS_CORPUS_ROOT = CANON_ROOT / "chapters"
 
 DATA_ROOT = PROJECT_ROOT / "data"
 MANIFEST_PATH = DATA_ROOT / "sync_manifest.json"
 
 SYNC_VERSION = 1
 ANNOTATOR_VERSION = 3
-CHUNKER_VERSION = 2
+CHUNKER_VERSION = 3
 
 
 def file_hash(path: Path) -> str:
@@ -101,16 +102,18 @@ def relative_path(path: Path) -> str:
 
 def find_manuscripts():
     """
-    Find Markdown manuscript files only.
+    Find the Prechunker-generated chapter Markdown corpus.
 
-    Generated lore files are intentionally excluded from
-    manuscript analysis.
+    canon/manuscript remains the raw manuscript source. Sync analyzes
+    only canon/chapters so structured-memory analysis uses the same
+    chapter corpus as the full-manuscript workflow. Generated entity
+    lore files remain excluded.
     """
-    if not MANUSCRIPT_ROOT.exists():
+    if not ANALYSIS_CORPUS_ROOT.exists():
         return []
 
     return sorted(
-        MANUSCRIPT_ROOT.rglob("*.md")
+        ANALYSIS_CORPUS_ROOT.rglob("*.md")
     )
 
 

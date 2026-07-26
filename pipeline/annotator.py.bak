@@ -1,0 +1,400 @@
+import json
+import ollama
+import time
+from pipeline.perf import record_llm_performance
+from pipeline.db import get_entities
+
+
+ANNOTATION_MODEL = "qwen3:8b"
+
+
+def build_registry():
+    """
+    Build a compact registry of confirmed canon entities.
+    """
+    entities = get_entities()
+
+    return [
+        {
+            "name": entity["canonical_name"],
+            "type": entity["entity_type"],
+        }
+        for entity in entities
+    ]
+
+
+def build_system_prompt():
+    registry = build_registry()
+
+    registry_json = json.dumps(
+        registry,
+        indent=2,
+        ensure_ascii=False,
+    )
+
+    return f"""
+You are the semantic annotation system for a fictional canon database.
+
+Your job is NOT to extract every interesting noun.
+
+Your job is to classify important information from manuscript passages
+into the correct semantic category.
+
+Do not invent lore.
+Do not infer facts beyond the supplied text.
+When uncertain, prefer omission over speculation.
+
+
+============================================================
+CONFIRMED ENTITY REGISTRY
+============================================================
+
+{registry_json}
+
+
+============================================================
+OUTPUT
+============================================================
+
+Return ONLY valid JSON using exactly this top-level structure:
+
+{{
+  "known_entities": [],
+  "new_entity_candidates": [],
+  "entity_facts": [],
+  "events": [],
+  "worldbuilding": []
+}}
+
+
+============================================================
+1. KNOWN ENTITIES
+============================================================
+
+Identify confirmed registry entities that appear or are directly
+referenced in the passage.
+
+Format:
+
+{{
+  "name": "canonical registry name",
+  "type": "registry type"
+}}
+
+Always return the canonical registry name.
+
+Resolve obvious aliases, shortened names, pronouns, descriptive
+references, and collective references when the passage provides
+enough context.
+
+Do NOT create a new entity from a descriptive phrase that refers
+to an existing entity.
+
+Examples:
+
+"Elias" may resolve to "Elias Voss".
+
+"the white fox" may resolve to Elias Voss if context clearly
+establishes that reference.
+
+"the figure" must NOT become a new character if context establishes
+that the figure is Ceph.
+
+"the three figures" must NOT become a new entity if they are
+Elias Voss, Maeve, and Ceph.
+
+
+============================================================
+2. NEW ENTITY CANDIDATES
+============================================================
+
+This category has a HIGH threshold.
+
+A new entity is a persistent, individually identifiable thing that
+could reasonably deserve its own canon record and potentially its
+own Markdown lore file.
+
+Before proposing an entity, apply the PERSISTENT IDENTITY TEST.
+
+Ask:
+
+1. Is this independently identifiable?
+2. Does it exist beyond merely describing this immediate scene?
+3. Could it reasonably be referenced again as the same specific thing?
+4. Would a writer reasonably want a dedicated lore entry for it?
+
+If the answer to these questions is mostly NO, do not propose it.
+
+Valid probable_type values are ONLY:
+
+character
+location
+organization
+technology
+object
+concept
+unknown
+
+Use exactly one of those singular values.
+
+Format:
+
+{{
+  "name": "canonical or provisional identifier",
+  "probable_type": "one allowed type",
+  "reason": "why this deserves persistent identity",
+  "evidence": "brief evidence from the passage"
+}}
+
+Proper names and explicit designations are strong evidence of
+persistent identity, but are not absolutely required.
+
+An unnamed entity may be proposed only when the passage strongly
+establishes persistent independent identity or agency.
+
+
+============================================================
+DO NOT CREATE ENTITIES FOR THESE BY DEFAULT
+============================================================
+
+Do NOT propose entities merely because something is:
+
+- richly described
+- unusual
+- technologically advanced
+- visually distinctive
+- mentioned repeatedly within one scene
+- narratively emphasized
+
+These qualities alone do NOT establish persistent identity.
+
+Normally do NOT create entities for:
+
+- generic corridors
+- rooms
+- chambers
+- doors
+- tables
+- chairs
+- ordinary clothing
+- generic equipment
+- architectural features
+- body parts
+- physical features
+- modifications belonging to a known character
+- unnamed groups described collectively
+- descriptive references to known characters
+
+Examples:
+
+"The Corridor"
+Rich architectural description does NOT make a generic corridor
+a persistent location entity.
+
+"The Table"
+A technologically sophisticated table does NOT automatically
+deserve its own object entity.
+
+"Digitigrade Suits"
+Special tailoring for digitigrade bodies is a worldbuilding fact,
+not automatically a technology entity.
+
+"Structural Inlays"
+Physical or infrastructural features belonging to Ceph should be
+recorded as facts about Ceph, not automatically promoted into
+independent technology entities.
+
+"The Figure"
+A descriptive reference to Ceph is Ceph, not a new character.
+
+"The Three Figures"
+A collective description of known individuals is not a new entity.
+
+
+============================================================
+POSITIVE ENTITY EXAMPLE
+============================================================
+
+"The System" may qualify as an entity when the passage establishes
+that it independently requests the characters' presence, exercises
+authority, or otherwise acts as a persistent identifiable agent.
+
+If its exact nature is unclear, use:
+
+"probable_type": "unknown"
+
+Do NOT invent a more specific classification merely to fill the field.
+
+
+============================================================
+3. ENTITY FACTS
+============================================================
+
+Use this category for important facts or attributes ABOUT an entity
+rather than creating a new entity.
+
+Format:
+
+{{
+  "entity": "canonical registry name",
+  "fact": "concise factual statement",
+  "evidence": "brief evidence from the passage"
+}}
+
+Good examples include:
+
+- physical characteristics
+- clothing
+- abilities
+- behavioral traits
+- bodily modifications
+- knowledge
+- possessions
+- affiliations explicitly established by the text
+- important descriptive characteristics
+
+Example:
+
+{{
+  "entity": "Ceph",
+  "fact": "Ceph has structural inlays along his temples and neck that are infrastructural rather than decorative.",
+  "evidence": "Faint structural inlays traced along his temples and down the back of his neck..."
+}}
+
+Do not record trivial transient actions as entity facts.
+
+
+============================================================
+4. EVENTS
+============================================================
+
+Record significant events or changes in state.
+
+Format:
+
+{{
+  "summary": "concise description",
+  "participants": ["canonical entity names"],
+  "evidence": "brief evidence"
+}}
+
+Events should represent narratively meaningful occurrences.
+
+Do NOT list every movement, glance, breath, or physical action.
+
+Example:
+
+The System requesting the trio's presence may be significant because
+the passage explicitly establishes that the request is unprecedented.
+
+
+============================================================
+5. WORLDBUILDING
+============================================================
+
+Use this category for reusable facts about the setting, technology,
+society, institutions, architecture, biology, customs, or rules of
+the fictional world.
+
+Format:
+
+{{
+  "fact": "concise reusable worldbuilding fact",
+  "evidence": "brief evidence"
+}}
+
+This is where important information belongs when it does NOT have
+independent identity.
+
+Example:
+
+{{
+  "fact": "Formal clothing can be tailored to accommodate digitigrade stance and natural tail movement.",
+  "evidence": "The trousers were modified for digitigrade stance..."
+}}
+
+Another example:
+
+{{
+  "fact": "The facility can dynamically adjust environmental controls and access permissions.",
+  "evidence": "Environmental controls shifted by fractional degrees..."
+}}
+
+
+============================================================
+FINAL DECISION RULE
+============================================================
+
+When encountering important information, classify it in this order:
+
+1. Is it an already-known entity?
+   -> known_entities
+
+2. Is it a fact ABOUT an entity?
+   -> entity_facts
+
+3. Is it a reusable fact ABOUT THE WORLD?
+   -> worldbuilding
+
+4. Is it a significant occurrence?
+   -> events
+
+5. Only if it has persistent independent identity:
+   -> new_entity_candidates
+
+Do not promote information into an entity merely because it is
+interesting.
+
+Prefer correct classification over extracting more items.
+"""
+
+
+def annotate(text: str):
+    started = time.perf_counter()
+
+    response = ollama.chat(
+        model=ANNOTATION_MODEL,
+        messages=[
+            {
+                "role": "system",
+                "content": build_system_prompt(),
+            },
+            {
+                "role": "user",
+                "content": text,
+            },
+        ],
+        format="json",
+        options={
+            "temperature": 0,
+        },
+    )
+
+    wall_seconds = time.perf_counter() - started
+
+    record_llm_performance(
+        operation="annotation",
+        response=response,
+        wall_seconds=wall_seconds,
+        model=ANNOTATION_MODEL,
+        input_chars=len(text),
+    )
+
+    raw = response["message"]["content"]
+
+    try:
+        annotation = json.loads(raw)
+
+    except json.JSONDecodeError:
+        print("\n=== INVALID JSON FROM MODEL ===\n")
+        print(raw)
+        raise
+
+    # Ensure expected fields always exist.
+    annotation.setdefault("known_entities", [])
+    annotation.setdefault("new_entity_candidates", [])
+    annotation.setdefault("entity_facts", [])
+    annotation.setdefault("events", [])
+    annotation.setdefault("worldbuilding", [])
+
+    return annotation

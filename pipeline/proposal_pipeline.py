@@ -1,7 +1,7 @@
 from pathlib import Path
 from pipeline.paths import canonical_source
 from pipeline.chunker import chunk_markdown
-from pipeline.annotator import annotate
+from pipeline.annotator import AnnotationParseError, annotate
 from pipeline.db import (
     add_appearance,
     add_entity_fact,
@@ -10,6 +10,17 @@ from pipeline.db import (
     get_entity_by_name,
     get_pending_proposals,
 )
+
+
+class DocumentAnalysisError(RuntimeError):
+    """Indicates that one or more chunks must be retried for a source."""
+
+    def __init__(self, source, failed_chunks):
+        self.source = source
+        self.failed_chunks = failed_chunks
+        super().__init__(
+            f"{len(failed_chunks)} chunk(s) require retry for {source}"
+        )
 
 
 def proposal_exists(
@@ -74,6 +85,7 @@ def analyze_document(path: Path):
     proposals_created = 0
     appearances_recorded = 0
     facts_recorded = 0
+    failed_chunks = []
 
     for chunk_index, chunk in enumerate(chunks):
 
@@ -82,9 +94,22 @@ def analyze_document(path: Path):
             f"{chunk_index + 1}/{len(chunks)}..."
         )
 
-        annotation = annotate(
-            chunk["text"]
-        )
+        try:
+            annotation = annotate(
+                chunk["text"]
+            )
+        except AnnotationParseError as error:
+            failed_chunks.append(
+                {
+                    "chunk_index": chunk_index,
+                    "scene_index": chunk["scene_index"],
+                    "error": str(error),
+                }
+            )
+            print(
+                f"  RETRY   chunk {chunk_index}: {error}"
+            )
+            continue
 
         # ---------------------------------
         # KNOWN ENTITY APPEARANCES
@@ -239,6 +264,15 @@ def analyze_document(path: Path):
         f"New proposals: "
         f"{proposals_created}"
     )
+
+    if failed_chunks:
+        print(
+            f"Retry required for {len(failed_chunks)} chunk(s)."
+        )
+        raise DocumentAnalysisError(
+            source=source,
+            failed_chunks=failed_chunks,
+        )
 
 
 if __name__ == "__main__":
