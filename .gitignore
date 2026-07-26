@@ -1,5 +1,54 @@
-.env
-*.log
+# Python
 __pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
 .venv/
-data/
+venv/
+env/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# StarFur runtime data
+data/*.db
+data/*.db-*
+data/*.sqlite
+data/*.sqlite3
+data/perf.jsonl
+data/sync_manifest.json
+# Chroma / vector database
+chroma/
+chroma_db/
+data/chroma/
+data/chroma_db/
+
+# Logs / temporary files
+*.log
+*.tmp
+*.bak
+*~
+.cache/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE/editor
+.vscode/
+.idea/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Model files — DO NOT PUT THESE ON GITHUB
+*.gguf
+*.safetensors
+*.bin
+*.pth
+*.pt
