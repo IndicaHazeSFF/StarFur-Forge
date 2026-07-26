@@ -15,6 +15,10 @@ CHROMA_PORT = 8000
 COLLECTION_NAME = "starfur_canon"
 EMBED_MODEL = "nomic-embed-text"
 
+# Bump when a change can alter indexed chunk content or metadata.
+# Existing records without this value are treated as stale once.
+SEMANTIC_INDEX_VERSION = 2
+
 
 def embed(text: str):
     response = ollama.embed(
@@ -47,7 +51,13 @@ def document_type(path: Path):
     return "unknown"
 
 
-def existing_hash(collection, source: str):
+def existing_index_state(collection, source: str):
+    """
+    Return the stored file and index versions for one source.
+
+    A missing semantic index version denotes an index created before
+    versioned invalidation and therefore requires one safe re-index.
+    """
     result = collection.get(
         where={"source": source},
         include=["metadatas"],
@@ -56,7 +66,12 @@ def existing_hash(collection, source: str):
     if not result["metadatas"]:
         return None
 
-    return result["metadatas"][0].get("file_hash")
+    metadata = result["metadatas"][0]
+
+    return {
+        "file_hash": metadata.get("file_hash"),
+        "index_version": metadata.get("index_version"),
+    }
 
 
 def indexed_sources(collection):
@@ -82,17 +97,34 @@ def ingest_file(collection, path: Path):
 
     digest = file_hash(path)
 
-    old_hash = existing_hash(
+    existing = existing_index_state(
         collection,
         relative,
     )
 
-    if old_hash == digest:
+    old_hash = (
+        existing["file_hash"]
+        if existing
+        else None
+    )
+    old_index_version = (
+        existing["index_version"]
+        if existing
+        else None
+    )
+
+    if (
+        old_hash == digest
+        and old_index_version == SEMANTIC_INDEX_VERSION
+    ):
         print(f"SKIP     {relative}")
         return 0, "unchanged"
 
     if old_hash:
-        print(f"UPDATE   {relative}")
+        if old_index_version != SEMANTIC_INDEX_VERSION:
+            print(f"REINDEX  {relative}")
+        else:
+            print(f"UPDATE   {relative}")
     else:
         print(f"NEW      {relative}")
 
@@ -115,6 +147,7 @@ def ingest_file(collection, path: Path):
             "chunk_index": index,
             "scene_index": chunk["scene_index"],
             "file_hash": digest,
+            "index_version": SEMANTIC_INDEX_VERSION,
         }
 
         # Copy document frontmatter into Chroma metadata.
