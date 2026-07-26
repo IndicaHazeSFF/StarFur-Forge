@@ -33,6 +33,90 @@ That relatively simple idea has since evolved into something considerably larger
 Allow StarFur to retrieve relevant portions of the manuscript based on natural-language questions.
 
 ## Components
+## Preprocessing Layer — The Prechunker
+
+Before Mr. Chonker operates on manuscript content, StarFur includes a higher-level preprocessing stage: the **Prechunker**.
+
+The Prechunker solves a different problem from Mr. Chonker.
+
+Its responsibility is to take a large source document—potentially an entire manuscript or other large input—and divide it into logical Markdown documents suitable for the rest of the StarFur pipeline.
+
+Conceptually:
+
+```
+LARGE SOURCE DOCUMENT
+         │
+         ▼
+    PRECHUNKER
+         │
+         ├── chapter detection
+         ├── document segmentation
+         ├── filename generation
+         └── Markdown output
+         │
+         ▼
+   INDIVIDUAL .MD FILES
+         │
+         ▼
+    MR. CHONKER
+```
+
+The distinction is important:
+
+**Prechunker performs document-level segmentation.**
+
+**Mr. Chonker performs retrieval/analysis-level chunking inside those documents.**
+
+For a novel, this means the Prechunker can transform a monolithic manuscript into files such as:
+
+```
+canon/chapters/
+    01-routine.md
+    02-approach.md
+    03-classification.md
+    ...
+    15-margin.md
+```
+
+Mr. Chonker can then independently process each chapter into smaller semantic chunks suitable for embeddings and Mr. Annotator.
+
+The architecture therefore supports:
+
+```
+RAW INPUT
+    ↓
+PRECHUNKER
+    ↓
+DOCUMENTS
+    ↓
+MR. CHONKER
+    ↓
+SEMANTIC CHUNKS
+    ↓
+┌─────────────────────┐
+│                     │
+▼                     ▼
+MR. ANNOTATOR      EMBEDDINGS
+│                     │
+▼                     ▼
+SQLITE              CHROMA
+```
+
+Although currently used for manuscript preparation, the Prechunker should remain **input-agnostic where practical**.
+
+Future source types could include:
+
+* complete novels;
+* exported writing projects;
+* large Markdown documents;
+* worldbuilding documents;
+* notes;
+* reference material;
+* other structured textual corpora.
+
+This gives StarFur an explicit ingestion boundary:
+
+> The Prechunker converts external source material into StarFur documents; Mr. Chonker converts StarFur documents into machine-usable chunks.
 
 ### Mr. Chonker — Markdown Chunker
 
@@ -377,7 +461,10 @@ This marks the transition from **prototype plumbing** to **knowledge-quality dev
 The fundamental StarFur pipeline now exists.
 
 ```
-MANUSCRIPT
+RAW MANUSCRIPT
+     │
+     ▼
+PRECHUNKER
      │
      ▼
 MR. CHONKER
@@ -1245,7 +1332,7 @@ Build working memory, retrieval, and tools before spending excessive effort on v
 ## Phase 1 — Semantic Lore Memory
 
 **COMPLETE**
-
+* Prechunker / source segmentation
 * Markdown ingestion
 * Mr. Chonker
 * embeddings
