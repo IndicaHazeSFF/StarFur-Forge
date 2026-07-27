@@ -11,6 +11,7 @@ from pipeline.db import (
     get_all_entity_facts,
 )
 from pipeline.proposal_pipeline import analyze_document
+from pipeline.assistant import run_interactive
 from pipeline.canon_writer import export_entities
 
 
@@ -289,6 +290,19 @@ def main():
     )
 
     # -------------------------
+    # ASSISTANT
+    # -------------------------
+
+    assistant_parser = subparsers.add_parser(
+        "assistant",
+        help="Start the local conversational assistant",
+    )
+    assistant_parser.add_argument(
+        "--config",
+        help="Path to assistant JSON configuration",
+    )
+
+    # -------------------------
     # ENTITY
     # -------------------------
 
@@ -347,6 +361,9 @@ def main():
 
     elif args.command == "analyze":
         analyze(args.path)
+
+    elif args.command == "assistant":
+        run_interactive(args.config) if args.config else run_interactive()
 
     elif args.command == "entity":
         show_entity(args.name)

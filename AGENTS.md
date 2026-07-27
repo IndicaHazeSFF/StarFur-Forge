@@ -24,6 +24,7 @@
 - pipeline/db.py owns SQLite access and source-derived cleanup. pipeline/canon_writer.py creates entity files and may replace only StarFur-managed fact regions.
 - pipeline/ingest.py chunks all Markdown below canon/ for Chroma ingestion; this semantic scope is broader than sync's structured-analysis scope. pipeline/rag.py and pipeline/query.py provide semantic retrieval.
 - starfur.py is a CLI adapter over the pipeline. There is no shared service/application layer or TUI/web adapter yet; do not invent one during focused pipeline surgery.
+- pipeline/assistant.py is the narrow Stage 2 conversational loop: it loads persona/config files, reads active structured assistant memories explicitly, keeps only a bounded in-memory session window, and never writes memories automatically.
 
 ## Canonical source, provenance, and data invariants
 

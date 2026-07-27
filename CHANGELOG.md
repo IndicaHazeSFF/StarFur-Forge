@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-27 — Stage 2 conversational Assistant Mode
+
+- Purpose: provide the first usable local chat loop while keeping persona, memory storage, routing, and future services separate.
+- Modified: pipeline/assistant.py, starfur.py, config/assistant.json, persona/default.md, tests/test_assistant.py, AGENTS.md, and CHANGELOG.md.
+- Behavior: python starfur.py assistant loads file-backed persona/configuration, reads active assistant memories from the selected domain for context, maintains a bounded recent-session window, supports quit/exit, and leaves memory unchanged. Ollama failures or empty responses do not commit session state.
+- Verification: python -m unittest discover -s tests -v (33 tests passed). No production sync, memory mutation, Chroma rebuild, or full analysis was run.
+
+
 ## 2026-07-27 — Assistant structured memory foundation
 
 - Purpose: add Sprint Stage 1.2 personal assistant memory storage without coupling it to fictional lore entities/facts.
