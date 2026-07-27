@@ -1,6 +1,8 @@
 from pathlib import Path
 import sqlite3
 
+from pipeline.domains import DEFAULT_PROJECT_DOMAIN, normalize_domain
+
 
 DB_PATH = Path("data/starfur.db")
 
@@ -68,6 +70,24 @@ def ensure_entity_facts_schema(connection):
         )
 
 
+
+
+def ensure_memory_domains_schema(connection):
+    tables = ("entities", "appearances", "entity_facts", "proposals")
+    for table in tables:
+        exists = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+            (table,),
+        ).fetchone()
+        if not exists:
+            continue
+        columns = {row["name"] for row in connection.execute(f"PRAGMA table_info({table})")}
+        if "domain" not in columns:
+            connection.execute(
+                f"ALTER TABLE {table} ADD COLUMN domain TEXT NOT NULL DEFAULT '{DEFAULT_PROJECT_DOMAIN}'"
+            )
+
+
 def connect():
     """
     Open a connection to the StarFur database.
@@ -81,12 +101,13 @@ def connect():
     )
 
     ensure_entity_facts_schema(connection)
+    ensure_memory_domains_schema(connection)
     connection.commit()
 
     return connection
 
 
-def get_entities(entity_type=None):
+def get_entities(entity_type=None, domain=DEFAULT_PROJECT_DOMAIN):
     """
     Return confirmed entities.
 
@@ -94,16 +115,19 @@ def get_entities(entity_type=None):
     """
     with connect() as connection:
 
+        domain = normalize_domain(domain)
+
         if entity_type:
             rows = connection.execute(
                 """
                 SELECT *
                 FROM entities
                 WHERE entity_type = ?
+                AND domain = ?
                 AND status = 'confirmed'
                 ORDER BY canonical_name
                 """,
-                (entity_type,),
+                (entity_type, domain),
             ).fetchall()
 
         else:
@@ -111,34 +135,38 @@ def get_entities(entity_type=None):
                 """
                 SELECT *
                 FROM entities
-                WHERE status = 'confirmed'
+                WHERE domain = ?
+                AND status = 'confirmed'
                 ORDER BY canonical_name
                 """
-            ).fetchall()
+            , (domain,)).fetchall()
 
     return [dict(row) for row in rows]
 
 
-def get_entity_names_and_aliases():
+def get_entity_names_and_aliases(domain=DEFAULT_PROJECT_DOMAIN):
     """Return confirmed canonical names and aliases for proposal review."""
+    domain = normalize_domain(domain)
     with connect() as connection:
         rows = connection.execute(
             """
-            SELECT canonical_name AS name FROM entities WHERE status = 'confirmed'
+            SELECT canonical_name AS name FROM entities WHERE status = 'confirmed' AND domain = ?
             UNION ALL
             SELECT aliases.alias AS name
             FROM aliases JOIN entities ON entities.id = aliases.entity_id
-            WHERE entities.status = 'confirmed'
+            WHERE entities.status = 'confirmed' AND entities.domain = ?
             ORDER BY name
-            """
+            """, (domain, domain)
         ).fetchall()
     return [row["name"] for row in rows if row["name"]]
 
 
-def get_entity_by_name(name):
+def get_entity_by_name(name, domain=DEFAULT_PROJECT_DOMAIN):
     """
     Find an entity by canonical name or alias.
     """
+    domain = normalize_domain(domain)
+
     with connect() as connection:
 
         row = connection.execute(
@@ -146,9 +174,10 @@ def get_entity_by_name(name):
             SELECT *
             FROM entities
             WHERE lower(canonical_name) = lower(?)
+              AND domain = ?
             LIMIT 1
             """,
-            (name,),
+            (name, domain),
         ).fetchone()
 
         if row:
@@ -161,9 +190,10 @@ def get_entity_by_name(name):
             JOIN entities
                 ON aliases.entity_id = entities.id
             WHERE lower(aliases.alias) = lower(?)
+              AND entities.domain = ?
             LIMIT 1
             """,
-            (name,),
+            (name, domain),
         ).fetchone()
 
     if row:
@@ -176,6 +206,7 @@ def create_entity(
     canonical_name,
     entity_type,
     description=None,
+    domain=DEFAULT_PROJECT_DOMAIN,
 ):
     """
     Create a confirmed canon entity.
@@ -187,14 +218,16 @@ def create_entity(
             INSERT INTO entities (
                 canonical_name,
                 entity_type,
-                description
+                description,
+                domain
             )
-            VALUES (?, ?, ?)
+            VALUES (?, ?, ?, ?)
             """,
             (
                 canonical_name,
                 entity_type,
                 description,
+                normalize_domain(domain),
             ),
         )
 
@@ -292,7 +325,7 @@ def create_proposal(
                 scene_index,
                 chunk_index
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 proposal_type,
@@ -453,6 +486,7 @@ def add_entity_fact(
     chunk_index=None,
     status="extracted",
     fact_type=FACT_TYPE_DEFAULT,
+    domain=DEFAULT_PROJECT_DOMAIN,
 ):
     """
     Record a source-derived fact about an entity.
@@ -471,9 +505,10 @@ def add_entity_fact(
                 scene_index,
                 chunk_index,
                 fact_type,
-                status
+                status,
+                domain
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 entity_id,
@@ -484,9 +519,10 @@ def add_entity_fact(
                 chunk_index,
                 normalize_fact_type(fact_type),
                 status,
+                normalize_domain(domain),
             ),
         )
-def get_entity_facts(entity_id):
+def get_entity_facts(entity_id, domain=DEFAULT_PROJECT_DOMAIN):
     """
     Return all recorded facts for an entity.
     """
@@ -507,9 +543,10 @@ def get_entity_facts(entity_id):
                 updated_at
             FROM entity_facts
             WHERE entity_id = ?
+              AND domain = ?
             ORDER BY source, scene_index, chunk_index, id
             """,
-            (entity_id,),
+            (entity_id, normalize_domain(domain)),
         ).fetchall()
 
     return rows

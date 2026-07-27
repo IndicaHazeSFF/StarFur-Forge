@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS entities (
     description TEXT,
 
     status TEXT NOT NULL DEFAULT 'confirmed',
+    domain TEXT NOT NULL DEFAULT 'project:crown-of-claws',
 
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -49,6 +50,7 @@ CREATE TABLE IF NOT EXISTS appearances (
     chunk_index INTEGER,
 
     context TEXT,
+    domain TEXT NOT NULL DEFAULT 'project:crown-of-claws',
 
     FOREIGN KEY(entity_id)
         REFERENCES entities(id)
@@ -68,6 +70,7 @@ CREATE TABLE IF NOT EXISTS entity_facts (
     chunk_index INTEGER,
 
     fact_type TEXT NOT NULL DEFAULT 'durable_fact',
+    domain TEXT NOT NULL DEFAULT 'project:crown-of-claws',
     status TEXT NOT NULL DEFAULT 'extracted',
 
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -147,6 +150,7 @@ CREATE TABLE IF NOT EXISTS proposals (
     source TEXT,
     scene_index INTEGER,
     chunk_index INTEGER,
+    domain TEXT NOT NULL DEFAULT 'project:crown-of-claws',
 
     status TEXT NOT NULL DEFAULT 'pending',
 

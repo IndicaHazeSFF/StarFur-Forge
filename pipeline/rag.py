@@ -1,6 +1,8 @@
 import chromadb
 import ollama
 
+from pipeline.domains import DEFAULT_PROJECT_DOMAIN, normalize_domain
+
 
 CHROMA_HOST = "localhost"
 CHROMA_PORT = 8000
@@ -20,7 +22,8 @@ def embed(text: str):
     return response["embeddings"][0]
 
 
-def retrieve(question: str):
+def retrieve(question: str, domain=DEFAULT_PROJECT_DOMAIN):
+    domain = normalize_domain(domain)
     client = chromadb.HttpClient(
         host=CHROMA_HOST,
         port=CHROMA_PORT,
@@ -34,6 +37,7 @@ def retrieve(question: str):
         query_embeddings=[embed(question)],
         n_results=min(TOP_K, collection.count()),
         include=["documents", "metadatas", "distances"],
+        where={"domain": domain},
     )
 
     return result

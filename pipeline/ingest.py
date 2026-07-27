@@ -5,6 +5,7 @@ import chromadb
 import ollama
 
 from pipeline.chunker import chunk_markdown
+from pipeline.domains import DEFAULT_PROJECT_DOMAIN, normalize_domain
 
 
 CANON_ROOT = Path("canon")
@@ -17,7 +18,7 @@ EMBED_MODEL = "nomic-embed-text"
 
 # Bump when a change can alter indexed chunk content or metadata.
 # Existing records without this value are treated as stale once.
-SEMANTIC_INDEX_VERSION = 2
+SEMANTIC_INDEX_VERSION = 3
 
 
 def embed(text: str):
@@ -90,7 +91,8 @@ def indexed_sources(collection):
     return sources
 
 
-def ingest_file(collection, path: Path):
+def ingest_file(collection, path: Path, domain=DEFAULT_PROJECT_DOMAIN):
+    domain = normalize_domain(domain)
     relative = str(
         path.relative_to(CANON_ROOT)
     )
@@ -148,6 +150,7 @@ def ingest_file(collection, path: Path):
             "scene_index": chunk["scene_index"],
             "file_hash": digest,
             "index_version": SEMANTIC_INDEX_VERSION,
+            "domain": domain,
         }
 
         # Copy document frontmatter into Chroma metadata.
