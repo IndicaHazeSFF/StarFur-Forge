@@ -79,6 +79,40 @@ class AssistantTests(unittest.TestCase):
             session.respond("hello")
         self.assertEqual(session.messages, [])
 
+    def test_explicit_commands_use_crud_and_soft_forget(self):
+        created = []
+        updated = []
+        config = type("Config", (), {"chat_model": "test", "domain": "personal", "max_session_messages": 4, "max_memories": 2, "memory_policy": "off"})()
+        session = AssistantSession(config, "Persona", chat=lambda **kwargs: {"message": {"content": "unused"}}, memory_creator=lambda **kwargs: created.append(kwargs) or 7, memory_searcher=lambda *args, **kwargs: [{"id": 7}], memory_updater=lambda *args, **kwargs: updated.append((args, kwargs)))
+        self.assertIn("Remembered", session.respond("remember this: I prefer foxes"))
+        self.assertEqual(created[0]["source"], "explicit:user")
+        self.assertIn("Forgotten", session.respond("forget this: foxes"))
+        self.assertEqual(updated[0][1]["status"], "forgotten")
+
+    def test_proposals_are_validated_and_not_persisted(self):
+        calls = []
+        config = type("Config", (), {"chat_model": "test", "domain": "personal", "max_session_messages": 4, "max_memories": 0, "memory_policy": "conservative"})()
+        def fake_chat(**kwargs):
+            calls.append(kwargs)
+            if len(calls) == 1:
+                return {"message": {"content": "answer"}}
+            return {"message": {"content": "{\"store\": true, \"subject\": \"User\", \"memory_type\": \"preference\", \"summary\": \"Likes foxes\", \"importance\": 0.8, \"confidence\": 0.9, \"retention\": \"long_term\", \"domain\": \"personal\", \"source\": \"conversation\"}"}}
+        creator = lambda **kwargs: (_ for _ in ()).throw(AssertionError("automatic persistence"))
+        session = AssistantSession(config, "Persona", chat=fake_chat, memory_creator=creator, memory_loader=lambda **kwargs: [])
+        self.assertEqual(session.respond("I really like foxes"), "answer")
+        self.assertEqual(len(session.proposals), 1)
+        self.assertTrue(session.proposals[0]["store"])
+
+    def test_invalid_proposal_does_not_break_turn(self):
+        config = type("Config", (), {"chat_model": "test", "domain": "personal", "max_session_messages": 4, "max_memories": 0, "memory_policy": "conservative"})()
+        calls = iter([
+            {"message": {"content": "answer"}},
+            {"message": {"content": "{\"store\": true, \"subject\": \"User\", \"memory_type\": \"bogus\", \"summary\": \"bad\", \"importance\": 1, \"confidence\": 1, \"retention\": \"long_term\", \"domain\": \"personal\", \"source\": \"test\"}"}},
+        ])
+        session = AssistantSession(config, "Persona", chat=lambda **kwargs: next(calls), memory_loader=lambda **kwargs: [])
+        self.assertEqual(session.respond("hello"), "answer")
+        self.assertEqual(len(session.proposals), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

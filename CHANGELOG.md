@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-27 — Stage 3 explicit memory controls and proposals
+
+- Purpose: add user-controlled assistant memory commands and conservative review-only proposals.
+- Modified: pipeline/assistant.py, config/assistant.json, tests/test_assistant.py, AGENTS.md, and CHANGELOG.md.
+- Behavior: remember this/forget this and memory list/search operate in the selected domain using validated CRUD; forget is soft. Completed normal turns may produce validated in-session proposals under off/conservative policy, but no automatic memory persistence or personal Chroma writing occurs.
+- Verification: python -m unittest discover -s tests -v (36 tests passed). No production sync, memory mutation, Chroma rebuild, or full analysis was run.
+
+
 ## 2026-07-27 — Stage 2 conversational Assistant Mode
 
 - Purpose: provide the first usable local chat loop while keeping persona, memory storage, routing, and future services separate.
