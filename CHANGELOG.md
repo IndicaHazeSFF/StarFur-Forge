@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-27 — Assistant structured memory foundation
+
+- Purpose: add Sprint Stage 1.2 personal assistant memory storage without coupling it to fictional lore entities/facts.
+- Modified: pipeline/db.py, pipeline/init_db.py, tests/test_assistant_memory.py, AGENTS.md, and CHANGELOG.md.
+- Behavior: additive assistant_memories schema and domain-aware CRUD support preferences, facts, experiences, projects, relationships, situations, goals, and routines with session/short_term/long_term retention. Validation rejects unknown types/retentions/statuses; forget marks memories forgotten instead of deleting provenance.
+- Verification: python -m unittest discover -s tests -v (29 tests passed). No production sync, SQLite/Chroma mutation, or rebuild was run.
+
+
 ## 2026-07-27 — POSIX-safe targeted reanalysis test
 
 - Purpose: make manifest-entry verification portable across Windows and WSL/Linux path separators.

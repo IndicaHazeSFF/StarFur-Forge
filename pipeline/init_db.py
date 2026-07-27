@@ -82,6 +82,30 @@ CREATE TABLE IF NOT EXISTS entity_facts (
 );
 
 
+CREATE TABLE IF NOT EXISTS assistant_memories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    domain TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    memory_type TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    details TEXT,
+    importance REAL NOT NULL DEFAULT 0.5,
+    confidence REAL NOT NULL DEFAULT 0.5,
+    retention TEXT NOT NULL DEFAULT 'long_term',
+    status TEXT NOT NULL DEFAULT 'active',
+    source TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_accessed_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_assistant_memories_domain
+ON assistant_memories(domain);
+
+CREATE INDEX IF NOT EXISTS idx_assistant_memories_status
+ON assistant_memories(status);
+
+
 CREATE TABLE IF NOT EXISTS relationships (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
 

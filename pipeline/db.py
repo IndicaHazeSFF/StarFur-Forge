@@ -16,6 +16,23 @@ FACT_TYPES = (
 )
 
 
+ASSISTANT_MEMORY_TYPES = (
+    "preference", "personal_fact", "experience", "project_context",
+    "relationship_context", "ongoing_situation", "goal", "routine",
+)
+ASSISTANT_RETENTIONS = ("session", "short_term", "long_term")
+ASSISTANT_MEMORY_STATUSES = ("active", "superseded", "forgotten")
+
+def _validated(value, allowed, label):
+    if value not in allowed:
+        raise ValueError(f"Invalid {label}: {value!r}")
+    return value
+
+def normalize_memory_type(value): return _validated(value, ASSISTANT_MEMORY_TYPES, "memory_type")
+def normalize_retention(value): return _validated(value, ASSISTANT_RETENTIONS, "retention")
+def normalize_memory_status(value): return _validated(value, ASSISTANT_MEMORY_STATUSES, "status")
+
+
 def normalize_fact_type(fact_type):
     if fact_type in FACT_TYPES:
         return fact_type
@@ -88,6 +105,30 @@ def ensure_memory_domains_schema(connection):
             )
 
 
+
+
+def ensure_assistant_memories_schema(connection):
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS assistant_memories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            domain TEXT NOT NULL,
+            subject TEXT NOT NULL,
+            memory_type TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            details TEXT,
+            importance REAL NOT NULL DEFAULT 0.5,
+            confidence REAL NOT NULL DEFAULT 0.5,
+            retention TEXT NOT NULL DEFAULT 'long_term',
+            status TEXT NOT NULL DEFAULT 'active',
+            source TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            last_accessed_at TEXT
+        )
+    """)
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_assistant_memories_domain ON assistant_memories(domain)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_assistant_memories_status ON assistant_memories(status)")
+
 def connect():
     """
     Open a connection to the StarFur database.
@@ -102,6 +143,7 @@ def connect():
 
     ensure_entity_facts_schema(connection)
     ensure_memory_domains_schema(connection)
+    ensure_assistant_memories_schema(connection)
     connection.commit()
 
     return connection
@@ -588,3 +630,100 @@ def get_all_entity_facts():
         ).append(row)
 
     return facts_by_entity
+
+def create_assistant_memory(subject, memory_type, summary, details=None, importance=0.5, confidence=0.5, retention="long_term", source=None, domain="personal"):
+    domain = normalize_domain(domain)
+    memory_type = normalize_memory_type(memory_type)
+    retention = normalize_retention(retention)
+    if not 0 <= importance <= 1 or not 0 <= confidence <= 1:
+        raise ValueError("importance and confidence must be between 0 and 1")
+    with connect() as connection:
+        cursor = connection.execute(
+            """INSERT INTO assistant_memories
+            (domain, subject, memory_type, summary, details, importance, confidence, retention, source)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (domain, subject, memory_type, summary, details, importance, confidence, retention, source),
+        )
+        connection.commit()
+        return cursor.lastrowid
+
+
+def get_assistant_memory(memory_id, domain="personal"):
+    with connect() as connection:
+        row = connection.execute(
+            "SELECT * FROM assistant_memories WHERE id = ? AND domain = ?",
+            (memory_id, normalize_domain(domain)),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def list_assistant_memories(domain="personal", status="active", memory_type=None, retention=None, limit=100):
+    clauses = ["domain = ?"]
+    params = [normalize_domain(domain)]
+    if status is not None:
+        clauses.append("status = ?")
+        params.append(normalize_memory_status(status))
+    if memory_type is not None:
+        clauses.append("memory_type = ?")
+        params.append(normalize_memory_type(memory_type))
+    if retention is not None:
+        clauses.append("retention = ?")
+        params.append(normalize_retention(retention))
+    if limit <= 0:
+        raise ValueError("limit must be positive")
+    params.append(limit)
+    with connect() as connection:
+        rows = connection.execute(
+            f"SELECT * FROM assistant_memories WHERE {' AND '.join(clauses)} ORDER BY updated_at DESC, id DESC LIMIT ?",
+            params,
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def search_assistant_memories(query, domain="personal", status="active", limit=20):
+    if not query or not query.strip():
+        raise ValueError("query must not be empty")
+    pattern = f"%{query.strip()}%"
+    clauses = ["domain = ?", "(subject LIKE ? OR summary LIKE ? OR details LIKE ?)"]
+    params = [normalize_domain(domain), pattern, pattern, pattern]
+    if status is not None:
+        clauses.append("status = ?")
+        params.append(normalize_memory_status(status))
+    params.append(limit)
+    with connect() as connection:
+        rows = connection.execute(
+            f"SELECT * FROM assistant_memories WHERE {' AND '.join(clauses)} ORDER BY updated_at DESC, id DESC LIMIT ?",
+            params,
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def update_assistant_memory(memory_id, domain="personal", **changes):
+    allowed = {"subject", "memory_type", "summary", "details", "importance", "confidence", "retention", "status", "source"}
+    unknown = set(changes) - allowed
+    if unknown:
+        raise ValueError(f"Unknown memory fields: {sorted(unknown)}")
+    if "memory_type" in changes:
+        changes["memory_type"] = normalize_memory_type(changes["memory_type"])
+    if "retention" in changes:
+        changes["retention"] = normalize_retention(changes["retention"])
+    if "status" in changes:
+        changes["status"] = normalize_memory_status(changes["status"])
+    for field in ("importance", "confidence"):
+        if field in changes and not 0 <= changes[field] <= 1:
+            raise ValueError(f"{field} must be between 0 and 1")
+    if not changes:
+        return get_assistant_memory(memory_id, domain)
+    assignments = ", ".join(f"{key} = ?" for key in changes)
+    values = list(changes.values()) + [memory_id, normalize_domain(domain)]
+    with connect() as connection:
+        connection.execute(
+            f"UPDATE assistant_memories SET {assignments}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND domain = ?",
+            values,
+        )
+        connection.commit()
+    return get_assistant_memory(memory_id, domain)
+
+
+def forget_assistant_memory(memory_id, domain="personal"):
+    return update_assistant_memory(memory_id, domain, status="forgotten")

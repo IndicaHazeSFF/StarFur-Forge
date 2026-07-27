@@ -14,6 +14,7 @@
 - Shared domain identifiers live in pipeline/domains.py. Valid namespaces are personal and project:<slug>; the default remains project:crown-of-claws for existing lore behavior.
 - Structured entities, appearances, entity_facts, and proposals carry a domain column. db.connect() additively migrates missing columns and assigns legacy rows to project:crown-of-claws. Domain-aware queries default to that lore domain.
 - Chroma metadata carries the same domain and retrieval accepts a domain filter. Existing canon ingestion remains in the existing collection and default domain. Assistant storage/retrieval policy is not implemented yet.
+- Assistant personal memory uses the separate assistant_memories table and db CRUD primitives; do not reuse fictional entity_facts for personal records. Memory types, retention, and status values are validated constants, and forget is a soft status transition preserving provenance/history.
 
 
 - pipeline/prechunker.py converts canon/manuscript/manuscript.txt into chapter Markdown under canon/chapters/.
