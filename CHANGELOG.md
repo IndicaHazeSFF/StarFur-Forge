@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-27 — POSIX-safe targeted reanalysis test
+
+- Purpose: make manifest-entry verification portable across Windows and WSL/Linux path separators.
+- Modified: tests/test_targeted_reanalysis.py and CHANGELOG.md.
+- Behavior: the test compares normalized relative paths instead of assuming backslashes; production logic is unchanged.
+- Verification: python -m unittest discover -s tests -v (26 tests passed).
+
+
 ## 2026-07-27 — Additive memory domains
 
 - Purpose: establish explicit personal/project namespaces without separating the StarFur Forge engine or changing existing Crown of Claws behavior.

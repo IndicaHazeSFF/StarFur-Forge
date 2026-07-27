@@ -57,7 +57,11 @@ class TargetedReanalysisTests(unittest.TestCase):
             self.assertIn("canon/chapters/02.md", saved["files"])
             self.assertEqual(saved["files"]["canon/chapters/02.md"]["hash"], "old-other")
             self.assertEqual(
-                saved["files"][next(key for key in saved["files"] if key.endswith("chapters\\01.md"))]["hash"],
+                next(
+                    entry["hash"]
+                    for key, entry in saved["files"].items()
+                    if key.replace("\\", "/") == target.relative_to(root).as_posix()
+                ),
                 sync.file_hash(target),
             )
 
