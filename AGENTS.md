@@ -33,6 +33,15 @@
 - A chunker change can require both version bumps. Do not assume a content hash alone invalidates Chroma.
 - Chroma ingestion deletes a source's old chunks before upserting its replacement chunks. Treat reindexing as a destructive runtime operation and do not run it implicitly in tests or audits.
 
+## Annotation failure handling
+- Annotation JSON must be an object whose five extraction sections are lists of objects; wrong nested types are retryable parse failures rather than values to coerce or silently drop.
+- Annotation requests set ANNOTATION_MAX_OUTPUT_TOKENS through Ollama's num_predict option. Raise the ceiling only with explicit reasoning and regression coverage; runaway outputs are a reliability failure, not a quality signal.
+
+- annotator.py retries only malformed, empty, or non-object model output. The current bound is three total attempts; extraction prompts, schema fields, temperature, and interpretation semantics are unchanged.
+- Transport/Ollama errors are not converted into parse retries and continue to propagate.
+- After parse retries are exhausted, AnnotationParseError identifies the failed chunk. proposal_pipeline.py records the chunk failure, continues later chunks in the same document, and raises DocumentAnalysisError after the document so sync keeps the source dirty for retry.
+- Do not treat a partially processed document as successful or manually mark its manifest entry clean.
+
 ## Database and migration cautions
 
 - Do not call pipeline/init_db.py against the working database during surgery. Its schema is not a complete migration system and may not represent every live table used by the current pipeline (including entity facts).

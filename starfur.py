@@ -1,7 +1,7 @@
 from pathlib import Path
 import argparse
 
-from pipeline.sync import run_sync
+from pipeline.sync import run_sync, reanalyze_chapter
 from pipeline.rag import ask_starfur
 from pipeline.db import (
     connect,
@@ -327,6 +327,14 @@ def main():
         "sync",
         help="Synchronize canon with StarFur memory",
     )
+    reanalyze_parser = subparsers.add_parser(
+        "reanalyze-chapter",
+        help="Force structured reanalysis of one canon chapter",
+    )
+    reanalyze_parser.add_argument(
+        "path",
+        help="Markdown file inside canon/chapters/",
+    )
 
     # -------------------------
     # DISPATCH
@@ -356,6 +364,9 @@ def main():
         
     elif args.command == "sync":
         run_sync()
+
+    elif args.command == "reanalyze-chapter":
+        reanalyze_chapter(args.path)
 
     else:
         parser.print_help()

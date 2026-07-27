@@ -237,11 +237,24 @@ Do NOT invent a more specific classification merely to fill the field.
 Use this category for important facts or attributes ABOUT an entity
 rather than creating a new entity.
 
+Classify every entity fact using exactly one fact_type:
+
+- durable_fact: a persistent canon statement that should remain true beyond the immediate scene.
+- behavioral_tendency: a recurring/general disposition, habit, or pattern; do not infer one from a single action when possible.
+- physical_attribute: an intrinsic physical characteristic of the entity (body, appearance, or stable bodily modification). Do NOT use this for equipment use/ownership, posture, actions, environmental behavior, clothing in a scene, or temporary physical conditions.
+- procedural_system_rule: an explicit rule, capability, protocol, or system behavior, not a character's one-time action.
+- temporary_scene_state: transient actions, conditions, posture, symptoms, perceptions, or other moment-specific observations.
+
+Only attach a fact when the evidence clearly establishes the named entity as the subject or owner of that fact. Do not infer ambiguous ownership from nearby prose, group actions, equipment, or environmental effects. If the subject is unclear, omit the fact rather than guess.
+
+Do not discard temporary_scene_state facts. Store them with that type.
+
 Format:
 
 {{
   "entity": "canonical registry name",
   "fact": "concise factual statement",
+  "fact_type": "one allowed fact_type value",
   "evidence": "brief evidence from the passage"
 }}
 
@@ -265,7 +278,7 @@ Example:
   "evidence": "Faint structural inlays traced along his temples and down the back of his neck..."
 }}
 
-Do not record trivial transient actions as entity facts.
+Do not record trivial transient actions as entity facts unless they are useful scene-state observations; classify those as temporary_scene_state.
 
 
 ============================================================
@@ -365,6 +378,29 @@ class AnnotationParseError(RuntimeError):
 
 
 ANNOTATION_MAX_ATTEMPTS = 3
+ANNOTATION_MAX_OUTPUT_TOKENS = 4096
+ANNOTATION_LIST_FIELDS = (
+    "known_entities",
+    "new_entity_candidates",
+    "entity_facts",
+    "events",
+    "worldbuilding",
+)
+
+
+def validate_annotation_shape(annotation):
+    """Reject shapes that downstream extraction code cannot safely consume."""
+    for field in ANNOTATION_LIST_FIELDS:
+        value = annotation.setdefault(field, [])
+
+        if not isinstance(value, list):
+            raise ValueError(f"field {field!r} must be a list")
+
+        for index, item in enumerate(value):
+            if not isinstance(item, dict):
+                raise ValueError(
+                    f"field {field!r} item {index} must be an object"
+                )
 
 
 def annotate(text: str):
@@ -387,6 +423,7 @@ def annotate(text: str):
             format="json",
             options={
                 "temperature": 0,
+                "num_predict": ANNOTATION_MAX_OUTPUT_TOKENS,
             },
         )
 
@@ -416,6 +453,8 @@ def annotate(text: str):
                 reason = "top-level JSON value is not an object"
                 raise ValueError(reason)
 
+            validate_annotation_shape(annotation)
+
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
             if isinstance(error, json.JSONDecodeError):
                 reason = "malformed JSON"
@@ -442,13 +481,6 @@ def annotate(text: str):
                 attempts=attempt,
                 reason=reason,
             ) from error
-
-        # Ensure expected fields always exist.
-        annotation.setdefault("known_entities", [])
-        annotation.setdefault("new_entity_candidates", [])
-        annotation.setdefault("entity_facts", [])
-        annotation.setdefault("events", [])
-        annotation.setdefault("worldbuilding", [])
 
         return annotation
 

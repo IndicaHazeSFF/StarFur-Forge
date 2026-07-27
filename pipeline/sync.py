@@ -227,6 +227,47 @@ def export_canon():
     print(f"Updated:   {updated}")
     print(f"Unchanged: {unchanged}")
 
+def validate_chapter_path(path):
+    """Resolve and validate one file in the authoritative chapter corpus."""
+    candidate = Path(path).expanduser()
+    if not candidate.is_absolute():
+        candidate = PROJECT_ROOT / candidate
+    candidate = candidate.resolve()
+    corpus = ANALYSIS_CORPUS_ROOT.resolve()
+    try:
+        candidate.relative_to(corpus)
+    except ValueError as error:
+        raise ValueError(
+            "Chapter must be inside canon/chapters/."
+        ) from error
+    if candidate.suffix.lower() != ".md":
+        raise ValueError("Chapter must be a Markdown file.")
+    if not candidate.is_file():
+        raise FileNotFoundError(candidate)
+    return candidate
+
+
+def reanalyze_chapter(path):
+    """Reanalyze exactly one authoritative chapter without Chroma ingestion."""
+    chapter = validate_chapter_path(path)
+    manifest = load_manifest()
+    print(f"Reanalyzing {relative_path(chapter)}")
+    analyze_document(chapter)
+    files = dict(manifest.get("files", {}))
+    files[relative_path(chapter)] = {"hash": file_hash(chapter)}
+    manifest.update(
+        {
+            "sync_version": SYNC_VERSION,
+            "annotator_version": ANNOTATOR_VERSION,
+            "chunker_version": CHUNKER_VERSION,
+            "files": files,
+        }
+    )
+    save_manifest(manifest)
+    print("Chapter reanalysis complete.")
+    return chapter
+
+
 def run_sync():
     print("\n" + "=" * 70)
     print("STARFUR SYNC")

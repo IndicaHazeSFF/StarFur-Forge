@@ -56,6 +56,29 @@ CREATE TABLE IF NOT EXISTS appearances (
 );
 
 
+CREATE TABLE IF NOT EXISTS entity_facts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    entity_id INTEGER NOT NULL,
+    fact TEXT NOT NULL,
+    evidence TEXT,
+
+    source TEXT NOT NULL,
+    scene_index INTEGER,
+    chunk_index INTEGER,
+
+    fact_type TEXT NOT NULL DEFAULT 'durable_fact',
+    status TEXT NOT NULL DEFAULT 'extracted',
+
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY(entity_id)
+        REFERENCES entities(id)
+        ON DELETE CASCADE
+);
+
+
 CREATE TABLE IF NOT EXISTS relationships (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
 

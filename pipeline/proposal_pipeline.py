@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 from pipeline.paths import canonical_source
 from pipeline.chunker import chunk_markdown
 from pipeline.annotator import AnnotationParseError, annotate
@@ -8,6 +9,7 @@ from pipeline.db import (
     clear_source_derived_memory,
     create_proposal,
     get_entity_by_name,
+    get_entity_names_and_aliases,
     get_pending_proposals,
 )
 
@@ -21,6 +23,33 @@ class DocumentAnalysisError(RuntimeError):
         super().__init__(
             f"{len(failed_chunks)} chunk(s) require retry for {source}"
         )
+
+
+def normalize_proposal_name(name):
+    """Normalize only trivial presentation differences for comparison."""
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", " ", str(name).casefold())).strip()
+
+
+def proposal_match(name):
+    """Return duplicate/possible-match information without merging names."""
+    normalized = normalize_proposal_name(name)
+    pending = get_pending_proposals()
+    confirmed = get_entity_names_and_aliases()
+    for proposal in pending:
+        other = proposal.get("proposed_name")
+        if other and normalize_proposal_name(other) == normalized:
+            return {"kind": "pending_duplicate", "match": other}
+    for other in confirmed:
+        if normalize_proposal_name(other) == normalized:
+            return {"kind": "confirmed_duplicate", "match": other}
+    possible = []
+    for other in [p.get("proposed_name") for p in pending] + confirmed:
+        if not other:
+            continue
+        left, right = normalized, normalize_proposal_name(other)
+        if left != right and (left in right or right in left):
+            possible.append(other)
+    return {"kind": "possible_match", "matches": sorted(set(possible))} if possible else None
 
 
 def proposal_exists(
@@ -181,6 +210,9 @@ def analyze_document(path: Path):
                 evidence=entity_fact.get(
                     "evidence"
                 ),
+                fact_type=entity_fact.get(
+                    "fact_type"
+                ),
                 source=source,
                 scene_index=chunk[
                     "scene_index"
@@ -210,21 +242,15 @@ def analyze_document(path: Path):
             if not name:
                 continue
 
-            # Entity may have been confirmed since
-            # this document was previously analyzed.
-            if get_entity_by_name(name):
+            match = proposal_match(name)
+            if match and match["kind"] in {"confirmed_duplicate", "pending_duplicate"}:
+                print(f"  EXISTS   {name} (matches {match['match']})")
                 continue
-
-            if proposal_exists(
-                name,
-                source,
-                chunk["scene_index"],
-                chunk_index,
-            ):
+            if match and match["kind"] == "possible_match":
                 print(
-                    f"  EXISTS   {name}"
+                    f"  REVIEW   {name} possible matches: "
+                    + ", ".join(match["matches"])
                 )
-                continue
 
             create_proposal(
                 proposal_type="new_entity",

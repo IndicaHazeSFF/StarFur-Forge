@@ -4,6 +4,69 @@ import sqlite3
 
 DB_PATH = Path("data/starfur.db")
 
+FACT_TYPE_DEFAULT = "durable_fact"
+FACT_TYPES = (
+    "durable_fact",
+    "behavioral_tendency",
+    "physical_attribute",
+    "procedural_system_rule",
+    "temporary_scene_state",
+)
+
+
+def normalize_fact_type(fact_type):
+    if fact_type in FACT_TYPES:
+        return fact_type
+
+    return FACT_TYPE_DEFAULT
+
+
+def ensure_entity_facts_schema(connection):
+    """Add fact classification without rewriting existing fact rows."""
+    table = connection.execute(
+        """
+        SELECT name
+        FROM sqlite_master
+        WHERE type = 'table'
+          AND name = 'entity_facts'
+        """
+    ).fetchone()
+
+    if not table:
+        connection.execute(
+            """
+            CREATE TABLE entity_facts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                entity_id INTEGER NOT NULL,
+                fact TEXT NOT NULL,
+                evidence TEXT,
+                source TEXT NOT NULL,
+                scene_index INTEGER,
+                chunk_index INTEGER,
+                fact_type TEXT NOT NULL DEFAULT 'durable_fact',
+                status TEXT NOT NULL DEFAULT 'extracted',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        return
+
+    columns = {
+        row["name"]
+        for row in connection.execute(
+            "PRAGMA table_info(entity_facts)"
+        ).fetchall()
+    }
+
+    if "fact_type" not in columns:
+        connection.execute(
+            """
+            ALTER TABLE entity_facts
+            ADD COLUMN fact_type TEXT NOT NULL DEFAULT 'durable_fact'
+            """
+        )
+
 
 def connect():
     """
@@ -16,6 +79,9 @@ def connect():
     connection.execute(
         "PRAGMA foreign_keys = ON"
     )
+
+    ensure_entity_facts_schema(connection)
+    connection.commit()
 
     return connection
 
@@ -51,6 +117,22 @@ def get_entities(entity_type=None):
             ).fetchall()
 
     return [dict(row) for row in rows]
+
+
+def get_entity_names_and_aliases():
+    """Return confirmed canonical names and aliases for proposal review."""
+    with connect() as connection:
+        rows = connection.execute(
+            """
+            SELECT canonical_name AS name FROM entities WHERE status = 'confirmed'
+            UNION ALL
+            SELECT aliases.alias AS name
+            FROM aliases JOIN entities ON entities.id = aliases.entity_id
+            WHERE entities.status = 'confirmed'
+            ORDER BY name
+            """
+        ).fetchall()
+    return [row["name"] for row in rows if row["name"]]
 
 
 def get_entity_by_name(name):
@@ -370,6 +452,7 @@ def add_entity_fact(
     scene_index=None,
     chunk_index=None,
     status="extracted",
+    fact_type=FACT_TYPE_DEFAULT,
 ):
     """
     Record a source-derived fact about an entity.
@@ -387,9 +470,10 @@ def add_entity_fact(
                 source,
                 scene_index,
                 chunk_index,
+                fact_type,
                 status
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 entity_id,
@@ -398,6 +482,7 @@ def add_entity_fact(
                 source,
                 scene_index,
                 chunk_index,
+                normalize_fact_type(fact_type),
                 status,
             ),
         )
@@ -416,6 +501,7 @@ def get_entity_facts(entity_id):
                 source,
                 scene_index,
                 chunk_index,
+                fact_type,
                 status,
                 created_at,
                 updated_at
@@ -442,6 +528,7 @@ def get_all_entity_facts():
                 source,
                 scene_index,
                 chunk_index,
+                fact_type,
                 status
             FROM entity_facts
             ORDER BY
