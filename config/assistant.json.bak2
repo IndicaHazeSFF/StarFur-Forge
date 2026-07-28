@@ -1,0 +1,8 @@
+{
+  "chat_model": "qwen3:8b",
+  "persona_path": "persona/default.md",
+  "domain": "personal",
+  "max_session_messages": 20,
+  "max_memories": 5,
+  "memory_policy": "conservative"
+}

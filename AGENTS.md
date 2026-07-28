@@ -15,6 +15,7 @@
 - Structured entities, appearances, entity_facts, and proposals carry a domain column. db.connect() additively migrates missing columns and assigns legacy rows to project:crown-of-claws. Domain-aware queries default to that lore domain.
 - Chroma metadata carries the same domain and retrieval accepts a domain filter. Existing canon ingestion remains in the existing collection and default domain. Assistant storage/retrieval policy is not implemented yet.
 - Assistant personal memory uses the separate assistant_memories table and db CRUD primitives; do not reuse fictional entity_facts for personal records. Memory types, retention, and status values are validated constants, and forget is a soft status transition preserving provenance/history.
+- Valid assistant proposals may be persisted as pending only by the CLI session. Approval creates one assistant memory transactionally and links both sides with assistant_memory_proposals.approved_memory_id and assistant_memories.source_proposal_id; reviewed proposals are never deleted.
 
 
 - pipeline/prechunker.py converts canon/manuscript/manuscript.txt into chapter Markdown under canon/chapters/.
@@ -25,7 +26,12 @@
 - pipeline/ingest.py chunks all Markdown below canon/ for Chroma ingestion; this semantic scope is broader than sync's structured-analysis scope. pipeline/rag.py and pipeline/query.py provide semantic retrieval.
 - starfur.py is a CLI adapter over the pipeline. There is no shared service/application layer or TUI/web adapter yet; do not invent one during focused pipeline surgery.
 - pipeline/assistant.py is the narrow Stage 2 conversational loop: it loads persona/config files, reads active structured assistant memories explicitly, keeps only a bounded in-memory session window, and never writes memories automatically.
+- Assistant prompt assembly must keep the engine-owned config/assistant_policy.md grounding policy separate from replaceable persona text. Policy governs direct answers and factual use of retrieved context; persona governs tone/presentation and must not replace grounding.
+- The grounding policy should answer factual questions first but permit brief persona warmth/style afterward; it must not make the assistant sterile or suppress appropriate presentation.
 - Stage 3 assistant controls support explicit remember/forget and memory list/search commands. Conservative proposals are validated and held for review in session memory; automatic persistence remains disabled.
+- pipeline/retrieval_debug.py provides opt-in off/summary/verbose/trace tracing for assistant commands, structured memory lookup, context assembly, model requests, and responses. Use starfur.py assistant --debug verbose (or trace) when diagnosing retrieval/grounding. Full prompt/content output is sensitive and disabled by default.
+- Proposal generation must emit debug events for proposal_request, proposal_response, proposal_validation, and proposal_error. Proposal failures remain non-fatal and automatic proposals remain non-persistent until review workflow exists.
+- Proposal extraction treats only the user message as factual evidence; assistant responses are non-authoritative context. Prompts enumerate canonical memory types/retentions, while domain and source are engine-owned. Invalid proposals receive at most one constrained repair attempt.
 
 ## Canonical source, provenance, and data invariants
 

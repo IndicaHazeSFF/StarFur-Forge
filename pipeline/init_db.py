@@ -96,7 +96,8 @@ CREATE TABLE IF NOT EXISTS assistant_memories (
     source TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    last_accessed_at TEXT
+    last_accessed_at TEXT,
+    source_proposal_id INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_assistant_memories_domain
@@ -105,6 +106,8 @@ ON assistant_memories(domain);
 CREATE INDEX IF NOT EXISTS idx_assistant_memories_status
 ON assistant_memories(status);
 
+
+CREATE TABLE IF NOT EXISTS assistant_memory_proposals (id INTEGER PRIMARY KEY AUTOINCREMENT, domain TEXT NOT NULL, subject TEXT NOT NULL, memory_type TEXT NOT NULL, summary TEXT NOT NULL, details TEXT, importance REAL NOT NULL, confidence REAL NOT NULL, retention TEXT NOT NULL, source TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, reviewed_at TEXT, reviewed_by TEXT, review_note TEXT, approved_memory_id INTEGER);
 
 CREATE TABLE IF NOT EXISTS relationships (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

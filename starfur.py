@@ -301,6 +301,11 @@ def main():
         "--config",
         help="Path to assistant JSON configuration",
     )
+    assistant_parser.add_argument(
+        "--debug",
+        choices=("off", "summary", "verbose", "trace"),
+        help="Retrieval debugging detail level",
+    )
 
     # -------------------------
     # ENTITY
@@ -363,7 +368,7 @@ def main():
         analyze(args.path)
 
     elif args.command == "assistant":
-        run_interactive(args.config) if args.config else run_interactive()
+        run_interactive(args.config, debug_level=args.debug) if args.config else run_interactive(debug_level=args.debug)
 
     elif args.command == "entity":
         show_entity(args.name)

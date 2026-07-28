@@ -128,6 +128,10 @@ def ensure_assistant_memories_schema(connection):
     """)
     connection.execute("CREATE INDEX IF NOT EXISTS idx_assistant_memories_domain ON assistant_memories(domain)")
     connection.execute("CREATE INDEX IF NOT EXISTS idx_assistant_memories_status ON assistant_memories(status)")
+    columns = {row["name"] for row in connection.execute("PRAGMA table_info(assistant_memories)")}
+    if "source_proposal_id" not in columns: connection.execute("ALTER TABLE assistant_memories ADD COLUMN source_proposal_id INTEGER")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_assistant_memories_source_proposal ON assistant_memories(source_proposal_id) WHERE source_proposal_id IS NOT NULL")
+    connection.execute("CREATE TABLE IF NOT EXISTS assistant_memory_proposals (id INTEGER PRIMARY KEY AUTOINCREMENT, domain TEXT NOT NULL, subject TEXT NOT NULL, memory_type TEXT NOT NULL, summary TEXT NOT NULL, details TEXT, importance REAL NOT NULL, confidence REAL NOT NULL, retention TEXT NOT NULL, source TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, reviewed_at TEXT, reviewed_by TEXT, review_note TEXT, approved_memory_id INTEGER)")
 
 def connect():
     """
@@ -727,3 +731,43 @@ def update_assistant_memory(memory_id, domain="personal", **changes):
 
 def forget_assistant_memory(memory_id, domain="personal"):
     return update_assistant_memory(memory_id, domain, status="forgotten")
+
+def create_assistant_memory_proposal(proposal, domain="personal"):
+    domain = normalize_domain(domain)
+    required = ("subject", "memory_type", "summary", "details", "importance", "confidence", "retention")
+    if any(field not in proposal for field in required): raise ValueError("Missing proposal field")
+    normalize_memory_type(proposal["memory_type"]); normalize_retention(proposal["retention"])
+    for field in ("importance", "confidence"):
+        if isinstance(proposal[field], bool) or not isinstance(proposal[field], (int, float)) or not 0 <= proposal[field] <= 1: raise ValueError("Invalid proposal score")
+    with connect() as connection:
+        cursor = connection.execute("INSERT INTO assistant_memory_proposals (domain, subject, memory_type, summary, details, importance, confidence, retention, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (domain, proposal["subject"], proposal["memory_type"], proposal["summary"], proposal.get("details"), proposal["importance"], proposal["confidence"], proposal["retention"], proposal.get("source", "assistant_turn_proposal")))
+        connection.commit()
+        return cursor.lastrowid
+
+def list_assistant_memory_proposals(domain="personal", status="pending"):
+    with connect() as connection:
+        rows = connection.execute("SELECT * FROM assistant_memory_proposals WHERE domain = ? AND (? IS NULL OR status = ?) ORDER BY created_at, id", (normalize_domain(domain), status, status)).fetchall()
+    return [dict(row) for row in rows]
+
+def get_assistant_memory_proposal(proposal_id, domain="personal"):
+    with connect() as connection:
+        row = connection.execute("SELECT * FROM assistant_memory_proposals WHERE id = ? AND domain = ?", (proposal_id, normalize_domain(domain))).fetchone()
+    return dict(row) if row else None
+
+def reject_assistant_memory_proposal(proposal_id, domain="personal", reviewed_by="user", review_note=None):
+    with connect() as connection:
+        cursor = connection.execute("UPDATE assistant_memory_proposals SET status = 'rejected', reviewed_at = CURRENT_TIMESTAMP, reviewed_by = ?, review_note = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND domain = ? AND status = 'pending'", (reviewed_by, review_note, proposal_id, normalize_domain(domain)))
+        if cursor.rowcount != 1: raise ValueError("Proposal is missing or not pending")
+        connection.commit()
+    return get_assistant_memory_proposal(proposal_id, domain)
+
+def approve_assistant_memory_proposal(proposal_id, domain="personal", reviewed_by="user", review_note=None):
+    domain = normalize_domain(domain)
+    with connect() as connection:
+        proposal = connection.execute("SELECT * FROM assistant_memory_proposals WHERE id = ? AND domain = ? AND status = 'pending'", (proposal_id, domain)).fetchone()
+        if not proposal: raise ValueError("Proposal is missing or not pending")
+        cursor = connection.execute("INSERT INTO assistant_memories (domain, subject, memory_type, summary, details, importance, confidence, retention, status, source, source_proposal_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)", (domain, proposal["subject"], proposal["memory_type"], proposal["summary"], proposal["details"], proposal["importance"], proposal["confidence"], proposal["retention"], proposal["source"], proposal_id))
+        memory_id = cursor.lastrowid
+        connection.execute("UPDATE assistant_memory_proposals SET status = 'approved', approved_memory_id = ?, reviewed_at = CURRENT_TIMESTAMP, reviewed_by = ?, review_note = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending'", (memory_id, reviewed_by, review_note, proposal_id))
+        connection.commit()
+    return get_assistant_memory(memory_id, domain)

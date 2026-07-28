@@ -1,5 +1,53 @@
 # Changelog
 
+## 2026-07-28 — Durable assistant proposal storage foundation
+
+- Purpose: persist validated assistant proposals for restart-safe review without changing lore proposals or auto-approving memories.
+- Modified: pipeline/db.py, pipeline/init_db.py, pipeline/assistant.py, tests/test_assistant_proposals.py, AGENTS.md, and CHANGELOG.md.
+- Behavior: assistant_memory_proposals supports pending/approved/rejected lifecycle; CLI-generated store=true proposals become pending. Approval transactionally creates assistant_memories and links source_proposal_id/approved_memory_id; rejection preserves audit history.
+- Verification: python -m unittest discover -s tests -q (42 tests passed). No production sync, memory mutation, Chroma rebuild, or full analysis was run.
+
+
+## 2026-07-28 — Grounded assistant memory proposal extraction
+
+- Purpose: improve proposal quality without weakening validation or allowing assistant roleplay to become user memory.
+- Modified: pipeline/assistant.py, tests/test_assistant.py, AGENTS.md, and CHANGELOG.md.
+- Behavior: proposal prompts use user-only factual evidence, enumerate canonical enums, require numeric scores, and assign domain/source in engine code. Invalid output gets one bounded repair attempt, then remains safely rejected.
+- Verification: python -m unittest discover -s tests -q (40 tests passed). No production sync, memory mutation, Chroma rebuild, or full analysis was run.
+
+
+## 2026-07-28 — Proposal-path retrieval diagnostics
+
+- Purpose: expose why conservative assistant memory proposals are accepted, rejected, empty, or unavailable without changing persistence behavior.
+- Modified: pipeline/assistant.py, tests/test_assistant.py, AGENTS.md, and CHANGELOG.md.
+- Behavior: verbose/trace debugging now reports proposal request, raw response status, validation result, and non-fatal validation/model errors. Automatic proposals remain session-only and are never silently persisted.
+- Verification: python -m unittest discover -s tests -q (40 tests passed). No production sync, memory mutation, Chroma rebuild, or full analysis was run.
+
+
+## 2026-07-28 — Balance grounded answers with persona expression
+
+- Purpose: preserve the successful factual grounding fix without suppressing natural persona warmth.
+- Modified: config/assistant_policy.md, tests/test_assistant.py, AGENTS.md, and CHANGELOG.md.
+- Behavior: the engine answers accurately first, then permits brief affectionate/persona expression when appropriate; persona still cannot contradict or overwhelm factual grounding.
+- Verification: python -m unittest discover -s tests -q (40 tests passed).
+
+
+## 2026-07-28 — Engine-owned assistant grounding policy
+
+- Purpose: ensure replaceable personas cannot override factual grounding or replace direct answers with unrelated roleplay.
+- Modified: pipeline/assistant.py, config/assistant.json, config/assistant_policy.md, tests/test_assistant.py, AGENTS.md, and CHANGELOG.md.
+- Behavior: assistant prompts now include a separate engine policy after persona text, explicitly prioritizing the user question and retrieved factual context. Persona remains presentation-only.
+- Verification: python -m unittest discover -s tests -q (39 tests passed). No production sync, memory mutation, Chroma rebuild, or full analysis was run.
+
+
+## 2026-07-28 — Retrieval debugging and observability
+
+- Purpose: make assistant retrieval, context assembly, commands, and model grounding inspectable before further memory-quality changes.
+- Modified: pipeline/retrieval_debug.py, pipeline/assistant.py, starfur.py, config/assistant.json, tests/test_assistant.py, AGENTS.md, and CHANGELOG.md.
+- Behavior: assistant supports --debug off, summary, verbose, and trace. Verbose shows full memory/context/model payloads; trace adds elapsed timing. Debugging is opt-in and does not alter memory persistence or retrieval behavior.
+- Verification: python -m unittest discover -s tests -v (38 tests passed). No production sync, memory mutation, Chroma rebuild, or full analysis was run.
+
+
 ## 2026-07-27 — Stage 3 explicit memory controls and proposals
 
 - Purpose: add user-controlled assistant memory commands and conservative review-only proposals.

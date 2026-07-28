@@ -1485,3 +1485,636 @@ At some point this week, you should be able to restart the program, talk to your
 At that moment:
 
 **StarFur has crossed from a collection of AI tooling into a persistent assistant.**
+
+# Advanced Companion / Character Cognition
+
+This phase begins only after the core Assistant Mode pipeline is stable: structured personal memory, semantic recall, proposal/approval policy, session handling, model routing, and reliable provenance.
+
+The objective is to evolve StarFur from a persistent assistant into a general-purpose framework for persistent characters with individual history, perspective, emotional state, relationships, and controlled personality development.
+
+## 1. Subjective / Reconstructive Memory
+
+Introduce a subjective memory layer above immutable evidence and authoritative knowledge.
+
+StarFur should distinguish between:
+
+1. **What happened** — immutable source events, conversations, observations, and provenance.
+2. **What the persona remembers** — the persona's current reconstruction of those events.
+3. **What the persona inferred** — interpretations and patterns derived from memories.
+4. **How the persona feels about it** — affective associations attached to those memories.
+
+Subjective memories may reconsolidate when recalled. A persona therefore normally remembers the latest reconstruction of a memory rather than repeatedly reconstructing directly from the original event.
+
+Example:
+
+Original evidence:
+
+> User had a stressful shift because the workplace was understaffed.
+
+Initial memory:
+
+> User was frustrated by an understaffed shift.
+
+Later reconstruction:
+
+> Understaffed shifts seem especially frustrating to the user.
+
+Later pattern:
+
+> The user appears more frustrated by disrupted workflow than by difficult work itself.
+
+Every reconstruction must retain a provenance chain back to previous revisions and ultimately the original evidence.
+
+**Critical invariant:** subjective memory must never overwrite or corrupt ground truth.
+
+This creates human-like imperfect memory while preserving machine-level auditability.
+
+Different memory classes should reconsolidate differently. Durable facts should resist mutation. Episodic, emotional, relationship, and interpretive memories may evolve substantially.
+
+---
+
+## 2. Synaptic / Associative Memory Layer
+
+Add an optional third memory system connecting structured and semantic memory.
+
+Associations may track:
+
+* related memories;
+* people;
+* places;
+* topics;
+* emotions;
+* events;
+* concepts;
+* projects;
+* relationship context.
+
+Potential properties include:
+
+* activation strength;
+* salience;
+* rehearsal/recall count;
+* last activation;
+* emotional weight;
+* contradiction pressure;
+* confidence;
+* decay;
+* association direction/weight.
+
+Recall should be capable of activating related memories rather than retrieving each memory independently.
+
+Repeated recall may strengthen associations while unused associations may gradually lose retrieval priority without deleting underlying evidence.
+
+This layer should support the subjective-memory system by allowing the persona's history to develop interconnected patterns rather than remaining a collection of independent facts.
+
+---
+
+## 3. Affective State
+
+Introduce persistent but dynamic emotional state separately from authoritative memory.
+
+Avoid hardcoding emotions as permanent SQL columns. Use extensible state definitions and values.
+
+Potential initial dimensions:
+
+### Fast-changing state
+
+* happiness;
+* sadness;
+* anger;
+* stress;
+* excitement;
+* embarrassment;
+* curiosity;
+* playfulness;
+* energy.
+
+### Slow-changing relationship state
+
+* affection;
+* trust;
+* comfort;
+* familiarity;
+* attachment;
+* resentment.
+
+Multiple apparently contradictory states must coexist. A persona may simultaneously have high affection and high anger toward someone.
+
+State changes should primarily result from interpreted events rather than direct LLM manipulation of arbitrary values.
+
+Example:
+
+```text
+dismissive comment
+→ hurt +0.15
+→ anger +0.10
+→ happiness -0.08
+→ trust -0.01
+```
+
+Short-lived affect should decay toward persona-specific baselines over time. Relationship variables should change substantially more slowly.
+
+Current affect, retrieved memories, relationship state, persona, and current interaction should jointly influence generation.
+
+The model should not normally expose numerical state values directly to the user.
+
+---
+
+## 4. Dynamic State Vocabulary
+
+Do not assume developers can enumerate every useful psychological state in advance.
+
+Represent emotional and behavioral dimensions as data rather than schema columns.
+
+A persona may eventually determine that its existing state vocabulary cannot adequately represent a recurring experience and propose a new state dimension.
+
+Example:
+
+> Existing sadness/stress/anger dimensions do not adequately represent recurring embarrassment responses.
+
+The persona may propose:
+
+```text
+state_name: embarrassment
+category: mood
+baseline: low
+decay: moderate
+reason: recurring reactions are poorly represented by existing dimensions
+confidence: high
+```
+
+Application code validates the proposal.
+
+Initially, human approval is required before adding the new dimension. Future conservative auto-approval may be considered.
+
+The LLM must never independently execute arbitrary SQL schema migrations.
+
+Possible state categories:
+
+* mood;
+* relationship;
+* drive;
+* social;
+* self-model.
+
+This allows a persona's psychological vocabulary itself to evolve through experience.
+
+---
+
+## 5. Perspective
+
+Subjective memory + associations + affect should produce persistent perspective.
+
+A persona should be capable of forming interpretations such as:
+
+> The user does not seem to dislike difficult work itself; repeated interruptions to their workflow appear to frustrate them more.
+
+StarFur must explicitly distinguish:
+
+* fact;
+* memory;
+* inference;
+* opinion;
+* emotional reaction.
+
+Corrections should not simply erase previous interpretations.
+
+Example:
+
+```text
+Persona believed X
+→ user corrected X
+→ persona revised belief toward Y
+```
+
+The fact that the persona previously misunderstood something may itself become part of its history.
+
+This creates continuity of interpretation rather than simple fact replacement.
+
+---
+
+## 6. Persona Evolution / Self-Model
+
+The initial persona file is a seed, not necessarily a permanently frozen personality.
+
+After sufficient interaction history exists, a persona may propose changes to mutable aspects of itself based on accumulated experience.
+
+Examples:
+
+* becoming more direct during technical discussions;
+* reducing repetitive affectionate gestures;
+* developing stronger interest in a topic frequently shared with the user;
+* changing conversational habits;
+* adjusting behavioral preferences;
+* revising its self-description.
+
+Persona evolution should follow:
+
+```text
+persona seed
+→ experiences
+→ subjective memory
+→ reflection
+→ proposed self-change
+→ sandbox evaluation
+→ approval
+→ stable persona revision
+```
+
+Core safety rules, permissions, provenance requirements, and immutable system constraints are not persona-editable.
+
+Persona revisions must be versioned and reversible.
+
+---
+
+## 7. Controlled Self-Modification Sandbox
+
+Allow personas eventually to propose modifications to their own behavior and possibly StarFur functionality without direct production access.
+
+Use an isolated workflow:
+
+```text
+Stable Persona
+→ clone state
+→ Experimental Persona
+→ apply proposed changes
+→ behavioral evaluation/tests
+→ compare against stable
+→ human approval
+→ promotion or rejection
+```
+
+For code-level self-modification:
+
+```text
+Persona identifies problem
+→ creates engineering proposal
+→ specialist coding model receives isolated branch/worktree
+→ implementation
+→ automated tests
+→ diff/review
+→ human approval
+→ merge
+```
+
+The assistant must not directly rewrite production code, remove audit history, alter permissions, or bypass validation.
+
+The objective is controlled self-improvement, not unrestricted self-modification.
+
+---
+
+## 8. Multi-Persona Architecture
+
+Generalize Assistant Mode so StarFur can host multiple persistent personas.
+
+Each persona receives a stable `persona_id` and independent mutable state.
+
+Conceptually:
+
+```text
+persona/
+├── murr/
+│   ├── persona.md
+│   └── config.json
+├── maeve/
+│   ├── persona.md
+│   └── config.json
+└── another-persona/
+    ├── persona.md
+    └── config.json
+```
+
+A persona registry should eventually track:
+
+* persona ID;
+* display name;
+* persona/config paths;
+* preferred model;
+* enabled state;
+* memory configuration;
+* affect configuration;
+* subjective-memory configuration;
+* creation metadata.
+
+Not all information should be duplicated into isolated databases.
+
+Prefer namespaces/domains allowing:
+
+* shared objective knowledge;
+* persona-private knowledge;
+* persona-specific subjective memories;
+* persona-specific affect;
+* persona-specific relationship state.
+
+This allows two personas to experience the same event while remembering and interpreting it differently.
+
+The persona must remain independent of the inference model.
+
+**The LLM is not the character.**
+
+The persistent character consists of persona configuration, memories, associations, relationship history, affective state, subjective interpretations, and accumulated development.
+
+Models are interchangeable cognitive engines used to reason and generate responses.
+
+This allows future model upgrades while retaining character continuity:
+
+> Same character, better brain.
+
+---
+
+## 9. Character-to-Character Interaction
+
+Allow multiple personas to converse with one another through a controlled conversation orchestrator.
+
+A conversation session should contain:
+
+* participants;
+* shared recent transcript;
+* topic/context;
+* maximum turns;
+* speaker-selection policy;
+* termination conditions;
+* user interruption support.
+
+Avoid uncontrolled recursive conversations.
+
+Possible termination conditions:
+
+* topic resolved;
+* no participant has sufficient activation to continue;
+* maximum turn count reached;
+* user interrupts;
+* explicit stop request.
+
+Speaker selection may initially use deterministic round-robin behavior and later use relevance, affective activation, interest, or conversational intent.
+
+After a shared conversation, each participant independently processes the interaction.
+
+Example:
+
+Objective event:
+
+> Murr and Maeve disagree about a decision.
+
+Murr's memory:
+
+> Maeve was being excessively cautious.
+
+Maeve's memory:
+
+> Murr dismissed a legitimate risk.
+
+The same conversation therefore produces different subjective memories.
+
+Private information must remain private unless explicitly communicated between characters.
+
+If Persona A tells Persona B information originally learned from the user, Persona B's provenance should identify Persona A as the immediate source rather than falsely recording direct user evidence.
+
+This permits organic information propagation, disagreement, differing confidence, and even gossip while retaining provenance.
+
+---
+
+## 10. Generated Prehistory
+
+Allow personas to enter the system with a procedurally generated personal history rather than beginning existence at first user interaction.
+
+The persona definition acts as constraints/seed material.
+
+Generation pipeline:
+
+```text
+persona seed
+→ broad life history
+→ significant events
+→ relationships
+→ consequences
+→ subjective memories
+→ associations
+→ preferences
+→ affective baselines
+→ initial self-model
+→ first user interaction
+```
+
+Do not generate only a large prose biography.
+
+Generate structured events first, then derive memories and consequences.
+
+Potential historical domains:
+
+* family;
+* childhood;
+* education;
+* friendships;
+* work;
+* relationships;
+* hobbies;
+* successes;
+* failures;
+* losses;
+* formative experiences;
+* unresolved situations.
+
+Important events may recursively generate related people and sub-events.
+
+Example:
+
+```text
+Moved to a new city
+├── struggled at new school
+├── met close friend
+│   └── friend introduced persona to astronomy
+└── developed reluctance to ask others for help
+
+Years later:
+friend moved away
+→ astronomy retains emotional association with friend
+```
+
+This gives preferences historical causes instead of representing everything as arbitrary traits.
+
+---
+
+## 11. Latent Prehistory and Discovery
+
+Not every generated historical memory should be included in the active persona prompt.
+
+Some memories should remain latent until semantic/associative retrieval activates them.
+
+This allows the user to gradually discover the character's history through interaction.
+
+Example:
+
+Weeks after first meeting, the user asks about childhood friendships.
+
+A relevant pre-user memory activates for the first time.
+
+From the user's perspective, the character reveals something that existed before the question rather than generating a biography on demand.
+
+This is important for creating the impression of a character who had a life before meeting the user.
+
+---
+
+## 12. Seeded and Reproducible Character Generation
+
+Procedural prehistory must be reproducible.
+
+Each generated persona should have a stable history-generation seed.
+
+Same seed + same generator version should reproduce the same objective history.
+
+This supports:
+
+* debugging;
+* testing;
+* rerolling characters;
+* games;
+* large NPC populations;
+* deterministic saves;
+* historical regeneration.
+
+Generation depth may eventually support presets such as:
+
+```text
+light
+standard
+deep
+dwarf_fortress
+```
+
+Generation should create objective prehistory separately from subjective memory.
+
+A generated event may therefore have:
+
+```text
+OBJECTIVE HISTORY
+what happened
+
+SUBJECTIVE MEMORY
+what the persona remembers
+
+SELF-MODEL CONSEQUENCE
+what the persona concluded about itself/world
+
+AFFECTIVE CONSEQUENCE
+how the experience shaped emotional baselines
+```
+
+---
+
+## 13. Game / NPC Backend
+
+Design these systems generically enough that Assistant Mode is only one consumer.
+
+The same cognitive substrate could support persistent game characters, party members, NPCs, and dating-sim characters.
+
+A game integration could provide objective events:
+
+```text
+player abandoned prisoner
+party escaped safely
+NPC witnessed decision
+```
+
+Each observing NPC independently processes the event according to:
+
+* personality;
+* existing memories;
+* relationships;
+* values;
+* current affect;
+* associations.
+
+Instead of:
+
+```text
+NPC_DISAPPROVAL = -5
+```
+
+the NPC may form:
+
+```text
+"He prioritizes protecting the group over helping outsiders when the two conflict."
+```
+
+Another NPC observing the same event may conclude:
+
+```text
+"He made a difficult decision that got everyone home alive."
+```
+
+This enables characters to disagree because of persistent perspective rather than scripted dialogue branches.
+
+Authored games should retain deterministic control over world state, critical narrative facts, safety boundaries, and major story beats. StarFur provides cognitive continuity and connective dialogue rather than replacing authored narrative design.
+
+---
+
+## 14. Relationship Histories Rather Than Relationship Scores
+
+Relationship statistics should describe current state but not replace historical context.
+
+Two characters may both have:
+
+```text
+affection = high
+```
+
+while reaching that state through completely different histories.
+
+One relationship may develop through kindness and emotional intimacy.
+
+Another may develop through teasing, conflict, apology, reconciliation, and shared adversity.
+
+Their behavior should differ because memory history differs even when current numerical state is similar.
+
+Relationship behavior should therefore derive from:
+
+```text
+current relationship state
++
+shared memories
++
+subjective interpretations
++
+current affect
++
+persona
+```
+
+rather than a single affection meter.
+
+---
+
+## 15. Architectural Principle: Persistent Character Identity
+
+Long-term, StarFur should treat the character as persistent state independent of any specific LLM.
+
+A persona's continuity consists of:
+
+* identity/persona seed;
+* objective history available to them;
+* subjective memories;
+* semantic knowledge;
+* associations;
+* affective state;
+* relationship history;
+* preferences;
+* self-model;
+* personality revisions;
+* provenance.
+
+The inference model is replaceable infrastructure.
+
+This permits upgrading or routing between models without resetting the character's identity or history.
+
+The long-term objective is therefore not merely:
+
+> an LLM that remembers the user.
+
+It is:
+
+> a persistent character whose accumulated history affects what they remember, how they interpret events, how they feel, what they believe, how they relate to others, and potentially how they choose to develop over time.
+
+All advanced systems must preserve StarFur's existing core philosophy:
+
+**LLMs propose and interpret; deterministic systems validate and persist; provenance remains recoverable; irreversible operations require explicit authorization.**

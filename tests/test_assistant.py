@@ -8,7 +8,7 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.modules.setdefault("ollama", types.ModuleType("ollama"))
 
-from pipeline.assistant import AssistantSession, load_config, load_persona
+from pipeline.assistant import AssistantSession, load_config, load_persona, load_policy
 
 
 class AssistantTests(unittest.TestCase):
@@ -91,7 +91,7 @@ class AssistantTests(unittest.TestCase):
 
     def test_proposals_are_validated_and_not_persisted(self):
         calls = []
-        config = type("Config", (), {"chat_model": "test", "domain": "personal", "max_session_messages": 4, "max_memories": 0, "memory_policy": "conservative"})()
+        config = type("Config", (), {"chat_model": "test", "domain": "personal", "max_session_messages": 4, "max_memories": 0, "memory_policy": "conservative", "debug_level": "verbose"})()
         def fake_chat(**kwargs):
             calls.append(kwargs)
             if len(calls) == 1:
@@ -102,9 +102,18 @@ class AssistantTests(unittest.TestCase):
         self.assertEqual(session.respond("I really like foxes"), "answer")
         self.assertEqual(len(session.proposals), 1)
         self.assertTrue(session.proposals[0]["store"])
+        self.assertEqual(session.proposals[0]["source"], "assistant_turn_proposal")
+        self.assertEqual(session.proposals[0]["domain"], "personal")
+        events = [event["event"] for event in session.trace.events]
+        self.assertIn("proposal_request", events)
+        request = next(event for event in session.trace.events if event["event"] == "proposal_request")
+        self.assertIn("USER FACTUAL INPUT", request["messages"][1]["content"])
+        self.assertIn("project_context", request["messages"][0]["content"])
+        self.assertIn("proposal_response", events)
+        self.assertIn("proposal_validation", events)
 
     def test_invalid_proposal_does_not_break_turn(self):
-        config = type("Config", (), {"chat_model": "test", "domain": "personal", "max_session_messages": 4, "max_memories": 0, "memory_policy": "conservative"})()
+        config = type("Config", (), {"chat_model": "test", "domain": "personal", "max_session_messages": 4, "max_memories": 0, "memory_policy": "conservative", "debug_level": "verbose"})()
         calls = iter([
             {"message": {"content": "answer"}},
             {"message": {"content": "{\"store\": true, \"subject\": \"User\", \"memory_type\": \"bogus\", \"summary\": \"bad\", \"importance\": 1, \"confidence\": 1, \"retention\": \"long_term\", \"domain\": \"personal\", \"source\": \"test\"}"}},
@@ -112,7 +121,52 @@ class AssistantTests(unittest.TestCase):
         session = AssistantSession(config, "Persona", chat=lambda **kwargs: next(calls), memory_loader=lambda **kwargs: [])
         self.assertEqual(session.respond("hello"), "answer")
         self.assertEqual(len(session.proposals), 0)
+        self.assertIn("proposal_error", [event["event"] for event in session.trace.events])
 
+    def test_debug_trace_records_memory_context_and_model(self):
+        config = type("Config", (), {"chat_model": "test", "domain": "personal", "max_session_messages": 4, "max_memories": 1, "memory_policy": "off", "debug_level": "verbose"})()
+        session = AssistantSession(
+            config,
+            "Persona",
+            chat=lambda **kwargs: {"message": {"content": "answer"}},
+            memory_loader=lambda **kwargs: [{"summary": "Murr project"}],
+        )
+        session.respond("What am I building?")
+        events = [event["event"] for event in session.trace.events]
+        self.assertIn("memory_lookup", events)
+        self.assertIn("context_assembly", events)
+        self.assertIn("model_request", events)
+        self.assertIn("model_response", events)
+        rendered = session.trace.render()
+        self.assertIn("Murr project", rendered)
+        self.assertIn("What am I building?", rendered)
+
+    def test_debug_off_emits_no_trace(self):
+        config = type("Config", (), {"chat_model": "test", "domain": "personal", "max_session_messages": 4, "max_memories": 0, "memory_policy": "off"})()
+        session = AssistantSession(config, "Persona", chat=lambda **kwargs: {"message": {"content": "answer"}}, memory_loader=lambda **kwargs: [])
+        session.respond("hello")
+        self.assertEqual(session.trace.render(), "")
+
+    def test_engine_policy_is_separate_from_persona_and_grounding_is_explicit(self):
+        config = type("Config", (), {"chat_model": "test", "domain": "personal", "max_session_messages": 4, "max_memories": 1, "memory_policy": "off", "debug_level": "verbose"})()
+        session = AssistantSession(
+            config,
+            "Persona-only style",
+            policy="Answer directly. Retrieved memory is factual context.",
+            chat=lambda **kwargs: {"message": {"content": "grounded answer"}},
+            memory_loader=lambda **kwargs: [{"summary": "Building a two-dimensional memory system"}],
+        )
+        session.respond("What am I building?")
+        prompt = session.trace.events[2]["messages"][0]["content"]
+        self.assertIn("Persona-only style", prompt)
+        self.assertIn("Answer directly", prompt)
+        self.assertIn("Building a two-dimensional memory system", prompt)
+
+    def test_policy_allows_persona_after_grounded_answer(self):
+        policy = load_policy()
+        self.assertIn("Answer the user's actual question accurately and directly.", policy)
+        self.assertIn("preserve the persona's natural warmth", policy)
+        self.assertIn("must not replace, contradict, bury, or overwhelm", policy)
 
 if __name__ == "__main__":
     unittest.main()
