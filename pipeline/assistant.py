@@ -258,6 +258,7 @@ def run_interactive(config_path=DEFAULT_CONFIG_PATH, input_fn=input, output_fn=p
         if user_text.strip().casefold() in {"quit", "exit"}:
             output_fn("Goodbye.")
             return
+        proposal_count_before = len(session.proposals)
         try:
             answer = session.respond(user_text)
         except Exception as error:
@@ -267,7 +268,7 @@ def run_interactive(config_path=DEFAULT_CONFIG_PATH, input_fn=input, output_fn=p
         if answer:
             output_fn(f"StarFur: {answer}")
         session.trace.emit(output_fn)
-        if session.proposals:
+        if len(session.proposals) > proposal_count_before:
             proposal = session.proposals[-1]
             if proposal.get("store"):
                 output_fn("Memory proposal available for review: " + proposal["summary"])

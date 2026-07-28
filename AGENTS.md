@@ -16,6 +16,7 @@
 - Chroma metadata carries the same domain and retrieval accepts a domain filter. Existing canon ingestion remains in the existing collection and default domain. Assistant storage/retrieval policy is not implemented yet.
 - Assistant personal memory uses the separate assistant_memories table and db CRUD primitives; do not reuse fictional entity_facts for personal records. Memory types, retention, and status values are validated constants, and forget is a soft status transition preserving provenance/history.
 - Valid assistant proposals may be persisted as pending only by the CLI session. Approval creates one assistant memory transactionally and links both sides with assistant_memory_proposals.approved_memory_id and assistant_memories.source_proposal_id; reviewed proposals are never deleted.
+- Proposal review notifications are emitted only when the current turn creates a new proposal; stale session proposals must not be announced after list/approve/reject or unrelated turns.
 
 
 - pipeline/prechunker.py converts canon/manuscript/manuscript.txt into chapter Markdown under canon/chapters/.

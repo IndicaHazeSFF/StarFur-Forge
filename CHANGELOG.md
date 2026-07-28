@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-28 — Fix stale assistant proposal notifications
+
+- Purpose: prevent previously created proposals from being announced after unrelated commands or turns.
+- Modified: pipeline/assistant.py, tests/test_assistant.py, AGENTS.md, and CHANGELOG.md.
+- Behavior: review notices now appear only when the current turn creates a new proposal.
+- Verification: python -m unittest discover -s tests -q (43 tests passed).
+
+
 ## 2026-07-28 — Durable assistant proposal storage foundation
 
 - Purpose: persist validated assistant proposals for restart-safe review without changing lore proposals or auto-approving memories.

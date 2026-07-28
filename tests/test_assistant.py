@@ -4,11 +4,13 @@ import sys
 import tempfile
 import types
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.modules.setdefault("ollama", types.ModuleType("ollama"))
 
 from pipeline.assistant import AssistantSession, load_config, load_persona, load_policy
+from pipeline import assistant as assistant_module
 
 
 class AssistantTests(unittest.TestCase):
@@ -167,6 +169,20 @@ class AssistantTests(unittest.TestCase):
         self.assertIn("Answer the user's actual question accurately and directly.", policy)
         self.assertIn("preserve the persona's natural warmth", policy)
         self.assertIn("must not replace, contradict, bury, or overwhelm", policy)
+
+    def test_proposal_notice_only_appears_for_new_proposal(self):
+        class FakeSession:
+            def __init__(self, *args, **kwargs):
+                self.proposals = [{"store": True, "summary": "old"}]
+                self.trace = type("Trace", (), {"emit": lambda self, output: None})()
+            def respond(self, text):
+                return "ok"
+        config = type("Config", (), {"persona_path": Path("persona/default.md"), "policy_path": Path("config/assistant_policy.md")})()
+        inputs = iter(["proposal list", "quit"])
+        output = []
+        with patch.object(assistant_module, "load_config", return_value=config), patch.object(assistant_module, "load_persona", return_value="persona"), patch.object(assistant_module, "load_policy", return_value="policy"), patch.object(assistant_module, "AssistantSession", FakeSession):
+            assistant_module.run_interactive(input_fn=lambda prompt: next(inputs), output_fn=output.append)
+        self.assertFalse(any("Memory proposal available" in line for line in output))
 
 if __name__ == "__main__":
     unittest.main()
