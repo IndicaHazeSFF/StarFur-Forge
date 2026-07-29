@@ -7,6 +7,7 @@ import ollama
 from pipeline.db import (
     create_assistant_memory,
     create_assistant_memory_proposal,
+    upsert_assistant_memory_proposal,
     list_assistant_memory_proposals, approve_assistant_memory_proposal, reject_assistant_memory_proposal,
     get_assistant_memory,
     list_assistant_memories,
@@ -171,8 +172,9 @@ class AssistantSession:
             proposal = validate_memory_proposal(raw, self.config.domain)
         self.trace.record("proposal_validation", status="accepted", store=proposal["store"], domain=proposal["domain"])
         if proposal["store"] and self.proposal_creator:
-            proposal["id"] = self.proposal_creator(proposal, domain=self.config.domain)
-            self.trace.record("proposal_persisted", proposal_id=proposal["id"], status="pending")
+            result = self.proposal_creator(proposal, domain=self.config.domain, observation_text=user_text)
+            proposal["id"] = result.get("proposal_id", result) if isinstance(result, dict) else result
+            self.trace.record("proposal_persisted", proposal_id=proposal["id"], status=result.get("action", "pending") if isinstance(result, dict) else "pending")
         self.proposals.append(proposal)
         return proposal
 
@@ -247,7 +249,7 @@ class AssistantSession:
 
 def run_interactive(config_path=DEFAULT_CONFIG_PATH, input_fn=input, output_fn=print, debug_level=None):
     config = load_config(config_path)
-    session = AssistantSession(config, load_persona(config.persona_path), policy=load_policy(config.policy_path), debug_level=debug_level, proposal_creator=create_assistant_memory_proposal)
+    session = AssistantSession(config, load_persona(config.persona_path), policy=load_policy(config.policy_path), debug_level=debug_level, proposal_creator=upsert_assistant_memory_proposal)
     output_fn("StarFur Assistant (remember this:, forget this:, memory list, memory search; quit to exit)")
     while True:
         try:

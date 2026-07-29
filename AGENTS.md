@@ -16,6 +16,7 @@
 - Chroma metadata carries the same domain and retrieval accepts a domain filter. Existing canon ingestion remains in the existing collection and default domain. Assistant storage/retrieval policy is not implemented yet.
 - Assistant personal memory uses the separate assistant_memories table and db CRUD primitives; do not reuse fictional entity_facts for personal records. Memory types, retention, and status values are validated constants, and forget is a soft status transition preserving provenance/history.
 - Valid assistant proposals may be persisted as pending only by the CLI session. Approval creates one assistant memory transactionally and links both sides with assistant_memory_proposals.approved_memory_id and assistant_memories.source_proposal_id; reviewed proposals are never deleted.
+- Assistant pending proposals use deterministic normalized proposal keys and atomic reinforcement. Equivalent pending evidence increments evidence_count, records unique provenance in assistant_memory_proposal_evidence, and raises confidence by a bounded 0.05 increment without approval.
 - Proposal review notifications are emitted only when the current turn creates a new proposal; stale session proposals must not be announced after list/approve/reject or unrelated turns.
 
 
@@ -74,6 +75,8 @@
 - Do not add relationship/event extraction merely because tables exist; current annotation persistence is focused on known entities, appearances, facts, and proposals.
 
 ## Testing and focused Python surgery
+
+Assistant proposal persistence receives the original user observation when available. Its normalized domain/subject/type/observation identity survives model summary paraphrases; repeated identical evidence is a no-op, while legacy callers without observations retain summary-based identity.
 
 - Add a regression test before changing chunk or source-discovery behavior. Keep tests deterministic and service-free; use temporary databases and fake Chroma collections.
 - After code changes, run: python -m unittest discover -s tests -v.

@@ -1,5 +1,8 @@
 from pathlib import Path
+import hashlib
+import re
 import sqlite3
+import unicodedata
 
 from pipeline.domains import DEFAULT_PROJECT_DOMAIN, normalize_domain
 
@@ -32,6 +35,21 @@ def normalize_memory_type(value): return _validated(value, ASSISTANT_MEMORY_TYPE
 def normalize_retention(value): return _validated(value, ASSISTANT_RETENTIONS, "retention")
 def normalize_memory_status(value): return _validated(value, ASSISTANT_MEMORY_STATUSES, "status")
 
+
+
+def normalize_proposal_text(value):
+    text = unicodedata.normalize("NFKC", str(value)).casefold().strip()
+    text = text.replace("’", "'").replace("“", "").replace("”", "")
+    text = re.sub(r"\s+", " ", text)
+    return re.sub(r"[.!?;:,]+$", "", text).strip()
+
+def assistant_proposal_key(domain, subject, memory_type, summary):
+    identity = "|".join((normalize_domain(domain), normalize_proposal_text(subject), memory_type, normalize_proposal_text(summary)))
+    return hashlib.sha256(identity.encode("utf-8")).hexdigest()
+
+def assistant_observation_key(domain, subject, memory_type, observation_text):
+    identity = "observation|" + "|".join((normalize_domain(domain), normalize_proposal_text(subject), memory_type, normalize_proposal_text(observation_text)))
+    return hashlib.sha256(identity.encode("utf-8")).hexdigest()
 
 def normalize_fact_type(fact_type):
     if fact_type in FACT_TYPES:
@@ -132,6 +150,11 @@ def ensure_assistant_memories_schema(connection):
     if "source_proposal_id" not in columns: connection.execute("ALTER TABLE assistant_memories ADD COLUMN source_proposal_id INTEGER")
     connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_assistant_memories_source_proposal ON assistant_memories(source_proposal_id) WHERE source_proposal_id IS NOT NULL")
     connection.execute("CREATE TABLE IF NOT EXISTS assistant_memory_proposals (id INTEGER PRIMARY KEY AUTOINCREMENT, domain TEXT NOT NULL, subject TEXT NOT NULL, memory_type TEXT NOT NULL, summary TEXT NOT NULL, details TEXT, importance REAL NOT NULL, confidence REAL NOT NULL, retention TEXT NOT NULL, source TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, reviewed_at TEXT, reviewed_by TEXT, review_note TEXT, approved_memory_id INTEGER)")
+    columns = {row["name"] for row in connection.execute("PRAGMA table_info(assistant_memory_proposals)")}
+    for column, definition in (('proposal_key', 'TEXT'), ('evidence_count', 'INTEGER NOT NULL DEFAULT 1'), ('first_observed_at', 'TEXT'), ('last_observed_at', 'TEXT')):
+        if column not in columns: connection.execute(f"ALTER TABLE assistant_memory_proposals ADD COLUMN {column} {definition}")
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_assistant_proposals_pending_key ON assistant_memory_proposals(domain, proposal_key) WHERE status = 'pending' AND proposal_key IS NOT NULL")
+    connection.execute("CREATE TABLE IF NOT EXISTS assistant_memory_proposal_evidence (id INTEGER PRIMARY KEY AUTOINCREMENT, proposal_id INTEGER NOT NULL, source TEXT NOT NULL, source_reference TEXT, evidence_hash TEXT NOT NULL, raw_excerpt TEXT, observed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(proposal_id, evidence_hash))")
 
 def connect():
     """
@@ -732,7 +755,9 @@ def update_assistant_memory(memory_id, domain="personal", **changes):
 def forget_assistant_memory(memory_id, domain="personal"):
     return update_assistant_memory(memory_id, domain, status="forgotten")
 
-def create_assistant_memory_proposal(proposal, domain="personal"):
+def create_assistant_memory_proposal(proposal, domain="personal", observation_text=None):
+    if observation_text is not None:
+        return upsert_assistant_memory_proposal(proposal, domain=domain, observation_text=observation_text)
     domain = normalize_domain(domain)
     required = ("subject", "memory_type", "summary", "details", "importance", "confidence", "retention")
     if any(field not in proposal for field in required): raise ValueError("Missing proposal field")
@@ -771,3 +796,27 @@ def approve_assistant_memory_proposal(proposal_id, domain="personal", reviewed_b
         connection.execute("UPDATE assistant_memory_proposals SET status = 'approved', approved_memory_id = ?, reviewed_at = CURRENT_TIMESTAMP, reviewed_by = ?, review_note = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending'", (memory_id, reviewed_by, review_note, proposal_id))
         connection.commit()
     return get_assistant_memory(memory_id, domain)
+
+def upsert_assistant_memory_proposal(proposal, domain="personal", source_reference=None, observation_text=None):
+    domain = normalize_domain(domain)
+    key = assistant_observation_key(domain, proposal["subject"], proposal["memory_type"], observation_text) if observation_text is not None else assistant_proposal_key(domain, proposal["subject"], proposal["memory_type"], proposal["summary"])
+    source = proposal.get("source", "assistant_turn_proposal")
+    evidence_text = observation_text if observation_text is not None else (source_reference or proposal["summary"])
+    evidence_hash = hashlib.sha256((source + "|" + normalize_proposal_text(evidence_text)).encode("utf-8")).hexdigest()
+    with connect() as connection:
+        connection.execute("BEGIN")
+        row = connection.execute("SELECT * FROM assistant_memory_proposals WHERE domain = ? AND proposal_key = ? AND status = 'pending'", (domain, key)).fetchone()
+        if row:
+            evidence = connection.execute("SELECT 1 FROM assistant_memory_proposal_evidence WHERE proposal_id = ? AND evidence_hash = ?", (row["id"], evidence_hash)).fetchone()
+            if evidence and observation_text is not None:
+                connection.commit()
+                return {"proposal_id": row["id"], "action": "duplicate_evidence", "previous_evidence_count": row["evidence_count"], "evidence_count": row["evidence_count"]}
+            connection.execute("UPDATE assistant_memory_proposals SET evidence_count = evidence_count + 1, last_observed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP, confidence = MIN(1.0, confidence + 0.05) WHERE id = ?", (row["id"],))
+            connection.execute("INSERT OR IGNORE INTO assistant_memory_proposal_evidence (proposal_id, source, source_reference, evidence_hash, raw_excerpt) VALUES (?, ?, ?, ?, ?)", (row["id"], source, source_reference, evidence_hash, observation_text or proposal.get("summary")) )
+            connection.commit()
+            return {"proposal_id": row["id"], "action": "reinforced", "previous_evidence_count": row["evidence_count"], "evidence_count": row["evidence_count"] + 1}
+        cursor = connection.execute("INSERT INTO assistant_memory_proposals (domain, subject, memory_type, summary, details, importance, confidence, retention, source, proposal_key, evidence_count, first_observed_at, last_observed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)", (domain, proposal["subject"], proposal["memory_type"], proposal["summary"], proposal.get("details"), proposal["importance"], proposal["confidence"], proposal["retention"], source, key))
+        proposal_id = cursor.lastrowid
+        connection.execute("INSERT INTO assistant_memory_proposal_evidence (proposal_id, source, source_reference, evidence_hash, raw_excerpt) VALUES (?, ?, ?, ?, ?)", (proposal_id, source, source_reference, evidence_hash, observation_text or proposal.get("summary")) )
+        connection.commit()
+    return {"proposal_id": proposal_id, "action": "created", "previous_evidence_count": 0, "evidence_count": 1}

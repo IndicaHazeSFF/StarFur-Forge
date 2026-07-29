@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-07-29 - Exact assistant evidence reinforcement
+
+- Purpose: keep repeated identical user evidence on one pending proposal despite extractor paraphrases.
+- Modified: pipeline/db.py, pipeline/assistant.py, tests/test_assistant_proposal_idempotency.py, and AGENTS.md.
+- Behavior: observation-aware identity reinforces pending proposals, duplicate evidence is idempotent, and first summary/details are preserved.
+- Verification: full unittest suite run; no production sync or database/Chroma mutation.
+
+## 2026-07-28 — Deterministic assistant proposal idempotency
+
+- Purpose: prevent duplicate pending assistant proposals while preserving repeated evidence and provenance.
+- Modified: pipeline/db.py, pipeline/assistant.py, tests/test_assistant_proposal_idempotency.py, AGENTS.md, and CHANGELOG.md.
+- Behavior: normalized domain/subject/type/summary identities reinforce pending proposals atomically; evidence_count increments, unique evidence rows preserve source references, and confidence increases by at most 0.05 per repeated observation. Reviewed proposals are not reopened or merged.
+- Verification: python -m unittest discover -s tests -q (46 tests passed). No production sync, memory mutation, Chroma rebuild, or full analysis was run.
+
+
 ## 2026-07-28 — Fix stale assistant proposal notifications
 
 - Purpose: prevent previously created proposals from being announced after unrelated commands or turns.
@@ -160,3 +175,4 @@
 - Cleanup invariant: tests verify that source cleanup removes only appearances, extracted facts, and pending proposals for the source, preserving entities, aliases, confirmed facts, and reviewed proposal history.
 - Versions: CHUNKER_VERSION bumped to 3; semantic index version set to 2.
 - Verification: python -m unittest discover -s tests -v (8 tests passed). No sync, SQLite mutation, Chroma rebuild, or full analysis was run.
+
