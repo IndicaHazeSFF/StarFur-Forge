@@ -155,6 +155,10 @@ def ensure_assistant_memories_schema(connection):
         if column not in columns: connection.execute(f"ALTER TABLE assistant_memory_proposals ADD COLUMN {column} {definition}")
     connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_assistant_proposals_pending_key ON assistant_memory_proposals(domain, proposal_key) WHERE status = 'pending' AND proposal_key IS NOT NULL")
     connection.execute("CREATE TABLE IF NOT EXISTS assistant_memory_proposal_evidence (id INTEGER PRIMARY KEY AUTOINCREMENT, proposal_id INTEGER NOT NULL, source TEXT NOT NULL, source_reference TEXT, evidence_hash TEXT NOT NULL, raw_excerpt TEXT, observed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(proposal_id, evidence_hash))")
+    evidence_columns = {row["name"] for row in connection.execute("PRAGMA table_info(assistant_memory_proposal_evidence)")}
+    if "memory_id" not in evidence_columns: connection.execute("ALTER TABLE assistant_memory_proposal_evidence ADD COLUMN memory_id INTEGER")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_assistant_proposal_evidence_memory ON assistant_memory_proposal_evidence(memory_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_assistant_proposal_evidence_proposal ON assistant_memory_proposal_evidence(proposal_id)")
 
 def connect():
     """
@@ -779,6 +783,15 @@ def get_assistant_memory_proposal(proposal_id, domain="personal"):
         row = connection.execute("SELECT * FROM assistant_memory_proposals WHERE id = ? AND domain = ?", (proposal_id, normalize_domain(domain))).fetchone()
     return dict(row) if row else None
 
+def inspect_assistant_memory_proposal(proposal_id, domain="personal"):
+    """Return a proposal and oldest-first evidence without changing any state."""
+    with connect() as connection:
+        proposal = connection.execute("SELECT * FROM assistant_memory_proposals WHERE id = ? AND domain = ?", (proposal_id, normalize_domain(domain))).fetchone()
+        if not proposal:
+            return None
+        evidence = connection.execute("SELECT id, proposal_id, source, source_reference, evidence_hash, raw_excerpt, observed_at FROM assistant_memory_proposal_evidence WHERE proposal_id = ? ORDER BY observed_at, id", (proposal_id,)).fetchall()
+    return {"proposal": dict(proposal), "evidence": [dict(row) for row in evidence]}
+
 def reject_assistant_memory_proposal(proposal_id, domain="personal", reviewed_by="user", review_note=None):
     with connect() as connection:
         cursor = connection.execute("UPDATE assistant_memory_proposals SET status = 'rejected', reviewed_at = CURRENT_TIMESTAMP, reviewed_by = ?, review_note = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND domain = ? AND status = 'pending'", (reviewed_by, review_note, proposal_id, normalize_domain(domain)))
@@ -789,13 +802,25 @@ def reject_assistant_memory_proposal(proposal_id, domain="personal", reviewed_by
 def approve_assistant_memory_proposal(proposal_id, domain="personal", reviewed_by="user", review_note=None):
     domain = normalize_domain(domain)
     with connect() as connection:
-        proposal = connection.execute("SELECT * FROM assistant_memory_proposals WHERE id = ? AND domain = ? AND status = 'pending'", (proposal_id, domain)).fetchone()
-        if not proposal: raise ValueError("Proposal is missing or not pending")
+        proposal = connection.execute("SELECT * FROM assistant_memory_proposals WHERE id = ? AND domain = ?", (proposal_id, domain)).fetchone()
+        if not proposal or proposal["status"] not in ("pending", "approved"):
+            raise ValueError("Proposal is missing or not pending")
+        if proposal["status"] == "approved" and proposal["approved_memory_id"]:
+            row = connection.execute("SELECT * FROM assistant_memories WHERE id = ? AND domain = ?", (proposal["approved_memory_id"], domain)).fetchone()
+            return dict(row) if row else None
         cursor = connection.execute("INSERT INTO assistant_memories (domain, subject, memory_type, summary, details, importance, confidence, retention, status, source, source_proposal_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)", (domain, proposal["subject"], proposal["memory_type"], proposal["summary"], proposal["details"], proposal["importance"], proposal["confidence"], proposal["retention"], proposal["source"], proposal_id))
         memory_id = cursor.lastrowid
         connection.execute("UPDATE assistant_memory_proposals SET status = 'approved', approved_memory_id = ?, reviewed_at = CURRENT_TIMESTAMP, reviewed_by = ?, review_note = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending'", (memory_id, reviewed_by, review_note, proposal_id))
+        connection.execute("UPDATE assistant_memory_proposal_evidence SET memory_id = ? WHERE proposal_id = ? AND (memory_id IS NULL OR memory_id = ?)", (memory_id, proposal_id, memory_id))
         connection.commit()
     return get_assistant_memory(memory_id, domain)
+
+def inspect_assistant_memory(memory_id, domain="personal"):
+    with connect() as connection:
+        memory = connection.execute("SELECT * FROM assistant_memories WHERE id = ? AND domain = ?", (memory_id, normalize_domain(domain))).fetchone()
+        if not memory: return None
+        evidence = connection.execute("SELECT id, proposal_id, memory_id, source, source_reference, evidence_hash, raw_excerpt, observed_at FROM assistant_memory_proposal_evidence WHERE memory_id = ? ORDER BY observed_at, id", (memory_id,)).fetchall()
+    return {"memory": dict(memory), "evidence": [dict(row) for row in evidence]}
 
 def upsert_assistant_memory_proposal(proposal, domain="personal", source_reference=None, observation_text=None):
     domain = normalize_domain(domain)
@@ -820,3 +845,5 @@ def upsert_assistant_memory_proposal(proposal, domain="personal", source_referen
         connection.execute("INSERT INTO assistant_memory_proposal_evidence (proposal_id, source, source_reference, evidence_hash, raw_excerpt) VALUES (?, ?, ?, ?, ?)", (proposal_id, source, source_reference, evidence_hash, observation_text or proposal.get("summary")) )
         connection.commit()
     return {"proposal_id": proposal_id, "action": "created", "previous_evidence_count": 0, "evidence_count": 1}
+
+

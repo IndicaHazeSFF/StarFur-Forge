@@ -9,6 +9,7 @@ from pipeline.db import (
     create_assistant_memory_proposal,
     upsert_assistant_memory_proposal,
     list_assistant_memory_proposals, approve_assistant_memory_proposal, reject_assistant_memory_proposal,
+    inspect_assistant_memory_proposal, inspect_assistant_memory,
     get_assistant_memory,
     list_assistant_memories,
     search_assistant_memories,
@@ -212,6 +213,19 @@ class AssistantSession:
         if lowered == "proposal list":
             rows = list_assistant_memory_proposals(domain=self.config.domain)
             return "\n".join("#" + str(row["id"]) + " [" + row["memory_type"] + "] " + row["summary"] for row in rows) or "No pending assistant proposals."
+        if lowered.startswith("memory inspect"):
+            parts = text.strip().split()
+            if len(parts) != 3 or not parts[2].isdigit(): return "Usage: memory inspect <id>"
+            inspected = inspect_assistant_memory(int(parts[2]), domain=self.config.domain)
+            return format_assistant_memory(inspected) if inspected else "Memory not found."
+        if lowered.startswith("proposal inspect"):
+            parts = text.strip().split()
+            if len(parts) != 3 or not parts[2].isdigit():
+                return "Usage: proposal inspect <id>"
+            inspected = inspect_assistant_memory_proposal(int(parts[2]), domain=self.config.domain)
+            if not inspected:
+                return "Proposal not found."
+            return format_assistant_memory_proposal(inspected)
         if lowered.startswith("proposal approve "):
             proposal_id = int(text.strip().split()[-1])
             memory = approve_assistant_memory_proposal(proposal_id, domain=self.config.domain)
@@ -246,6 +260,28 @@ class AssistantSession:
             self.trace.record("proposal_error", status="rejected", error=str(error))
         return content
 
+def format_assistant_memory(inspected):
+    memory = inspected["memory"]; evidence = inspected.get("evidence", [])
+    lines=[f"Memory #{memory['id']}",f"Domain: {memory.get('domain','unknown')}",f"Type: {memory.get('memory_type','unknown')}",f"Subject: {memory.get('subject','unknown')}","","Summary:",memory.get('summary') or '(none)',"","Details:",memory.get('details') or '(none)',"",f"Confidence: {memory.get('confidence','unknown')}",f"Importance: {memory.get('importance','unknown')}",f"Retention: {memory.get('retention','unknown')}",f"Status: {memory.get('status','unknown')}","","Evidence:"]
+    if not evidence: lines.append("no recorded evidence provenance")
+    for i,item in enumerate(evidence,1): lines.extend([f'{i}. "{item.get("raw_excerpt") or "(observation text unavailable)"}"',f"   Source: {item.get('source','unknown')}",f"   Added: {item.get('observed_at','unknown')}",f"   Observation key: {item.get('evidence_hash') or 'legacy/unavailable'}",f"   Proposal: #{item.get('proposal_id','unknown')}"])
+    lines.extend(["",f"Created: {memory.get('created_at','unknown')}",f"Updated: {memory.get('updated_at','unknown')}"])
+    return "\n".join(lines)
+
+def format_assistant_memory_proposal(inspected):
+    proposal = inspected["proposal"]
+    evidence = inspected.get("evidence", [])
+    identity = proposal.get("proposal_key") or "legacy/unavailable"
+    support = proposal.get("evidence_count") if proposal.get("evidence_count") is not None else "legacy/unavailable"
+    lines = [f"Proposal #{proposal['id']}", f"Status: {proposal.get('status', 'unknown')}", f"Domain: {proposal.get('domain', 'unknown')}", f"Type: {proposal.get('memory_type', 'unknown')}", f"Subject: {proposal.get('subject', 'unknown')}", "", "Summary:", proposal.get("summary") or "(none)", "", "Details:", proposal.get("details") or "(none)", "", f"Confidence: {proposal.get('confidence', 'unknown')}", f"Importance: {proposal.get('importance', 'unknown')}", f"Retention: {proposal.get('retention', 'unknown')}", f"Support: {support}", "", f"Identity: {identity}", "", "Evidence:"]
+    if not evidence:
+        lines.append("no recorded evidence provenance")
+    else:
+        for index, item in enumerate(evidence, 1):
+            observation = item.get("raw_excerpt") or item.get("source_reference") or "(observation text unavailable)"
+            lines.extend([f'{index}. "{observation}"', f"   Source: {item.get('source', 'unknown')}", f"   Added: {item.get('observed_at', 'unknown')}", f"   Observation key: {item.get('evidence_hash') or 'legacy/unavailable'}"])
+    lines.extend(["", f"Created: {proposal.get('created_at', 'unknown')}", f"Updated: {proposal.get('updated_at', 'unknown')}"])
+    return "\n".join(lines)
 
 def run_interactive(config_path=DEFAULT_CONFIG_PATH, input_fn=input, output_fn=print, debug_level=None):
     config = load_config(config_path)

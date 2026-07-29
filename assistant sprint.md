@@ -314,339 +314,319 @@ This prevents every sentence from immediately becoming long-term memory merely b
 
 ---
 
-# STAGE 3 — Selective Memory Writing
+# STAGE 3 — Selective Memory Writing *(Largely Complete)*
 
 ## Goal
 
-The assistant decides which conversational information may be useful later.
+The assistant should intelligently decide what information is worth remembering while keeping humans in complete control of what becomes authoritative memory.
 
-This is the critical assistant-memory feature.
+The model proposes.
 
-Do not embed the complete conversation automatically.
+The application validates.
+
+The human approves.
 
 Flow:
 
 ```text
 USER MESSAGE
-     ↓
-conversation model
-     ↓
-memory proposal
-     ↓
-validation/policy
-     ↓
-SQLite / Chroma / both / neither
+      ↓
+Grounded Extraction
+      ↓
+Schema Validation
+      ↓
+Persistent Proposal Queue
+      ↓
+Human Review
+      ↓
+Approved Memory
 ```
 
-## 3.1 Memory Proposal Schema
+---
 
-The model should return or separately produce something conceptually like:
+## 3.1 Memory Proposal Pipeline ✅
 
-```json
-{
-  "store": true,
-  "summary": "User prefers dark interfaces.",
-  "memory_type": "preference",
-  "retention": "long_term",
-  "importance": 0.72,
-  "confidence": 0.95,
-  "semantic_memory": true,
-  "structured_memory": true
-}
-```
+Implemented:
 
-The model does NOT receive unrestricted database access.
+* grounded extraction using only user messages as evidence
+* strict structured schema validation
+* bounded retry/repair pipeline
+* proposal normalization
+* engine-owned metadata
+* domain assignment
+* retention policy
+* importance/confidence validation
+* rejection of malformed proposals
+* explicit proposal semantics (`store=true`)
+
+The LLM never writes directly to permanent memory.
 
 It proposes.
 
-StarFur validates and writes.
+The application decides.
 
 ---
 
-## 3.2 Initial Memory Policy
+## 3.2 Durable Human Review Workflow ✅ *(Completed)*
 
-Store information when it is likely to matter later.
+Assistant memories now pass through a persistent review queue.
 
-Good candidates:
+Implemented:
 
-* durable preferences;
-* ongoing projects;
-* significant experiences;
-* goals;
-* recurring situations;
-* relationships;
-* user corrections;
-* important decisions.
+* durable proposal storage
+* pending / approved / rejected lifecycle
+* proposal persistence across restarts
+* proposal listing
+* proposal approval
+* proposal rejection
+* transactional approval
+* approved-memory linkage
+* proposal provenance
+* source proposal tracking
 
-Usually reject:
-
-* greetings;
-* filler;
-* jokes with no lasting relevance;
-* temporary wording;
-* routine acknowledgements;
-* random conversational fragments.
-
-Example:
-
-```text
-"Work was horrible tonight because my manager kept moving me
-between stations and I couldn't finish anything."
-```
-
-Could become:
-
-```text
-Experience:
-User had a frustrating work shift involving repeated station changes.
-
-Possible associated topic:
-work frustration
-```
-
-Not:
-
-```text
-User said "fuck this place" at 1:43 AM.
-```
-
-unless there is a reason that exact wording matters.
+Nothing becomes authoritative without approval.
 
 ---
 
-## 3.3 Human Control Initially
+## 3.3 Proposal Idempotency & Reinforcement ✅ *(Completed)*
 
-Start conservative.
+Repeated observations reinforce existing pending proposals rather than creating duplicates.
 
-Provide something equivalent to:
+Implemented:
 
-```text
-Memory policy:
-OFF
-CONSERVATIVE
-BALANCED
-AGGRESSIVE
-```
+* deterministic proposal identity
+* pending proposal deduplication
+* proposal evidence tracking
+* evidence count
+* duplicate evidence prevention
+* confidence reinforcement
+* first observed timestamp
+* last observed timestamp
+* bounded confidence growth
+* partial unique database constraints
+* reviewed proposals remain closed
 
-Prototype default:
-
-```text
-CONSERVATIVE
-```
-
-Also support:
-
-```text
-remember this
-forget this
-```
-
-Explicit user commands override automatic policy.
+This allows repeated observations to strengthen confidence while preserving complete auditability.
 
 ---
 
-# STAGE 4 — Write to Both Memory Systems
+## 3.4 Source Identity Stabilization *(Current Sprint)*
+
+Current limitation:
+
+Proposal identity still depends partly on LLM-generated summaries.
+
+This means identical user messages can occasionally create different pending proposals if the model phrases the summary differently.
+
+Next objective:
+
+Use deterministic source-event identity so that:
+
+```text
+Same user message
+        +
+Different generated summaries
+        ↓
+Same proposal
+```
+
+while still allowing genuinely different user messages to generate separate proposals.
+
+This intentionally avoids fuzzy semantic merging for now.
+
+---
+
+# STAGE 4 — Assistant Memory Persistence *(Mostly Complete)*
 
 ## Goal
 
-Use SQLite and Chroma for what each is good at.
+Use SQLite for authoritative assistant memory while preparing for semantic memory integration.
 
-## Structured Assistant Memory — SQLite
+Completed:
 
-Use for:
+* assistant memory schema
+* durable assistant memories
+* transactional approval pipeline
+* provenance preservation
+* proposal → memory linkage
+* source tracking
+* structured assistant memory CRUD
+* persistent memory domains
+* grounded retrieval
 
-* explicit facts;
-* preferences;
-* projects;
-* goals;
-* durable experiences;
-* metadata;
-* retention;
-* importance;
-* provenance.
+Remaining:
 
-SQLite answers:
+* Chroma semantic memory
+* dual-write policy
+* conversational episode storage
+* semantic namespace management
 
-> What do I explicitly know?
+SQLite now answers:
 
----
-
-## Semantic Assistant Memory — Chroma
-
-Use for:
-
-* conversational episodes;
-* fuzzy recollection;
-* broader context;
-* associated language;
-* experiences whose exact structured representation is insufficient.
-
-Chroma answers:
-
-> What past material seems relevant to this conversation?
+> What does StarFur explicitly know?
 
 ---
 
-## Combined Example
-
-Conversation:
-
-```text
-"I've been messing with StarFur every night after work
-because I really want this assistant prototype finished."
-```
-
-SQLite:
-
-```text
-Goal:
-Finish functional StarFur assistant prototype.
-
-Project:
-StarFur
-
-Importance:
-high
-```
-
-Chroma:
-
-```text
-semantic episode containing the surrounding discussion
-```
-
-Later:
-
-```text
-"I'm tired but I still want to work on the fox."
-```
-
-Semantic retrieval finds the prior context.
-
-SQLite confirms StarFur is an active important goal.
-
-The persona receives both.
-
----
-
-# STAGE 5 — Memory Retrieval Before Every Response
+# STAGE 5 — Memory Retrieval *(Partially Complete)*
 
 ## Goal
 
-Make memory naturally useful.
+Retrieve only the information relevant to the current conversation.
 
-Pipeline:
+Current pipeline:
 
 ```text
 USER MESSAGE
-     ↓
-query interpretation
-     ↓
-structured lookup
-     +
-semantic retrieval
-     ↓
-ranking/filtering
-     ↓
-context assembly
-     ↓
-persona model
+      ↓
+Structured Retrieval
+      ↓
+Context Assembly
+      ↓
+Persona
+      ↓
+Response
 ```
 
-Do not dump every known memory into context.
+Completed:
 
-Retrieve only what appears relevant.
+* structured retrieval before responses
+* domain-aware retrieval
+* grounded assistant recall
+* retrieval filtering
+* provenance-preserving context assembly
+
+Remaining:
+
+* semantic retrieval
+* retrieval ranking
+* retrieval budgeting
+* hybrid structured + semantic recall
+* contextual ranking improvements
 
 ---
 
-## 5.1 Retrieval Budget
-
-Define an explicit context budget.
-
-Example:
-
-```text
-Recent conversation:     X tokens
-Structured memories:     X tokens
-Semantic memories:       X tokens
-Persona/system prompt:   X tokens
-```
-
-This prevents memory growth from eventually destroying inference efficiency.
-
----
-
-## 5.2 Retrieval Ranking
-
-Initial ranking can combine:
-
-```text
-semantic similarity
-importance
-recency
-memory type
-current project
-```
-
-Later:
-
-```text
-association strength
-frequency of access
-emotional salience
-persona interest
-```
-
-This is the eventual foundation for the proposed synaptic layer.
-
-Do NOT implement full synaptic memory yet.
-
----
-
-# STAGE 6 — Memory Inspection and Correction
+# STAGE 6 — Memory Inspection & Auditability *(Mostly Complete)*
 
 ## Goal
 
-Never create a black-box memory assistant.
+Memory should never become a black box.
 
-Provide commands roughly equivalent to:
+Completed:
 
-```text
-memory list
-memory search
-memory show
-memory forget
-memory correct
-```
+* proposal inspection
+* proposal review
+* proposal approval
+* proposal rejection
+* provenance inspection
+* evidence inspection
+* deterministic audit trail
 
-Eventually:
+Still planned:
 
-```text
-memory why
-```
-
-could explain:
-
-```text
-Retrieved because:
-semantic similarity: 0.84
-importance: 0.76
-project match: StarFur
-```
-
-### Acceptance criteria
-
-You should always be able to answer:
-
-> What does she remember?
-
-> Why does she remember it?
-
-> Where did it come from?
-
-> How do I correct it?
+* memory search
+* memory correction
+* memory supersession
+* retrieval explanations ("Why did you remember this?")
+* memory editing
+* memory history visualization
 
 ---
+
+# Memory Engine Milestone — Version 0.4 ✅
+
+StarFur now has a fully human-in-the-loop memory architecture.
+
+```text
+Conversation
+        │
+        ▼
+Grounded Extraction
+        │
+        ▼
+Validation
+        │
+        ▼
+Persistent Proposal Queue
+        │
+        ▼
+Human Review
+        │
+        ▼
+Approved Memory
+        │
+        ▼
+Grounded Retrieval
+```
+
+Current properties:
+
+* deterministic
+* restart-safe
+* human-approved
+* provenance-preserving
+* transaction-safe
+* auditable
+* evidence-backed
+* domain-aware
+* validation-first
+
+---
+
+# Immediate Roadmap
+
+## Phase 4.3 — Source Identity Stabilization
+
+Ensure identical source events reinforce existing proposals regardless of generated summary wording.
+
+---
+
+## Phase 4.4 — Approved Memory Deduplication
+
+Detect when newly approved memories already exist.
+
+Possible outcomes:
+
+* ignore duplicate
+* reinforce existing memory
+* propose update
+* propose conflict
+
+---
+
+## Phase 4.5 — Memory Evolution
+
+Allow memories to change over time.
+
+Support:
+
+* active
+* superseded
+* historical
+* uncertain
+
+without losing provenance.
+
+---
+
+## Phase 4.6 — Semantic Memory Integration
+
+Integrate Chroma alongside structured memory for conversational recall and fuzzy contextual retrieval.
+
+---
+
+## Phase 4.7 — Retrieval Ranking
+
+Combine:
+
+* semantic similarity
+* importance
+* recency
+* memory type
+* domain relevance
+* access frequency
+
+to produce natural, context-aware recall.
+
 
 # STAGE 7 — Add POV/Perspective Foundation to Writing Memory
 

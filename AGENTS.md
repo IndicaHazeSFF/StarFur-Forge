@@ -84,3 +84,7 @@ Assistant proposal persistence receives the original user observation when avail
 - For sync work, test discovery and manifest planning without calling sync itself. Do not run full analysis, ingestion, or proposal review as a side effect of tests.
 - reanalyze-chapter force-analyzes exactly one Markdown file under canon/chapters/, updates only that file's manifest hash after success, and never runs Chroma ingestion. Invalid paths are rejected before analysis; failures leave the target manifest entry dirty for normal retry.
 - Keep changes narrow: preserve existing SQLite/Markdown/Chroma formats, avoid broad refactors, and report any destructive or non-transactional behavior before executing it.
+
+- `proposal inspect <id>` is read-only and domain-scoped; it displays proposal identity, lifecycle, and oldest-first evidence. Legacy proposals show unavailable identity/provenance placeholders.
+
+- Approved assistant proposal evidence is linked to the resulting memory via nullable evidence.memory_id; `memory inspect <id>` is read-only and legacy memories may have no provenance.

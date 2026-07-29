@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-07-29 - Approved memory evidence linkage
+
+- Approval now links proposal evidence to the canonical assistant memory; repeated approval is idempotent. Added domain-scoped read-only `memory inspect <id>`.
+- Modified: pipeline/db.py, pipeline/assistant.py, tests/test_assistant_proposals.py, AGENTS.md, CHANGELOG.md, and docs/COMMANDS.md.
+
+
+## 2026-07-29 - Assistant proposal inspection
+
+- Added read-only `proposal inspect <id>` inspection of proposal state, identity, and evidence provenance.
+- Modified: pipeline/db.py, pipeline/assistant.py, tests/test_assistant_proposal_inspection.py, AGENTS.md, and CHANGELOG.md.
+- Verification: full unittest suite passed; no production data or Chroma mutation.
+
+
 ## 2026-07-29 - Exact assistant evidence reinforcement
 
 - Purpose: keep repeated identical user evidence on one pending proposal despite extractor paraphrases.
