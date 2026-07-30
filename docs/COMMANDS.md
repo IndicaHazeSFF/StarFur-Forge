@@ -75,12 +75,14 @@ When a factual turn produces a proposal, review it in chat:
 
 Inspect approved memories:
 
-    memory inspect <id>
+    memory inspect <M-###>
 
 List or search active memories in the current domain:
 
     memory list
     memory search <query>
+
+User-facing references are compact (`M-001` for memories and `P-001` for proposals). Legacy numeric IDs remain accepted for compatibility.
 
 Approval is not automatic by default. Rejected proposals remain in history, and approving a proposal twice is refused.
 
@@ -310,7 +312,7 @@ Assistant proposal inspection:
 Displays a domain-scoped proposal, identity, lifecycle, and oldest-first evidence without changing state.
 
 
-    memory inspect <id>
+    memory inspect <M-###>
 
 Displays a domain-scoped canonical memory and evidence linked during proposal approval. Legacy memories may show no recorded evidence provenance.
 
