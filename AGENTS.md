@@ -94,3 +94,7 @@ Assistant proposal persistence receives the original user observation when avail
 - `assistant-context --explain` exposes selected and excluded deterministic retrieval candidates; keep scoring explainable before adding embeddings.
 
 - Retrieval benchmarks use checked-in stable fixture keys and a temporary SQLite database; never use production memory IDs or production DB for evaluation.
+
+- Retrieval strategy implementations live behind `MemoryRetriever`; semantic/hybrid retrievers require explicitly injected temporary collections and are not wired into assistant chat or production Chroma.
+
+- `FixtureChromaAdapter` owns a temporary PersistentClient and only ingests checked-in retrieval fixtures; it must never receive production paths or collections.

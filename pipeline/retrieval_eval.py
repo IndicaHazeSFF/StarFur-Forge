@@ -1,5 +1,7 @@
 import json
+import tempfile
 from pathlib import Path
+from pipeline.retrieval import DeterministicMemoryRetriever, SemanticMemoryRetriever, HybridMemoryRetriever
 from pipeline import db
 
 FIXTURE_ROOT = Path(__file__).resolve().parent.parent / "tests" / "fixtures"
@@ -18,7 +20,9 @@ def load_memories(path=FIXTURE_ROOT / "retrieval_memories.json"):
     if not isinstance(data,list): raise ValueError("Retrieval memories fixture must be a list")
     return data
 
-def run_benchmark(cases=None, memories=None):
+def run_benchmark(cases=None, memories=None, strategy="deterministic"):
+    if strategy not in {"deterministic", "semantic", "hybrid"}: raise ValueError("Unknown retrieval strategy")
+    if strategy != "deterministic": raise RuntimeError("Semantic benchmark requires an explicitly injected temporary Chroma retriever")
     cases=load_cases() if cases is None else cases; memories=load_memories() if memories is None else memories
     old=db.DB_PATH; import tempfile; temp=tempfile.TemporaryDirectory(ignore_cleanup_errors=True); db.DB_PATH=Path(temp.name)/"retrieval.sqlite"
     try:
@@ -37,3 +41,33 @@ def run_benchmark(cases=None, memories=None):
         total=len(cases) or 1
         return {"cases":len(cases),"top1_hit_rate":top1/total,"top3_hit_rate":top3/total,"irrelevant_result_count":irrelevant,"repeatability":repeat,"failures":failures}
     finally: db.DB_PATH=old; temp.cleanup()
+
+
+class FixtureChromaAdapter:
+    """Temporary Chroma collection for benchmark fixtures only."""
+    def __init__(self, embed_query, embedding_model="nomic-embed-text"):
+        self.embed_query = embed_query; self.embedding_model = embedding_model; self.temp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        try:
+            import chromadb
+        except ImportError as error: self.temp.cleanup(); raise RuntimeError("chromadb is required for semantic fixture evaluation") from error
+        self.client = chromadb.PersistentClient(path=self.temp.name)
+        self.collection = self.client.get_or_create_collection("retrieval_eval_fixture")
+    def ingest(self, memories):
+        self.collection.add(ids=[item["key"] for item in memories], documents=[item["summary"] for item in memories], metadatas=[{"domain":item.get("domain","personal")} for item in memories], embeddings=[self.embed_query(item["summary"]) for item in memories])
+        return SemanticMemoryRetriever(self.collection, self.embed_query, {item["key"]:item for item in memories})
+    def close(self): self.temp.cleanup()
+    def __enter__(self): return self
+    def __exit__(self, *args): self.close()
+
+
+def compare_fixture_strategies(embed_query, cases=None, memories=None):
+    """Compare deterministic/semantic/hybrid using one temporary fixture collection."""
+    cases=load_cases() if cases is None else cases; memories=load_memories() if memories is None else memories
+    with FixtureChromaAdapter(embed_query) as adapter:
+        semantic=adapter.ingest(memories); deterministic=DeterministicMemoryRetriever(); hybrid=HybridMemoryRetriever(deterministic, semantic)
+        results={}
+        for name,retriever in (("deterministic",deterministic),("semantic",semantic),("hybrid",hybrid)):
+            results[name]=[]
+            for case in cases:
+                rows=retriever.retrieve(case["query"],domain=case["domain"],limit=case["limit"]); results[name].append([row["memory"]["id"] for row in rows])
+        return results

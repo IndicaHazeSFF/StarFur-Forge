@@ -297,3 +297,11 @@ Displays deterministic ranked active canonical assistant memories and scoring re
     python starfur.py retrieval-eval
 
 Runs the checked-in retrieval benchmark against a temporary SQLite corpus and reports top-1/top-3 hit rate, irrelevant results, repeatability, and failures.
+
+
+    python starfur.py retrieval-eval --strategy deterministic|semantic|hybrid
+
+Semantic and hybrid strategies require explicit temporary Chroma dependencies; deterministic remains the default chat/evaluation path.
+
+
+Semantic retrieval evaluation uses only a temporary fixture Chroma collection with injected embeddings; production collections are never opened by the benchmark.

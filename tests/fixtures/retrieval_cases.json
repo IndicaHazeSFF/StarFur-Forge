@@ -24,10 +24,150 @@
     "limit": 3
   },
   {
-    "name": "domain isolation",
-    "query": "What memory system does StarFur use?",
+    "name": "case-1",
+    "query": "Tell me about the spectacles I got",
+    "expected_keys": [
+      "personal.glasses"
+    ],
+    "irrelevant_keys": [
+      "personal.work_schedule"
+    ],
+    "domain": "personal",
+    "limit": 3
+  },
+  {
+    "name": "case-2",
+    "query": "What do I use to see better?",
+    "expected_keys": [
+      "personal.glasses"
+    ],
+    "irrelevant_keys": [
+      "personal.work_schedule"
+    ],
+    "domain": "personal",
+    "limit": 3
+  },
+  {
+    "name": "case-3",
+    "query": "When am I usually working?",
+    "expected_keys": [
+      "personal.work_schedule"
+    ],
+    "irrelevant_keys": [
+      "personal.gpu"
+    ],
+    "domain": "personal",
+    "limit": 3
+  },
+  {
+    "name": "case-4",
+    "query": "What are my shifts?",
+    "expected_keys": [
+      "personal.work_schedule"
+    ],
+    "irrelevant_keys": [
+      "personal.gpu"
+    ],
+    "domain": "personal",
+    "limit": 3
+  },
+  {
+    "name": "case-5",
+    "query": "Tell me about my graphics hardware",
+    "expected_keys": [
+      "personal.gpu"
+    ],
+    "irrelevant_keys": [
+      "personal.work_schedule"
+    ],
+    "domain": "personal",
+    "limit": 3
+  },
+  {
+    "name": "case-6",
+    "query": "What is inside my main PC?",
+    "expected_keys": [
+      "personal.gpu"
+    ],
+    "irrelevant_keys": [
+      "personal.work_schedule"
+    ],
+    "domain": "personal",
+    "limit": 3
+  },
+  {
+    "name": "case-7",
+    "query": "What does StarFur remember?",
     "expected_keys": [],
-    "irrelevant_keys": [],
+    "irrelevant_keys": [
+      "personal.work_schedule"
+    ],
+    "domain": "personal",
+    "limit": 3
+  },
+  {
+    "name": "case-8",
+    "query": "What is my favorite ice cream?",
+    "expected_keys": [],
+    "irrelevant_keys": [
+      "personal.work_schedule"
+    ],
+    "domain": "personal",
+    "limit": 3
+  },
+  {
+    "name": "case-9",
+    "query": "How do glasses relate to my schedule?",
+    "expected_keys": [
+      "personal.glasses"
+    ],
+    "irrelevant_keys": [
+      "personal.work_schedule"
+    ],
+    "domain": "personal",
+    "limit": 3
+  },
+  {
+    "name": "case-10",
+    "query": "Which computer component do I own?",
+    "expected_keys": [
+      "personal.gpu"
+    ],
+    "irrelevant_keys": [
+      "personal.work_schedule"
+    ],
+    "domain": "personal",
+    "limit": 3
+  },
+  {
+    "name": "case-11",
+    "query": "What project uses structured memory?",
+    "expected_keys": [],
+    "irrelevant_keys": [
+      "personal.work_schedule"
+    ],
+    "domain": "personal",
+    "limit": 3
+  },
+  {
+    "name": "case-12",
+    "query": "Tell me something unrelated about gardening",
+    "expected_keys": [],
+    "irrelevant_keys": [
+      "personal.work_schedule"
+    ],
+    "domain": "personal",
+    "limit": 3
+  },
+  {
+    "name": "case-13",
+    "query": "What do I know about computers?",
+    "expected_keys": [
+      "personal.gpu"
+    ],
+    "irrelevant_keys": [
+      "personal.work_schedule"
+    ],
     "domain": "personal",
     "limit": 3
   }

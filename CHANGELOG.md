@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-30 - Fixture-only semantic retrieval adapter
+
+- Added temporary Chroma fixture lifecycle, stable-key ingestion, fixed embedding injection, and expanded retrieval benchmark coverage to 15 cases.
+
+
+## 2026-07-30 - Retrieval strategy boundary
+
+- Added MemoryRetriever protocol plus deterministic, injected semantic, and transparent hybrid implementations. Semantic/hybrid evaluation requires an explicit temporary collection and remains isolated from chat.
+
+
 ## 2026-07-30 - Retrieval benchmark corpus
 
 - Added stable-key retrieval fixtures, temporary SQLite benchmark execution, malformed-fixture validation, and `retrieval-eval` metrics/reporting.
