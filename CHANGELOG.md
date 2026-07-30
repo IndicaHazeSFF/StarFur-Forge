@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-30 - Retrieval benchmark corpus
+
+- Added stable-key retrieval fixtures, temporary SQLite benchmark execution, malformed-fixture validation, and `retrieval-eval` metrics/reporting.
+
+
 ## 2026-07-30 - Retrieval quality diagnostics
 
 - Added `assistant-context --explain`, exclusion reasons, and a small retrieval evaluation helper for top-1/top-3 and irrelevant-result metrics.

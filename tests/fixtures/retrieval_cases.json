@@ -1,0 +1,34 @@
+[
+  {
+    "name": "glasses recall",
+    "query": "What did I say about my glasses?",
+    "expected_keys": [
+      "personal.glasses"
+    ],
+    "irrelevant_keys": [
+      "personal.work_schedule"
+    ],
+    "domain": "personal",
+    "limit": 3
+  },
+  {
+    "name": "gpu recall",
+    "query": "What GPU do I have?",
+    "expected_keys": [
+      "personal.gpu"
+    ],
+    "irrelevant_keys": [
+      "personal.work_schedule"
+    ],
+    "domain": "personal",
+    "limit": 3
+  },
+  {
+    "name": "domain isolation",
+    "query": "What memory system does StarFur use?",
+    "expected_keys": [],
+    "irrelevant_keys": [],
+    "domain": "personal",
+    "limit": 3
+  }
+]

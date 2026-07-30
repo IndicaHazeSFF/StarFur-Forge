@@ -307,6 +307,8 @@ def main():
         help="Retrieval debugging detail level",
     )
 
+    subparsers.add_parser("retrieval-eval", help="Run the checked-in assistant retrieval benchmark")
+
     context_parser = subparsers.add_parser("assistant-context", help="Show ranked assistant memory context")
     context_parser.add_argument("query", help="Question or query text")
     context_parser.add_argument("--domain", default=None, help="Assistant memory domain")
@@ -375,6 +377,19 @@ def main():
 
     elif args.command == "assistant":
         run_interactive(args.config, debug_level=args.debug) if args.config else run_interactive(debug_level=args.debug)
+
+    elif args.command == "retrieval-eval":
+        from pipeline.retrieval_eval import run_benchmark
+        result = run_benchmark()
+        print("Retrieval Evaluation\n--------------------")
+        print(f"Cases:              {result['cases']}")
+        print(f"Top-1 hit rate:     {result['top1_hit_rate']:.1%}")
+        print(f"Top-3 hit rate:     {result['top3_hit_rate']:.1%}")
+        print(f"Irrelevant results: {result['irrelevant_result_count']}")
+        print(f"Repeatability:      {'PASS' if result['repeatability'] else 'FAIL'}")
+        if result['failures']:
+            print("\nFailures\n--------")
+            for failure in result['failures']: print(f"{failure['name']}\n  expected: {failure['expected']}\n  returned: {failure['returned']}")
 
     elif args.command == "assistant-context":
         from pipeline.db import retrieve_assistant_memories, explain_assistant_memory_retrieval

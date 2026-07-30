@@ -292,3 +292,8 @@ Displays a domain-scoped canonical memory and evidence linked during proposal ap
     python starfur.py assistant-context "query" [--domain personal] [--limit 8] [--explain]
 
 Displays deterministic ranked active canonical assistant memories and scoring reasons without invoking the chat model.
+
+
+    python starfur.py retrieval-eval
+
+Runs the checked-in retrieval benchmark against a temporary SQLite corpus and reports top-1/top-3 hit rate, irrelevant results, repeatability, and failures.

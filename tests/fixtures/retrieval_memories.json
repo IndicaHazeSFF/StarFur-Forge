@@ -1,0 +1,38 @@
+[
+  {
+    "key": "personal.glasses",
+    "domain": "personal",
+    "subject": "User",
+    "memory_type": "personal_fact",
+    "summary": "User recently received new glasses",
+    "confidence": 0.95,
+    "importance": 0.7
+  },
+  {
+    "key": "personal.work_schedule",
+    "domain": "personal",
+    "subject": "User",
+    "memory_type": "routine",
+    "summary": "User works closing shifts",
+    "confidence": 0.8,
+    "importance": 0.4
+  },
+  {
+    "key": "personal.gpu",
+    "domain": "personal",
+    "subject": "User",
+    "memory_type": "personal_fact",
+    "summary": "User has an NVIDIA RTX GPU",
+    "confidence": 0.9,
+    "importance": 0.6
+  },
+  {
+    "key": "project.coffee",
+    "domain": "project:starfur",
+    "subject": "User",
+    "memory_type": "project_context",
+    "summary": "StarFur uses structured memory",
+    "confidence": 0.9,
+    "importance": 0.8
+  }
+]

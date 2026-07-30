@@ -92,3 +92,5 @@ Assistant proposal persistence receives the original user observation when avail
 - Assistant retrieval uses deterministic ranking over active canonical assistant memories only; `assistant-context` exposes selected records and reasons before chat injection. Proposals are not prompt context by default.
 
 - `assistant-context --explain` exposes selected and excluded deterministic retrieval candidates; keep scoring explainable before adding embeddings.
+
+- Retrieval benchmarks use checked-in stable fixture keys and a temporary SQLite database; never use production memory IDs or production DB for evaluation.
