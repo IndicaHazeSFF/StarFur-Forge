@@ -12,7 +12,7 @@ from pipeline.db import (
     inspect_assistant_memory_proposal, inspect_assistant_memory,
     get_assistant_memory,
     list_assistant_memories,
-    search_assistant_memories,
+    search_assistant_memories, retrieve_assistant_memories,
     update_assistant_memory,
 )
 from pipeline.domains import normalize_domain
@@ -129,8 +129,13 @@ class AssistantSession:
 
     def _context_messages(self, user_text):
         self.trace = RetrievalTrace(self.debug_level)
-        memories = self.memory_loader(domain=self.config.domain, status="active", limit=self.config.max_memories)
-        self.trace.record("memory_lookup", domain=self.config.domain, count=len(memories), query=user_text)
+        if self.memory_loader is list_assistant_memories:
+            retrieved = retrieve_assistant_memories(user_text, domain=self.config.domain, limit=max(1, self.config.max_memories))
+            memories = [item["memory"] for item in retrieved]
+        else:
+            memories = self.memory_loader(domain=self.config.domain, status="active", limit=self.config.max_memories)
+            retrieved = [{"memory": memory, "score": None, "reasons": ["custom memory loader"]} for memory in memories]
+        self.trace.record("memory_lookup", domain=self.config.domain, count=len(memories), query=user_text, results=retrieved)
         memory_text = "\n".join(f"- {memory['summary']}" for memory in memories) or "(none)"
         self.trace.record("context_assembly", domain=self.config.domain, selected_count=len(memories), message_count=len(self.messages) + 1, context=memory_text)
         recent = self.messages[-self.config.max_session_messages:]

@@ -88,3 +88,7 @@ Assistant proposal persistence receives the original user observation when avail
 - `proposal inspect <id>` is read-only and domain-scoped; it displays proposal identity, lifecycle, and oldest-first evidence. Legacy proposals show unavailable identity/provenance placeholders.
 
 - Approved assistant proposal evidence is linked to the resulting memory via nullable evidence.memory_id; `memory inspect <id>` is read-only and legacy memories may have no provenance.
+
+- Assistant retrieval uses deterministic ranking over active canonical assistant memories only; `assistant-context` exposes selected records and reasons before chat injection. Proposals are not prompt context by default.
+
+- `assistant-context --explain` exposes selected and excluded deterministic retrieval candidates; keep scoring explainable before adding embeddings.

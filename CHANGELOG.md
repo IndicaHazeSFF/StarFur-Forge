@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-07-30 - Retrieval quality diagnostics
+
+- Added `assistant-context --explain`, exclusion reasons, and a small retrieval evaluation helper for top-1/top-3 and irrelevant-result metrics.
+
+
+## 2026-07-30 - Deterministic assistant retrieval
+
+- Added ranked canonical-memory retrieval, explainable context selection, and `assistant-context` CLI output. Wired relevant memories into assistant prompts.
+- Modified: pipeline/db.py, pipeline/assistant.py, starfur.py, tests/test_assistant_retrieval.py, AGENTS.md, and CHANGELOG.md.
+
+
 ## 2026-07-29 - Approved memory evidence linkage
 
 - Approval now links proposal evidence to the canonical assistant memory; repeated approval is idempotent. Added domain-scoped read-only `memory inspect <id>`.

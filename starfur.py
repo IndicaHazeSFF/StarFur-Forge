@@ -11,7 +11,7 @@ from pipeline.db import (
     get_all_entity_facts,
 )
 from pipeline.proposal_pipeline import analyze_document
-from pipeline.assistant import run_interactive
+from pipeline.assistant import run_interactive, load_config
 from pipeline.canon_writer import export_entities
 
 
@@ -307,6 +307,12 @@ def main():
         help="Retrieval debugging detail level",
     )
 
+    context_parser = subparsers.add_parser("assistant-context", help="Show ranked assistant memory context")
+    context_parser.add_argument("query", help="Question or query text")
+    context_parser.add_argument("--domain", default=None, help="Assistant memory domain")
+    context_parser.add_argument("--limit", type=int, default=8, help="Maximum selected memories")
+    context_parser.add_argument("--explain", action="store_true", help="Show selection and exclusion reasons")
+
     # -------------------------
     # ENTITY
     # -------------------------
@@ -369,6 +375,22 @@ def main():
 
     elif args.command == "assistant":
         run_interactive(args.config, debug_level=args.debug) if args.config else run_interactive(debug_level=args.debug)
+
+    elif args.command == "assistant-context":
+        from pipeline.db import retrieve_assistant_memories, explain_assistant_memory_retrieval
+        domain = args.domain or load_config().domain
+        packet = explain_assistant_memory_retrieval(args.query, domain=domain, limit=args.limit) if args.explain else {"selected": retrieve_assistant_memories(args.query, domain=domain, limit=args.limit), "not_selected": []}
+        print(f"Query: {args.query}\nDomain: {domain}\n\nSelected memories:")
+        if not packet["selected"]: print("  (none)")
+        for item in packet["selected"]:
+            memory = item["memory"]
+            print(f"  [{memory['memory_type']}:{memory['id']}] score={item['score']:.3f} {memory['summary']}")
+            if args.explain:
+                print("    reasons: " + "; ".join(item["reasons"]))
+        if args.explain:
+            print("\nNot selected:")
+            for item in packet["not_selected"]:
+                print(f"  [{item['memory']['memory_type']}:{item['memory']['id']}] score={item['score']:.3f} {item['memory']['summary']}\n    reason: {item['reason']}")
 
     elif args.command == "entity":
         show_entity(args.name)

@@ -711,6 +711,41 @@ def list_assistant_memories(domain="personal", status="active", memory_type=None
     return [dict(row) for row in rows]
 
 
+def retrieve_assistant_memories(query, domain="personal", limit=8):
+    """Return deterministic, explainable ranked canonical memories."""
+    if not query or not query.strip():
+        raise ValueError("query must not be empty")
+    if limit <= 0: raise ValueError("limit must be positive")
+    tokens = set(re.findall(r"[\w']+", normalize_proposal_text(query)))
+    rows = list_assistant_memories(domain=domain, status="active", limit=1000)
+    ranked = []
+    for row in rows:
+        text = normalize_proposal_text(" ".join(str(row.get(k) or "") for k in ("subject", "summary", "details")))
+        row_tokens = set(re.findall(r"[\w']+", text)); overlap = len(tokens & row_tokens)
+        phrase = normalize_proposal_text(query) in text
+        if not overlap and not phrase: continue
+        score = overlap / max(len(tokens), 1) + (0.5 if phrase else 0) + float(row.get("confidence") or 0) * 0.2 + float(row.get("importance") or 0) * 0.1
+        reasons = [f"{overlap} keyword overlap"]
+        if phrase: reasons.append("exact phrase")
+        ranked.append({"memory": row, "score": round(score, 6), "reasons": reasons})
+    ranked.sort(key=lambda item: (-item["score"], -int(item["memory"]["id"])))
+    return ranked[:limit]
+
+def explain_assistant_memory_retrieval(query, domain="personal", limit=8):
+    selected = retrieve_assistant_memories(query, domain=domain, limit=limit)
+    selected_ids = {item["memory"]["id"] for item in selected}
+    candidates = list_assistant_memories(domain=domain, status="active", limit=1000)
+    not_selected = []
+    query_tokens = set(re.findall(r"[\w']+", normalize_proposal_text(query)))
+    for row in candidates:
+        if row["id"] in selected_ids: continue
+        text = normalize_proposal_text(" ".join(str(row.get(k) or "") for k in ("subject", "summary", "details")))
+        overlap = len(query_tokens & set(re.findall(r"[\w']+", text)))
+        score = round(overlap / max(len(query_tokens), 1) + float(row.get("confidence") or 0) * 0.2 + float(row.get("importance") or 0) * 0.1, 6)
+        not_selected.append({"memory": row, "score": score, "reason": "below selection cutoff"})
+    not_selected.sort(key=lambda item: (-item["score"], -int(item["memory"]["id"])))
+    return {"selected": selected, "not_selected": not_selected}
+
 def search_assistant_memories(query, domain="personal", status="active", limit=20):
     if not query or not query.strip():
         raise ValueError("query must not be empty")

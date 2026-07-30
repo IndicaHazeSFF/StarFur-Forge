@@ -275,3 +275,20 @@ Time an annotation test:
 Planned: automatic performance logging and:
 
     python starfur.py perf
+
+
+Assistant proposal inspection:
+
+    proposal inspect <id>
+
+Displays a domain-scoped proposal, identity, lifecycle, and oldest-first evidence without changing state.
+
+
+    memory inspect <id>
+
+Displays a domain-scoped canonical memory and evidence linked during proposal approval. Legacy memories may show no recorded evidence provenance.
+
+
+    python starfur.py assistant-context "query" [--domain personal] [--limit 8] [--explain]
+
+Displays deterministic ranked active canonical assistant memories and scoring reasons without invoking the chat model.
