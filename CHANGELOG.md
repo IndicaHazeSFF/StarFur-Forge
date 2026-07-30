@@ -1,5 +1,39 @@
 # Changelog
 
+## 2026-07-30 - Idempotent Chroma deletion
+
+- Factory reset now treats both ?not found? and ?does not exist? Chroma deletion responses as an already-empty collection.
+- Extended reset regression coverage.
+
+
+## 2026-07-30 - Idempotent Chroma reset
+
+- Treat an already-absent semantic collection as empty during factory-reset, allowing SQLite cleanup and backup to complete safely.
+- Added regression coverage.
+
+
+## 2026-07-30 - Separate status reporting for assistant memory
+
+- Added independent assistant-memory totals, active-memory totals, and pending-proposal totals to `starfur.py status`; lore counts remain unchanged.
+- Added regression coverage for the separated counters.
+
+
+## 2026-07-30 - Assistant startup command help
+
+- Expanded the interactive assistant banner to advertise proposal review and memory inspection commands.
+
+
+## 2026-07-30 - Assistant memory command documentation
+
+- Documented interactive proposal listing, inspection, approval, rejection, and active-memory commands in docs/COMMANDS.md.
+
+
+## 2026-07-30 - Factory CLI parser fix
+
+- Removed duplicate hidden factory-reset subcommand registration that caused CLI startup to fail with an argparse conflict.
+- Verification: full unittest suite (62 tests) passed.
+
+
 ## 2026-07-30 - Factory restore
 
 - Added timestamped backup discovery and confirmation-gated SQLite restore with automatic pre-restore safety backup.

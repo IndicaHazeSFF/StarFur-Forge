@@ -30,6 +30,12 @@ def show_status():
     print(f"Proposals:     {stats['proposals']}")
     print(f"Facts:         {stats['entity_facts']}")
 
+    print("\nAssistant Memory")
+    print("----------------")
+    print(f"All memories:  {stats['assistant_memories']}")
+    print(f"Active:        {stats['assistant_active_memories']}")
+    print(f"Pending:       {stats['assistant_pending_proposals']}")
+
 def analyze(path_string):
     path = Path(path_string)
 
@@ -320,12 +326,6 @@ def main():
     restore_parser.add_argument("--backup", type=int, help=argparse.SUPPRESS)
     restore_parser.add_argument("--allow-production-reset", action="store_true", help=argparse.SUPPRESS)
 
-    reset_parser = subparsers.add_parser("factory-reset", help=argparse.SUPPRESS)
-    reset_parser.add_argument("--all", action="store_true", help=argparse.SUPPRESS)
-    reset_parser.add_argument("--assistant-only", action="store_true", help=argparse.SUPPRESS)
-    reset_parser.add_argument("--semantic-only", action="store_true", help=argparse.SUPPRESS)
-    reset_parser.add_argument("--confirm", action="store_true", help=argparse.SUPPRESS)
-    reset_parser.add_argument("--allow-production-reset", action="store_true", help=argparse.SUPPRESS)
 
     reset_parser = subparsers.add_parser("factory-reset", help=argparse.SUPPRESS)
     reset_parser.add_argument("--all", action="store_true", help=argparse.SUPPRESS)

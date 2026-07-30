@@ -60,6 +60,32 @@ Aliases also work:
 
 ---
 
+## Assistant Memory Review
+
+Start interactive Assistant Mode:
+
+    python starfur.py assistant
+
+When a factual turn produces a proposal, review it in chat:
+
+    proposal list
+    proposal inspect <id>
+    proposal approve <id>
+    proposal reject <id>
+
+Inspect approved memories:
+
+    memory inspect <id>
+
+List or search active memories in the current domain:
+
+    memory list
+    memory search <query>
+
+Approval is not automatic by default. Rejected proposals remain in history, and approving a proposal twice is refused.
+
+---
+
 ## Lore Review
 
 Review pending lore proposals:
@@ -311,3 +337,17 @@ Conversational introspection recognizes questions such as ?what do you remember 
 
 
 Interactive `assistant` responses stream incrementally in the terminal while the complete response remains buffered for history and proposal processing.
+
+
+Hidden development reset (not shown in normal help):
+
+    python starfur.py factory-reset --all --confirm
+
+Requires typing `StarFur Factory Reset`; creates a SQLite backup and scopes deletion to assistant memory plus the configured semantic collection. Production reset additionally requires `--allow-production-reset`.
+
+
+Hidden development restore:
+
+    python starfur.py factory-restore
+
+Lists timestamped backups, asks for a backup selection, and requires typing `StarFur Factory Restore`. Current data is safety-backed up before replacement.

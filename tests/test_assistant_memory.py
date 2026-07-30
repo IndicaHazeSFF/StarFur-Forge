@@ -52,6 +52,15 @@ class AssistantMemoryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             db.update_assistant_memory(personal, importance=1.5)
 
+    def test_database_stats_separate_assistant_counts(self):
+        db.create_assistant_memory("User", "preference", "Likes tea")
+        stats = db.database_stats()
+        self.assertEqual(stats["assistant_memories"], 1)
+        self.assertEqual(stats["assistant_active_memories"], 1)
+        self.assertEqual(stats["assistant_pending_proposals"], 0)
+        self.assertIn("entities", stats)
+        self.assertIn("entity_facts", stats)
+
     def test_schema_is_additive_and_lore_domain_unchanged(self):
         db.create_assistant_memory("User", "routine", "Works on StarFur", domain="personal")
         self.assertIsNotNone(db.get_assistant_memory(1, domain="personal"))

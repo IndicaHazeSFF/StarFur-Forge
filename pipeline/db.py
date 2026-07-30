@@ -461,6 +461,11 @@ def database_stats():
 
             stats[table] = count
 
+        # Keep assistant-memory counts separate from lore-memory counts.
+        stats["assistant_memories"] = connection.execute("SELECT COUNT(*) FROM assistant_memories").fetchone()[0]
+        stats["assistant_active_memories"] = connection.execute("SELECT COUNT(*) FROM assistant_memories WHERE status = 'active'").fetchone()[0]
+        stats["assistant_pending_proposals"] = connection.execute("SELECT COUNT(*) FROM assistant_memory_proposals WHERE status = 'pending'").fetchone()[0]
+
     return stats
 def clear_source_appearances(source):
     """
@@ -712,7 +717,7 @@ def list_assistant_memories(domain="personal", status="active", memory_type=None
 
 
 def retrieve_assistant_memories(query, domain="personal", limit=8):
-    """Return deterministic, explainable ranked canonical memories."""
+    """Compatibility wrapper for the deterministic retriever."""
     if not query or not query.strip():
         raise ValueError("query must not be empty")
     if limit <= 0: raise ValueError("limit must be positive")

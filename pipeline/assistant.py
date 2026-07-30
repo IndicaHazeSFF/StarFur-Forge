@@ -364,7 +364,7 @@ def run_interactive(config_path=DEFAULT_CONFIG_PATH, input_fn=input, output_fn=p
             print("StarFur: ", end="", flush=True); stream_started["value"] = True
         print(text, end="", flush=True)
     session = AssistantSession(config, load_persona(config.persona_path), policy=load_policy(config.policy_path), debug_level=debug_level, proposal_creator=upsert_assistant_memory_proposal, stream=True, stream_writer=stream_writer)
-    output_fn("StarFur Assistant (remember this:, forget this:, memory list, memory search; quit to exit)")
+    output_fn("StarFur Assistant (remember/forget, memory list/search/inspect, proposal list/inspect/approve/reject; quit to exit)")
     while True:
         try:
             user_text = input_fn("You: ")

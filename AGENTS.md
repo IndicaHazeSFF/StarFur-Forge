@@ -108,3 +108,9 @@ Assistant proposal persistence receives the original user observation when avail
 - Hidden `factory-reset` is destructive and confirmation-gated; it backs up SQLite, requires an explicit scope, and never touches lore tables. Semantic reset requires an injected/configured Chroma client before any SQLite deletion.
 
 - Hidden `factory-restore` lists timestamped backup directories, requires exact `StarFur Factory Restore` confirmation, and creates a pre-restore safety backup before replacing SQLite.
+
+### Status memory separation
+
+`starfur.py status` reports Crown-of-Claws lore tables separately from assistant memory tables. Factory reset and assistant testing must be verified using the assistant-memory counts; lore entities, facts, and proposals are intentionally independent.
+
+Factory reset treats a missing Chroma collection as an already-empty semantic store and records an empty snapshot when backups are requested.
