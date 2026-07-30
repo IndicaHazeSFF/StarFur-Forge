@@ -305,3 +305,6 @@ Semantic and hybrid strategies require explicit temporary Chroma dependencies; d
 
 
 Semantic retrieval evaluation uses only a temporary fixture Chroma collection with injected embeddings; production collections are never opened by the benchmark.
+
+
+Conversational introspection recognizes questions such as ?what do you remember about ...??, ?why do you remember that??, and ?where did that memory come from??. Responses use active canonical memory and approved provenance only.

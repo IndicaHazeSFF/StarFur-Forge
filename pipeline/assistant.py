@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import json
+import re
 from pathlib import Path
 
 import ollama
@@ -124,6 +125,7 @@ class AssistantSession:
         self.proposal_creator = proposal_creator
         self.messages = []
         self.proposals = []
+        self.last_memory_ids = []
         self.debug_level = normalize_debug_level(debug_level or getattr(config, "debug_level", "off"))
         self.trace = RetrievalTrace(self.debug_level)
 
@@ -135,6 +137,7 @@ class AssistantSession:
         else:
             memories = self.memory_loader(domain=self.config.domain, status="active", limit=self.config.max_memories)
             retrieved = [{"memory": memory, "score": None, "reasons": ["custom memory loader"]} for memory in memories]
+        self.last_memory_ids = [memory["id"] for memory in memories if memory.get("id") is not None]
         self.trace.record("memory_lookup", domain=self.config.domain, count=len(memories), query=user_text, results=retrieved)
         memory_text = "\n".join(f"- {memory['summary']}" for memory in memories) or "(none)"
         self.trace.record("context_assembly", domain=self.config.domain, selected_count=len(memories), message_count=len(self.messages) + 1, context=memory_text)
@@ -241,11 +244,51 @@ class AssistantSession:
             return "Rejected proposal #" + str(proposal_id) + "."
         return None
 
+    def explain_memory(self, query=None):
+        """Return a bounded, provenance-safe explanation payload."""
+        retrieval_items = []
+        if self.memory_loader is list_assistant_memories:
+            retrieval_items = retrieve_assistant_memories(query, domain=self.config.domain, limit=self.config.max_memories) if query is not None else [{"memory":{"id": memory_id}, "reasons": []} for memory_id in self.last_memory_ids]
+            target_ids = [item["memory"]["id"] for item in retrieval_items]
+            source_memories = {memory_id: inspect_assistant_memory(memory_id, domain=self.config.domain) for memory_id in target_ids}
+        else:
+            custom = self.memory_loader(domain=self.config.domain, status="active", limit=self.config.max_memories)
+            target_ids = self.last_memory_ids if query is None else [memory["id"] for memory in custom if any(token in (memory.get("summary","")+" "+memory.get("details","")).casefold() for token in query.casefold().split())]
+            source_memories = {memory["id"]: {"memory": memory, "evidence": []} for memory in custom if memory["id"] in target_ids}
+        if not target_ids: return {"status": "ambiguous" if query is None else "no_match", "memories": []}
+        payload=[]
+        for memory_id in target_ids[:self.config.max_memories]:
+            inspected = source_memories.get(memory_id)
+            if inspected:
+                memory=inspected["memory"]
+                payload.append({"memory_id":memory["id"],"summary":memory["summary"],"details":memory.get("details"),"confidence":memory.get("confidence"),"importance":memory.get("importance"),"source":memory.get("source"),"approved_memory_id":memory.get("id"),"evidence":inspected.get("evidence",[]),"retrieval_reasons":next((item.get("reasons",[]) for item in retrieval_items if item["memory"].get("id")==memory["id"]),[])})
+        return {"status":"ok" if payload else "no_match","memories":payload}
+
+    def _memory_introspection(self, user_text):
+        lowered=user_text.casefold()
+        why=any(phrase in lowered for phrase in ("why do you remember", "where did that memory come from", "what made you think that"))
+        direct=lowered.startswith("what do you remember about")
+        if not (why or direct): return None
+        query=None if why else user_text.split("about",1)[1].strip().rstrip("?")
+        explanation=self.explain_memory(query)
+        if explanation["status"] == "ambiguous": return "I am not sure which memory you mean. Which one should I explain?"
+        if explanation["status"] == "no_match": return "I do not have an active canonical memory that matches that."
+        explanation_text = (self.persona + "\n\nENGINE POLICY:\n" + self.policy + "\n\nYou are answering a memory-introspection question. Use ONLY the structured explanation JSON below. Explain remembered content and provenance naturally. Do not mention rejected proposals, raw databases, hidden reasoning, or invent causes.\nSTRUCTURED MEMORY EXPLANATION:\n" + json.dumps(explanation, ensure_ascii=False))
+        prompt=[{"role":"system","content":explanation_text},{"role":"user","content":user_text}]
+        self.trace.record("memory_explanation", query=query, memory_ids=[item["memory_id"] for item in explanation["memories"]], payload=explanation)
+        response=self.chat(model=self.config.chat_model,messages=prompt); content=response.get("message",{}).get("content","").strip()
+        if not content: raise RuntimeError("Assistant model returned empty content.")
+        return content
+
     def respond(self, user_text):
         user_text = user_text.strip()
         if not user_text:
             return ""
         command_result = self.command(user_text)
+        if command_result is None:
+            introspection = self._memory_introspection(user_text)
+            if introspection is not None:
+                return introspection
         if command_result is not None:
             self.trace.record("command", command=user_text)
             return command_result

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-30 - Conversational memory introspection
+
+- Added provenance-safe explain-memory intent handling, prior selected-memory tracking, direct memory recall questions, and custom-loader compatibility tests.
+
+
 ## 2026-07-30 - Fixture-only semantic retrieval adapter
 
 - Added temporary Chroma fixture lifecycle, stable-key ingestion, fixed embedding injection, and expanded retrieval benchmark coverage to 15 cases.

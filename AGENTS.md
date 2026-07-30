@@ -98,3 +98,5 @@ Assistant proposal persistence receives the original user observation when avail
 - Retrieval strategy implementations live behind `MemoryRetriever`; semantic/hybrid retrievers require explicitly injected temporary collections and are not wired into assistant chat or production Chroma.
 
 - `FixtureChromaAdapter` owns a temporary PersistentClient and only ingests checked-in retrieval fixtures; it must never receive production paths or collections.
+
+- Conversational memory introspection exposes only active canonical memory plus approved evidence in a structured prompt payload; no rejected proposals, raw DB, or hidden reasoning. Session tracks only prior selected memory IDs for follow-up why/provenance questions.
