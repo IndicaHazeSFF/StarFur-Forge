@@ -114,3 +114,5 @@ Assistant proposal persistence receives the original user observation when avail
 `starfur.py status` reports Crown-of-Claws lore tables separately from assistant memory tables. Factory reset and assistant testing must be verified using the assistant-memory counts; lore entities, facts, and proposals are intentionally independent.
 
 Factory reset treats a missing Chroma collection as an already-empty semantic store and records an empty snapshot when backups are requested.
+
+Assistant chat uses compact public record references (`M-###` and `P-###`) while SQLite numeric IDs remain internal provenance identifiers. Numeric references remain accepted for backward compatibility.

@@ -818,6 +818,42 @@ def list_assistant_memory_proposals(domain="personal", status="pending"):
         rows = connection.execute("SELECT * FROM assistant_memory_proposals WHERE domain = ? AND (? IS NULL OR status = ?) ORDER BY created_at, id", (normalize_domain(domain), status, status)).fetchall()
     return [dict(row) for row in rows]
 
+def assistant_public_id(kind, record_id, domain="personal"):
+    """Return a compact user-facing reference while retaining numeric DB IDs internally."""
+    table = "assistant_memories" if kind == "memory" else "assistant_memory_proposals" if kind == "proposal" else None
+    prefix = "M" if kind == "memory" else "P" if kind == "proposal" else None
+    if table is None:
+        raise ValueError("Unknown assistant record kind")
+    with connect() as connection:
+        row = connection.execute(
+            f"SELECT id FROM {table} WHERE domain = ? ORDER BY created_at, id",
+            (normalize_domain(domain),),
+        ).fetchall()
+    for position, row in enumerate(row, 1):
+        if row["id"] == int(record_id):
+            return f"{prefix}-{position:03d}"
+    return f"{prefix}-{int(record_id):03d}"
+
+
+def resolve_assistant_id(reference, kind, domain="personal"):
+    """Resolve public M-/P- references and legacy numeric IDs to internal IDs."""
+    value = str(reference).strip()
+    if value.isdigit():
+        return int(value)
+    match = re.fullmatch(r"([MP])-(\d+)", value, re.IGNORECASE)
+    expected = "M" if kind == "memory" else "P" if kind == "proposal" else None
+    if not match or match.group(1).upper() != expected:
+        return None
+    ordinal = int(match.group(2))
+    table = "assistant_memories" if kind == "memory" else "assistant_memory_proposals"
+    with connect() as connection:
+        rows = connection.execute(
+            f"SELECT id FROM {table} WHERE domain = ? ORDER BY created_at, id",
+            (normalize_domain(domain),),
+        ).fetchall()
+    return rows[ordinal - 1]["id"] if 1 <= ordinal <= len(rows) else None
+
+
 def get_assistant_memory_proposal(proposal_id, domain="personal"):
     with connect() as connection:
         row = connection.execute("SELECT * FROM assistant_memory_proposals WHERE id = ? AND domain = ?", (proposal_id, normalize_domain(domain))).fetchone()

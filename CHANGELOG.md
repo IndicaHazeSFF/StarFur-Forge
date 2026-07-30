@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-30 - Compact assistant record references
+
+- Added stable, domain-scoped `M-###` memory and `P-###` proposal references for chat output and commands.
+- Preserved legacy numeric ID compatibility and internal database IDs.
+- Added resolver/display regression tests and updated command documentation.
+
+
 ## 2026-07-30 - Idempotent Chroma deletion
 
 - Factory reset now treats both ?not found? and ?does not exist? Chroma deletion responses as an already-empty collection.

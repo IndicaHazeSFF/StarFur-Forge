@@ -52,6 +52,17 @@ class AssistantMemoryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             db.update_assistant_memory(personal, importance=1.5)
 
+    def test_compact_public_ids_resolve_and_preserve_numeric_compatibility(self):
+        memory_id = db.create_assistant_memory("User", "preference", "Likes tea")
+        proposal = {"subject": "User", "memory_type": "goal", "summary": "Finish tests", "details": "", "importance": 0.5, "confidence": 0.5, "retention": "short_term"}
+        proposal_id = db.create_assistant_memory_proposal(proposal)
+        self.assertEqual(db.assistant_public_id("memory", memory_id), "M-001")
+        self.assertEqual(db.assistant_public_id("proposal", proposal_id), "P-001")
+        self.assertEqual(db.resolve_assistant_id("M-001", "memory"), memory_id)
+        self.assertEqual(db.resolve_assistant_id("P-001", "proposal"), proposal_id)
+        self.assertEqual(db.resolve_assistant_id(str(memory_id), "memory"), memory_id)
+        self.assertIsNone(db.resolve_assistant_id("P-999", "proposal"))
+
     def test_database_stats_separate_assistant_counts(self):
         db.create_assistant_memory("User", "preference", "Likes tea")
         stats = db.database_stats()

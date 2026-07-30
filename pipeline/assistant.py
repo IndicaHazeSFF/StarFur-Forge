@@ -11,6 +11,7 @@ from pipeline.db import (
     upsert_assistant_memory_proposal,
     list_assistant_memory_proposals, approve_assistant_memory_proposal, reject_assistant_memory_proposal,
     inspect_assistant_memory_proposal, inspect_assistant_memory,
+    assistant_public_id, resolve_assistant_id,
     get_assistant_memory,
     list_assistant_memories,
     search_assistant_memories, retrieve_assistant_memories,
@@ -222,7 +223,7 @@ class AssistantSession:
             importance=0.9, confidence=1.0, retention="long_term",
             source="explicit:user", domain=self.config.domain,
         )
-        return f"Remembered (memory #{memory_id})."
+        return f"Remembered (memory {assistant_public_id('memory', memory_id, self.config.domain)})."
 
     def explicit_forget(self, text):
         matches = self.memory_searcher(text.strip(), domain=self.config.domain, status="active", limit=1)
@@ -230,7 +231,7 @@ class AssistantSession:
             return "No active matching memory found."
         memory = matches[0]
         self.memory_updater(memory["id"], domain=self.config.domain, status="forgotten")
-        return f"Forgotten memory #{memory['id']}."
+        return f"Forgotten memory {assistant_public_id('memory', memory['id'], self.config.domain)}."
 
     def command(self, text):
         lowered = text.strip().casefold()
@@ -240,34 +241,47 @@ class AssistantSession:
             return self.explicit_forget(text.split(":", 1)[1])
         if lowered == "memory list":
             memories = self.memory_loader(domain=self.config.domain, status="active", limit=100)
-            return "\n".join(f"#{m['id']} [{m['memory_type']}] {m['summary']}" for m in memories) or "No active memories."
+            return "\n".join(f"{assistant_public_id('memory', m['id'], self.config.domain)} [{m['memory_type']}] {m['summary']}" for m in memories) or "No active memories."
         if lowered.startswith("memory search "):
             memories = self.memory_searcher(text.strip()[14:], domain=self.config.domain, status="active", limit=20)
-            return "\n".join(f"#{m['id']} [{m['memory_type']}] {m['summary']}" for m in memories) or "No matching active memories."
+            return "\n".join(f"{assistant_public_id('memory', m['id'], self.config.domain)} [{m['memory_type']}] {m['summary']}" for m in memories) or "No matching active memories."
         if lowered == "proposal list":
             rows = list_assistant_memory_proposals(domain=self.config.domain)
-            return "\n".join("#" + str(row["id"]) + " [" + row["memory_type"] + "] " + row["summary"] for row in rows) or "No pending assistant proposals."
+            return "\n".join(f"{assistant_public_id('proposal', row['id'], self.config.domain)} [{row['memory_type']}] {row['summary']}" for row in rows) or "No pending assistant proposals."
         if lowered.startswith("memory inspect"):
             parts = text.strip().split()
-            if len(parts) != 3 or not parts[2].isdigit(): return "Usage: memory inspect <id>"
-            inspected = inspect_assistant_memory(int(parts[2]), domain=self.config.domain)
+            if len(parts) != 3:
+                return "Usage: memory inspect <M-### or numeric id>"
+            memory_id = resolve_assistant_id(parts[2], "memory", self.config.domain)
+            if memory_id is None:
+                return "Memory not found."
+            inspected = inspect_assistant_memory(memory_id, domain=self.config.domain)
             return format_assistant_memory(inspected) if inspected else "Memory not found."
         if lowered.startswith("proposal inspect"):
             parts = text.strip().split()
-            if len(parts) != 3 or not parts[2].isdigit():
-                return "Usage: proposal inspect <id>"
-            inspected = inspect_assistant_memory_proposal(int(parts[2]), domain=self.config.domain)
-            if not inspected:
+            if len(parts) != 3:
+                return "Usage: proposal inspect <P-### or numeric id>"
+            proposal_id = resolve_assistant_id(parts[2], "proposal", self.config.domain)
+            if proposal_id is None:
                 return "Proposal not found."
-            return format_assistant_memory_proposal(inspected)
-        if lowered.startswith("proposal approve "):
-            proposal_id = int(text.strip().split()[-1])
-            memory = approve_assistant_memory_proposal(proposal_id, domain=self.config.domain)
-            return "Approved proposal #" + str(proposal_id) + " as memory #" + str(memory["id"]) + "."
-        if lowered.startswith("proposal reject "):
-            proposal_id = int(text.strip().split()[-1])
-            reject_assistant_memory_proposal(proposal_id, domain=self.config.domain)
-            return "Rejected proposal #" + str(proposal_id) + "."
+            inspected = inspect_assistant_memory_proposal(proposal_id, domain=self.config.domain)
+            return format_assistant_memory_proposal(inspected) if inspected else "Proposal not found."
+        for action, handler in (("approve", approve_assistant_memory_proposal), ("reject", reject_assistant_memory_proposal)):
+            if lowered.startswith("proposal " + action + " "):
+                parts = text.strip().split()
+                if len(parts) != 3:
+                    return f"Usage: proposal {action} <P-### or numeric id>"
+                proposal_id = resolve_assistant_id(parts[2], "proposal", self.config.domain)
+                if proposal_id is None:
+                    return "Proposal not found."
+                try:
+                    if action == "approve":
+                        memory = handler(proposal_id, domain=self.config.domain)
+                        return f"Approved {assistant_public_id('proposal', proposal_id, self.config.domain)} as {assistant_public_id('memory', memory['id'], self.config.domain)}."
+                    handler(proposal_id, domain=self.config.domain)
+                    return f"Rejected {assistant_public_id('proposal', proposal_id, self.config.domain)}."
+                except ValueError as error:
+                    return f"Assistant error: {error}"
         return None
 
     def explain_memory(self, query=None):
@@ -335,9 +349,9 @@ class AssistantSession:
 
 def format_assistant_memory(inspected):
     memory = inspected["memory"]; evidence = inspected.get("evidence", [])
-    lines=[f"Memory #{memory['id']}",f"Domain: {memory.get('domain','unknown')}",f"Type: {memory.get('memory_type','unknown')}",f"Subject: {memory.get('subject','unknown')}","","Summary:",memory.get('summary') or '(none)',"","Details:",memory.get('details') or '(none)',"",f"Confidence: {memory.get('confidence','unknown')}",f"Importance: {memory.get('importance','unknown')}",f"Retention: {memory.get('retention','unknown')}",f"Status: {memory.get('status','unknown')}","","Evidence:"]
+    lines=[f"Memory {assistant_public_id('memory', memory['id'], memory.get('domain', 'personal'))}",f"Domain: {memory.get('domain','unknown')}",f"Type: {memory.get('memory_type','unknown')}",f"Subject: {memory.get('subject','unknown')}","","Summary:",memory.get('summary') or '(none)',"","Details:",memory.get('details') or '(none)',"",f"Confidence: {memory.get('confidence','unknown')}",f"Importance: {memory.get('importance','unknown')}",f"Retention: {memory.get('retention','unknown')}",f"Status: {memory.get('status','unknown')}","","Evidence:"]
     if not evidence: lines.append("no recorded evidence provenance")
-    for i,item in enumerate(evidence,1): lines.extend([f'{i}. "{item.get("raw_excerpt") or "(observation text unavailable)"}"',f"   Source: {item.get('source','unknown')}",f"   Added: {item.get('observed_at','unknown')}",f"   Observation key: {item.get('evidence_hash') or 'legacy/unavailable'}",f"   Proposal: #{item.get('proposal_id','unknown')}"])
+    for i,item in enumerate(evidence,1): lines.extend([f'{i}. "{item.get("raw_excerpt") or "(observation text unavailable)"}"',f"   Source: {item.get('source','unknown')}",f"   Added: {item.get('observed_at','unknown')}",f"   Observation key: {item.get('evidence_hash') or 'legacy/unavailable'}",f"   Proposal: {assistant_public_id('proposal', item.get('proposal_id'), memory.get('domain', 'personal')) if item.get('proposal_id') else 'unknown'}"])
     lines.extend(["",f"Created: {memory.get('created_at','unknown')}",f"Updated: {memory.get('updated_at','unknown')}"])
     return "\n".join(lines)
 
@@ -346,7 +360,7 @@ def format_assistant_memory_proposal(inspected):
     evidence = inspected.get("evidence", [])
     identity = proposal.get("proposal_key") or "legacy/unavailable"
     support = proposal.get("evidence_count") if proposal.get("evidence_count") is not None else "legacy/unavailable"
-    lines = [f"Proposal #{proposal['id']}", f"Status: {proposal.get('status', 'unknown')}", f"Domain: {proposal.get('domain', 'unknown')}", f"Type: {proposal.get('memory_type', 'unknown')}", f"Subject: {proposal.get('subject', 'unknown')}", "", "Summary:", proposal.get("summary") or "(none)", "", "Details:", proposal.get("details") or "(none)", "", f"Confidence: {proposal.get('confidence', 'unknown')}", f"Importance: {proposal.get('importance', 'unknown')}", f"Retention: {proposal.get('retention', 'unknown')}", f"Support: {support}", "", f"Identity: {identity}", "", "Evidence:"]
+    lines = [f"Proposal {assistant_public_id('proposal', proposal['id'], proposal.get('domain', 'personal'))}", f"Status: {proposal.get('status', 'unknown')}", f"Domain: {proposal.get('domain', 'unknown')}", f"Type: {proposal.get('memory_type', 'unknown')}", f"Subject: {proposal.get('subject', 'unknown')}", "", "Summary:", proposal.get("summary") or "(none)", "", "Details:", proposal.get("details") or "(none)", "", f"Confidence: {proposal.get('confidence', 'unknown')}", f"Importance: {proposal.get('importance', 'unknown')}", f"Retention: {proposal.get('retention', 'unknown')}", f"Support: {support}", "", f"Identity: {identity}", "", "Evidence:"]
     if not evidence:
         lines.append("no recorded evidence provenance")
     else:
