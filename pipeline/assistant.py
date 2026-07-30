@@ -111,7 +111,7 @@ def validate_memory_proposal(value, default_domain):
 class AssistantSession:
     def __init__(self, config, persona, chat=None, memory_loader=list_assistant_memories,
                  memory_creator=create_assistant_memory, memory_searcher=search_assistant_memories,
-                 memory_updater=update_assistant_memory, debug_level=None, policy=None, proposal_creator=None):
+                 memory_updater=update_assistant_memory, debug_level=None, policy=None, proposal_creator=None, stream=False, stream_writer=None):
         if config.max_session_messages <= 0:
             raise ValueError("max_session_messages must be positive")
         self.config = config
@@ -123,11 +123,37 @@ class AssistantSession:
         self.memory_searcher = memory_searcher
         self.memory_updater = memory_updater
         self.proposal_creator = proposal_creator
+        self.stream = stream
+        self.stream_writer = stream_writer
         self.messages = []
         self.proposals = []
         self.last_memory_ids = []
         self.debug_level = normalize_debug_level(debug_level or getattr(config, "debug_level", "off"))
         self.trace = RetrievalTrace(self.debug_level)
+
+    def _chat_complete(self, messages, *, model=None, stream=None):
+        """Return complete content while optionally rendering streamed chunks."""
+        use_stream = self.stream if stream is None else stream
+        kwargs = {"model": model or self.config.chat_model, "messages": messages}
+        if not use_stream:
+            response = self.chat(**kwargs)
+            return response.get("message", {}).get("content", "")
+        response = self.chat(stream=True, **kwargs)
+        if isinstance(response, dict):
+            return response.get("message", {}).get("content", "")
+        parts = []
+        for chunk in response:
+            if isinstance(chunk, dict):
+                message = chunk.get("message", {}) or {}
+                piece = message.get("content", "") if isinstance(message, dict) else getattr(message, "content", "")
+            else:
+                message = getattr(chunk, "message", None)
+                piece = getattr(message, "content", "") if message is not None else ""
+            if piece:
+                parts.append(piece)
+                if self.stream_writer:
+                    self.stream_writer(piece)
+        return "".join(parts)
 
     def _context_messages(self, user_text):
         self.trace = RetrievalTrace(self.debug_level)
@@ -276,7 +302,7 @@ class AssistantSession:
         explanation_text = (self.persona + "\n\nENGINE POLICY:\n" + self.policy + "\n\nYou are answering a memory-introspection question. Use ONLY the structured explanation JSON below. Explain remembered content and provenance naturally. Do not mention rejected proposals, raw databases, hidden reasoning, or invent causes.\nSTRUCTURED MEMORY EXPLANATION:\n" + json.dumps(explanation, ensure_ascii=False))
         prompt=[{"role":"system","content":explanation_text},{"role":"user","content":user_text}]
         self.trace.record("memory_explanation", query=query, memory_ids=[item["memory_id"] for item in explanation["memories"]], payload=explanation)
-        response=self.chat(model=self.config.chat_model,messages=prompt); content=response.get("message",{}).get("content","").strip()
+        content=self._chat_complete(prompt).strip()
         if not content: raise RuntimeError("Assistant model returned empty content.")
         return content
 
@@ -294,8 +320,7 @@ class AssistantSession:
             return command_result
         messages = self._context_messages(user_text)
         self.trace.record("model_request", model=self.config.chat_model, message_count=len(messages), messages=messages)
-        response = self.chat(model=self.config.chat_model, messages=messages)
-        content = response.get("message", {}).get("content", "").strip()
+        content = self._chat_complete(messages).strip()
         if not content:
             self.trace.record("model_response", model=self.config.chat_model, status="empty")
             raise RuntimeError("Assistant model returned empty content.")
@@ -333,7 +358,12 @@ def format_assistant_memory_proposal(inspected):
 
 def run_interactive(config_path=DEFAULT_CONFIG_PATH, input_fn=input, output_fn=print, debug_level=None):
     config = load_config(config_path)
-    session = AssistantSession(config, load_persona(config.persona_path), policy=load_policy(config.policy_path), debug_level=debug_level, proposal_creator=upsert_assistant_memory_proposal)
+    stream_started = {"value": False}
+    def stream_writer(text):
+        if not stream_started["value"]:
+            print("StarFur: ", end="", flush=True); stream_started["value"] = True
+        print(text, end="", flush=True)
+    session = AssistantSession(config, load_persona(config.persona_path), policy=load_policy(config.policy_path), debug_level=debug_level, proposal_creator=upsert_assistant_memory_proposal, stream=True, stream_writer=stream_writer)
     output_fn("StarFur Assistant (remember this:, forget this:, memory list, memory search; quit to exit)")
     while True:
         try:
@@ -352,7 +382,11 @@ def run_interactive(config_path=DEFAULT_CONFIG_PATH, input_fn=input, output_fn=p
             session.trace.emit(output_fn)
             continue
         if answer:
-            output_fn(f"StarFur: {answer}")
+            if stream_started["value"]:
+                output_fn("")
+            else:
+                output_fn(f"StarFur: {answer}")
+        stream_started["value"] = False
         session.trace.emit(output_fn)
         if len(session.proposals) > proposal_count_before:
             proposal = session.proposals[-1]

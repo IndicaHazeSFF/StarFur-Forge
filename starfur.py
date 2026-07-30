@@ -307,13 +307,32 @@ def main():
         help="Retrieval debugging detail level",
     )
 
-    subparsers.add_parser("retrieval-eval", help="Run the checked-in assistant retrieval benchmark")
+    eval_parser = subparsers.add_parser("retrieval-eval", help="Run the checked-in assistant retrieval benchmark")
+    eval_parser.add_argument("--strategy", choices=("deterministic", "semantic", "hybrid"), default="deterministic")
 
     context_parser = subparsers.add_parser("assistant-context", help="Show ranked assistant memory context")
     context_parser.add_argument("query", help="Question or query text")
     context_parser.add_argument("--domain", default=None, help="Assistant memory domain")
     context_parser.add_argument("--limit", type=int, default=8, help="Maximum selected memories")
     context_parser.add_argument("--explain", action="store_true", help="Show selection and exclusion reasons")
+
+    restore_parser = subparsers.add_parser("factory-restore", help=argparse.SUPPRESS)
+    restore_parser.add_argument("--backup", type=int, help=argparse.SUPPRESS)
+    restore_parser.add_argument("--allow-production-reset", action="store_true", help=argparse.SUPPRESS)
+
+    reset_parser = subparsers.add_parser("factory-reset", help=argparse.SUPPRESS)
+    reset_parser.add_argument("--all", action="store_true", help=argparse.SUPPRESS)
+    reset_parser.add_argument("--assistant-only", action="store_true", help=argparse.SUPPRESS)
+    reset_parser.add_argument("--semantic-only", action="store_true", help=argparse.SUPPRESS)
+    reset_parser.add_argument("--confirm", action="store_true", help=argparse.SUPPRESS)
+    reset_parser.add_argument("--allow-production-reset", action="store_true", help=argparse.SUPPRESS)
+
+    reset_parser = subparsers.add_parser("factory-reset", help=argparse.SUPPRESS)
+    reset_parser.add_argument("--all", action="store_true", help=argparse.SUPPRESS)
+    reset_parser.add_argument("--assistant-only", action="store_true", help=argparse.SUPPRESS)
+    reset_parser.add_argument("--semantic-only", action="store_true", help=argparse.SUPPRESS)
+    reset_parser.add_argument("--confirm", action="store_true", help=argparse.SUPPRESS)
+    reset_parser.add_argument("--allow-production-reset", action="store_true", help=argparse.SUPPRESS)
 
     # -------------------------
     # ENTITY
@@ -369,6 +388,52 @@ def main():
 
     args = parser.parse_args()
 
+    if args.command == "factory-restore":
+        from pipeline.reset import CONFIRMATION, factory_restore, list_backups
+        backups=list_backups()
+        if not backups: print("No backups available.")
+        else:
+            print("Available backups\n")
+            for index,item in enumerate(backups,1): print(f"{index}. {item.name[:8]} {item.name[9:11]}:{item.name[11:13]}")
+            selection=args.backup or int(input("Restore backup number: "))
+            if selection<1 or selection>len(backups): print("Invalid backup selection.")
+            else:
+                print("This will replace current assistant memory data.")
+                print(f"Type exactly: {CONFIRMATION.replace('Reset','Restore')}")
+                typed=input("Confirmation: ")
+                if typed != CONFIRMATION.replace("Reset","Restore"): print("Confirmation did not match. Restore cancelled.")
+                else:
+                    try:
+                        chroma_client=None
+                        if (backups[selection-1] / "chroma.json").exists():
+                            import chromadb
+                            from pipeline.ingest import CHROMA_HOST, CHROMA_PORT
+                            chroma_client=chromadb.HttpClient(host=CHROMA_HOST,port=CHROMA_PORT)
+                        print(f"Factory restore complete: {factory_restore('data/starfur.db',backups[selection-1],confirmation=typed,allow_production=args.allow_production_reset,chroma_client=chroma_client)}")
+                    except Exception as error: print(f"Factory restore failed: {error}")
+
+    if args.command == "factory-reset":
+        from pipeline.reset import CONFIRMATION, factory_reset
+        if sum(bool(flag) for flag in (args.all, args.assistant_only, args.semantic_only)) != 1: print("Choose exactly one reset scope.")
+        elif not args.confirm: print("Reset not performed. Add --confirm to continue.")
+        else:
+            print("WARNING: This is destructive.")
+            backup_answer=input("Would you like a backup made before the wipe? [Y/n]: ").strip().casefold()
+            make_backup=backup_answer not in {"n","no"}
+            print(f"Type exactly: {CONFIRMATION}"); typed=input("Confirmation: ")
+            if typed != CONFIRMATION: print("Confirmation did not match. Reset cancelled.")
+            else:
+                scope="assistant-and-semantic" if args.all else "assistant-only" if args.assistant_only else "semantic-only"
+                try:
+                    chroma_client=None
+                    if scope != "assistant-only":
+                        import chromadb
+                        from pipeline.ingest import CHROMA_HOST, CHROMA_PORT
+                        chroma_client=chromadb.HttpClient(host=CHROMA_HOST,port=CHROMA_PORT)
+                    result=factory_reset("data/starfur.db",scope=scope,confirmation=typed,allow_production=args.allow_production_reset,chroma_client=chroma_client,backup=make_backup)
+                    print(f"Factory reset complete: {result}")
+                except Exception as error: print(f"Factory reset failed: {error}")
+
     if args.command == "status":
         show_status()
 
@@ -380,7 +445,7 @@ def main():
 
     elif args.command == "retrieval-eval":
         from pipeline.retrieval_eval import run_benchmark
-        result = run_benchmark()
+        result = run_benchmark(strategy=args.strategy)
         print("Retrieval Evaluation\n--------------------")
         print(f"Cases:              {result['cases']}")
         print(f"Top-1 hit rate:     {result['top1_hit_rate']:.1%}")

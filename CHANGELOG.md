@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-07-30 - Factory restore
+
+- Added timestamped backup discovery and confirmation-gated SQLite restore with automatic pre-restore safety backup.
+
+
+## 2026-07-30 - Confirmation-gated factory reset
+
+- Added hidden scoped `factory-reset` with exact confirmation, SQLite backup, assistant-table cleanup, and explicit Chroma deletion injection.
+
+
+## 2026-07-30 - Ollama typed stream handling
+
+- Fixed interactive streaming to consume typed ChatResponse message content and suppress internal thinking/repr output.
+
+
+## 2026-07-30 - Streaming assistant output
+
+- Added compatible streamed Ollama response handling for interactive chat, preserving complete-response history and deterministic tests.
+
+
 ## 2026-07-30 - Conversational memory introspection
 
 - Added provenance-safe explain-memory intent handling, prior selected-memory tracking, direct memory recall questions, and custom-loader compatibility tests.

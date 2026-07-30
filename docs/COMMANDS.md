@@ -308,3 +308,6 @@ Semantic retrieval evaluation uses only a temporary fixture Chroma collection wi
 
 
 Conversational introspection recognizes questions such as ?what do you remember about ...??, ?why do you remember that??, and ?where did that memory come from??. Responses use active canonical memory and approved provenance only.
+
+
+Interactive `assistant` responses stream incrementally in the terminal while the complete response remains buffered for history and proposal processing.

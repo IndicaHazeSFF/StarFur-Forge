@@ -100,3 +100,11 @@ Assistant proposal persistence receives the original user observation when avail
 - `FixtureChromaAdapter` owns a temporary PersistentClient and only ingests checked-in retrieval fixtures; it must never receive production paths or collections.
 
 - Conversational memory introspection exposes only active canonical memory plus approved evidence in a structured prompt payload; no rejected proposals, raw DB, or hidden reasoning. Session tracks only prior selected memory IDs for follow-up why/provenance questions.
+
+- Interactive assistant chat uses optional Ollama streaming; chunks are rendered immediately but accumulated before session history/proposal extraction. Stream failures do not commit partial assistant state.
+
+- Ollama typed streaming chunks must read only `chunk.message.content`; never stringify chunks or expose `message.thinking` in terminal output.
+
+- Hidden `factory-reset` is destructive and confirmation-gated; it backs up SQLite, requires an explicit scope, and never touches lore tables. Semantic reset requires an injected/configured Chroma client before any SQLite deletion.
+
+- Hidden `factory-restore` lists timestamped backup directories, requires exact `StarFur Factory Restore` confirmation, and creates a pre-restore safety backup before replacing SQLite.
