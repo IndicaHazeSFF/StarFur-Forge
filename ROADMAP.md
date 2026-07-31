@@ -381,3 +381,207 @@ A persistent, local-first furry AI companion that can:
 > visibly inhabit the desktop,
 
 > and retain a transparent, inspectable memory of what it knows, who knows it, and why.
+
+
+Future Research & Long-Term Ideas
+
+The following ideas are intentionally outside the current roadmap. They represent promising directions once the core assistant, memory architecture, and user experience have matured.
+
+Persona Layer
+
+Separate personality from assistant logic.
+
+Current persona instructions are embedded within the assistant prompt. Future versions should move persona into its own configurable layer so that personality can be changed independently of memory retrieval, safety behavior, and reasoning.
+
+Potential goals:
+
+Swappable personas
+Cleaner prompts
+Better consistency on smaller models
+Easier community-created personas
+Neutral default persona for non-furry users
+Persona Library
+
+Allow users to install or create multiple personas.
+
+Examples:
+
+Neutral Assistant
+StarFur (default)
+Fox Mom
+Technical Mentor
+Creative Writer
+Custom user personas
+
+Personas should influence tone, style, and mannerisms without changing factual behavior or memory handling.
+
+Adaptive Model Profiles
+
+(The section you already added.)
+
+Automatically tune retrieval budgets, summarization, and context allocation based on the currently selected model.
+
+Context Manager
+
+Introduce a dedicated context assembly system responsible for intelligently constructing prompts.
+
+Responsibilities may include:
+
+Context budgeting
+Memory ranking
+Memory compression
+Conversation summarization
+Persona injection
+Token reservation
+Context diagnostics
+
+The Context Manager should become responsible for deciding what enters the model's context window.
+
+Conversation Summarization
+
+Replace extremely long conversation histories with progressively generated summaries.
+
+Goals:
+
+Reduce context usage
+Preserve continuity
+Improve small-model performance
+Allow effectively unlimited conversation length
+Memory Compression
+
+Investigate methods for combining related memories into more compact representations.
+
+Examples:
+
+Merge duplicate preferences
+Combine evolving goals
+Summarize historical context
+Detect obsolete memories
+
+The objective is to maximize information density while minimizing context consumption.
+
+Operational Memory
+
+Investigate a fourth memory domain dedicated to assistant operation rather than user knowledge.
+
+Possible responsibilities:
+
+Active context budgeting
+Retrieval diagnostics
+Session state
+Context planning
+Prompt assembly metadata
+Recently injected memories
+Provider capabilities
+
+This memory would not appear as user-visible long-term memory.
+
+Multiple Provider Support
+
+Expand beyond Ollama.
+
+Potential providers:
+
+LM Studio
+OpenAI-compatible APIs
+OpenRouter
+Local custom providers
+Future inference engines
+
+Provider selection should be abstracted behind a common interface.
+
+Open WebUI Integration
+
+Provide an OpenAI-compatible API allowing StarFur Forge to operate as a backend for Open WebUI.
+
+Goals:
+
+Browser-based chat
+Streaming responses
+Multi-session support
+Memory introspection
+Proposal review
+Full StarFur functionality outside the terminal
+Desktop Launcher
+
+Develop a graphical launcher for StarFur Forge.
+
+Possible features:
+
+Model selection
+Persona selection
+Provider selection
+Memory statistics
+Context diagnostics
+Launch configuration
+Profile management
+
+The launcher should make StarFur accessible to non-technical users.
+
+Telemetry-Based Optimization
+
+Allow StarFur to anonymously (or locally) learn how different models perform.
+
+Potential metrics:
+
+Retrieval success
+Context utilization
+Average prompt size
+Response latency
+Memory usefulness
+Summarization frequency
+
+The goal is to improve default configuration automatically over time.
+
+Plugin Architecture
+
+Provide extension points without requiring modification of the core assistant.
+
+Potential plugin categories:
+
+Retrieval strategies
+Persona packs
+Memory processors
+Exporters
+External tools
+Custom commands
+Multi-Agent Research
+
+Investigate specialized internal agents.
+
+Possible examples:
+
+Memory reviewer
+Context planner
+Persona manager
+Retrieval optimizer
+Proposal reviewer
+
+These should remain deterministic components rather than autonomous independent assistants.
+
+Distributed Knowledge Sources
+
+Allow retrieval from multiple simultaneous knowledge domains.
+
+Examples:
+
+User memories
+Novel canon
+Project documentation
+Git repositories
+Local notes
+External databases
+
+All should participate in retrieval while preserving provenance.
+
+Packaging & Distribution
+
+Long-term release goals:
+
+One-click installer
+Automatic dependency setup
+Model detection
+Guided first launch
+Configuration wizard
+Portable mode
+Cross-platform support
