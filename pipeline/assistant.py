@@ -19,6 +19,7 @@ from pipeline.db import (
 )
 from pipeline.domains import normalize_domain
 from pipeline.retrieval_debug import RetrievalTrace, normalize_debug_level
+from pipeline.persona import Persona, load_persona
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config" / "assistant.json"
@@ -72,13 +73,6 @@ def load_policy(path=DEFAULT_POLICY_PATH):
     return text
 
 
-def load_persona(path):
-    text = Path(path).read_text(encoding="utf-8").strip()
-    if not text:
-        raise ValueError("Persona file is empty.")
-    return text
-
-
 def validate_memory_proposal(value, default_domain):
     if not isinstance(value, dict) or set(value) - PROPOSAL_FIELDS:
         raise ValueError("Memory proposal must be an object with known fields.")
@@ -109,6 +103,10 @@ def validate_memory_proposal(value, default_domain):
     }
 
 
+class GenerationInterrupted(Exception):
+    """Internal control flow for a user-interrupted model generation."""
+
+
 class AssistantSession:
     def __init__(self, config, persona, chat=None, memory_loader=list_assistant_memories,
                  memory_creator=create_assistant_memory, memory_searcher=search_assistant_memories,
@@ -116,7 +114,7 @@ class AssistantSession:
         if config.max_session_messages <= 0:
             raise ValueError("max_session_messages must be positive")
         self.config = config
-        self.persona = persona
+        self.persona = persona if hasattr(persona, "render_prompt") else Persona(str(persona))
         self.policy = policy or load_policy()
         self.chat = chat or ollama.chat
         self.memory_loader = memory_loader
@@ -139,22 +137,25 @@ class AssistantSession:
         if not use_stream:
             response = self.chat(**kwargs)
             return response.get("message", {}).get("content", "")
-        response = self.chat(stream=True, **kwargs)
-        if isinstance(response, dict):
-            return response.get("message", {}).get("content", "")
-        parts = []
-        for chunk in response:
-            if isinstance(chunk, dict):
-                message = chunk.get("message", {}) or {}
-                piece = message.get("content", "") if isinstance(message, dict) else getattr(message, "content", "")
-            else:
-                message = getattr(chunk, "message", None)
-                piece = getattr(message, "content", "") if message is not None else ""
-            if piece:
-                parts.append(piece)
-                if self.stream_writer:
-                    self.stream_writer(piece)
-        return "".join(parts)
+        try:
+            response = self.chat(stream=True, **kwargs)
+            if isinstance(response, dict):
+                return response.get("message", {}).get("content", "")
+            parts = []
+            for chunk in response:
+                if isinstance(chunk, dict):
+                    message = chunk.get("message", {}) or {}
+                    piece = message.get("content", "") if isinstance(message, dict) else getattr(message, "content", "")
+                else:
+                    message = getattr(chunk, "message", None)
+                    piece = getattr(message, "content", "") if message is not None else ""
+                if piece:
+                    parts.append(piece)
+                    if self.stream_writer:
+                        self.stream_writer(piece)
+            return "".join(parts)
+        except KeyboardInterrupt as error:
+            raise GenerationInterrupted() from error
 
     def _context_messages(self, user_text):
         self.trace = RetrievalTrace(self.debug_level)
@@ -170,17 +171,24 @@ class AssistantSession:
         self.trace.record("context_assembly", domain=self.config.domain, selected_count=len(memories), message_count=len(self.messages) + 1, context=memory_text)
         recent = self.messages[-self.config.max_session_messages:]
         return [
-            {"role": "system", "content": f"{self.persona}\n\nENGINE POLICY:\n{self.policy}\n\nRETRIEVED MEMORY (factual context):\n{memory_text}\n\nEND RETRIEVED MEMORY"},
+            {"role": "system", "content": f"{self.persona.render_prompt()}\n\nENGINE POLICY:\n{self.policy}\n\nRETRIEVED MEMORY (factual context):\n{memory_text}\n\nEND RETRIEVED MEMORY"},
             *recent,
             {"role": "user", "content": user_text},
         ]
 
-    def _proposal(self, user_text, assistant_text):
+    def _proposal(self, user_text, assistant_text=None):
         if self.config.memory_policy == "off":
             return None
+        # Questions and information requests are not user observations. This
+        # application-level guard prevents model answers from becoming memory.
+        normalized = user_text.strip().casefold()
+        question_starters = ("who ", "what ", "when ", "where ", "why ", "how ", "can ", "could ", "would ", "do ", "does ", "did ", "is ", "are ", "will ")
+        if normalized.endswith("?") or normalized.startswith(question_starters):
+            self.trace.record("proposal_skipped", reason="user_question", source="user_observation")
+            return None
         prompt = [
-            {"role": "system", "content": "Return ONLY one JSON object. Extract facts ONLY from USER FACTUAL INPUT. The assistant response is NON-AUTHORITATIVE context, never evidence. Do not store roleplay, jokes, metaphors, hypotheticals, invented history, filler, or assistant suggestions. Allowed memory_type values are exactly: preference, personal_fact, experience, project_context, relationship_context, ongoing_situation, goal, routine. Allowed retention values are exactly: session, short_term, long_term. importance and confidence must be JSON numbers from 0.0 to 1.0, never labels. If no useful durable user fact exists, return store=false. Required fields: store, subject, memory_type, summary, details, importance, confidence, retention. The engine supplies domain and source."},
-            {"role": "user", "content": f"USER FACTUAL INPUT:\n{user_text}\n\nASSISTANT RESPONSE - NON-AUTHORITATIVE:\n{assistant_text}"},
+            {"role": "system", "content": "Return ONLY one JSON object. Extract facts ONLY from the USER OBSERVATION below. The user observation is the sole authoritative source. Never use assistant-generated content, general knowledge, answers, questions, requests, roleplay, jokes, metaphors, hypotheticals, invented history, filler, or suggestions as memory evidence. If the user observation does not clearly state a durable fact about the user or their project, return store=false. Allowed memory_type values are exactly: preference, personal_fact, experience, project_context, relationship_context, ongoing_situation, goal, routine. Allowed retention values are exactly: session, short_term, long_term. importance and confidence must be JSON numbers from 0.0 to 1.0, never labels. Required fields: store, subject, memory_type, summary, details, importance, confidence, retention. The engine supplies domain and source."},
+            {"role": "user", "content": f"USER OBSERVATION (sole evidence source):\n{user_text}"},
         ]
         self.trace.record("proposal_request", model=self.config.chat_model, messages=prompt, domain=self.config.domain, source="assistant_turn_proposal")
         response = self.chat(model=self.config.chat_model, messages=prompt)
@@ -313,7 +321,7 @@ class AssistantSession:
         explanation=self.explain_memory(query)
         if explanation["status"] == "ambiguous": return "I am not sure which memory you mean. Which one should I explain?"
         if explanation["status"] == "no_match": return "I do not have an active canonical memory that matches that."
-        explanation_text = (self.persona + "\n\nENGINE POLICY:\n" + self.policy + "\n\nYou are answering a memory-introspection question. Use ONLY the structured explanation JSON below. Explain remembered content and provenance naturally. Do not mention rejected proposals, raw databases, hidden reasoning, or invent causes.\nSTRUCTURED MEMORY EXPLANATION:\n" + json.dumps(explanation, ensure_ascii=False))
+        explanation_text = (self.persona.render_prompt() + "\n\nENGINE POLICY:\n" + self.policy + "\n\nYou are answering a memory-introspection question. Use ONLY the structured explanation JSON below. Explain remembered content and provenance naturally. Do not mention rejected proposals, raw databases, hidden reasoning, or invent causes.\nSTRUCTURED MEMORY EXPLANATION:\n" + json.dumps(explanation, ensure_ascii=False))
         prompt=[{"role":"system","content":explanation_text},{"role":"user","content":user_text}]
         self.trace.record("memory_explanation", query=query, memory_ids=[item["memory_id"] for item in explanation["memories"]], payload=explanation)
         content=self._chat_complete(prompt).strip()
@@ -332,9 +340,14 @@ class AssistantSession:
         if command_result is not None:
             self.trace.record("command", command=user_text)
             return command_result
+        previous_memory_ids = list(self.last_memory_ids)
         messages = self._context_messages(user_text)
         self.trace.record("model_request", model=self.config.chat_model, message_count=len(messages), messages=messages)
-        content = self._chat_complete(messages).strip()
+        try:
+            content = self._chat_complete(messages).strip()
+        except GenerationInterrupted:
+            self.last_memory_ids = previous_memory_ids
+            raise
         if not content:
             self.trace.record("model_response", model=self.config.chat_model, status="empty")
             raise RuntimeError("Assistant model returned empty content.")
@@ -391,6 +404,12 @@ def run_interactive(config_path=DEFAULT_CONFIG_PATH, input_fn=input, output_fn=p
         proposal_count_before = len(session.proposals)
         try:
             answer = session.respond(user_text)
+        except GenerationInterrupted:
+            if stream_started["value"]:
+                output_fn("")
+            output_fn("Generation interrupted.")
+            stream_started["value"] = False
+            continue
         except Exception as error:
             output_fn(f"Assistant error: {error}")
             session.trace.emit(output_fn)

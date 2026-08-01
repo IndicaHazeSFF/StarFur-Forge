@@ -109,10 +109,22 @@ class AssistantTests(unittest.TestCase):
         events = [event["event"] for event in session.trace.events]
         self.assertIn("proposal_request", events)
         request = next(event for event in session.trace.events if event["event"] == "proposal_request")
-        self.assertIn("USER FACTUAL INPUT", request["messages"][1]["content"])
+        self.assertIn("USER OBSERVATION (sole evidence source)", request["messages"][1]["content"])
         self.assertIn("project_context", request["messages"][0]["content"])
         self.assertIn("proposal_response", events)
         self.assertIn("proposal_validation", events)
+
+    def test_questions_and_assistant_answers_never_create_proposals(self):
+        calls = []
+        config = type("Config", (), {"chat_model": "test", "domain": "personal", "max_session_messages": 4, "max_memories": 0, "memory_policy": "conservative", "debug_level": "verbose"})()
+        def fake_chat(**kwargs):
+            calls.append(kwargs)
+            return {"message": {"content": "The answer is 1944."}}
+        session = AssistantSession(config, "Persona", chat=fake_chat, memory_loader=lambda **kwargs: [])
+        self.assertEqual(session.respond("Origin of gaslighting term?"), "The answer is 1944.")
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(session.proposals, [])
+        self.assertIn("proposal_skipped", [event["event"] for event in session.trace.events])
 
     def test_invalid_proposal_does_not_break_turn(self):
         config = type("Config", (), {"chat_model": "test", "domain": "personal", "max_session_messages": 4, "max_memories": 0, "memory_policy": "conservative", "debug_level": "verbose"})()

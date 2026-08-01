@@ -116,3 +116,11 @@ Assistant proposal persistence receives the original user observation when avail
 Factory reset treats a missing Chroma collection as an already-empty semantic store and records an empty snapshot when backups are requested.
 
 Assistant chat uses compact public record references (`M-###` and `P-###`) while SQLite numeric IDs remain internal provenance identifiers. Numeric references remain accepted for backward compatibility.
+
+### Persona layer
+
+Assistant persona presentation is loaded through `pipeline.persona.Persona` and `render_prompt()`. Persona configuration controls style only; retrieval, provenance, policy, safety, commands, and proposals remain in assistant/engine code. Missing or invalid persona files use the neutral fallback.
+
+Assistant automatic proposal extraction is user-observation-only by default. Assistant responses, general knowledge answers, questions, and requests are not canonical evidence. Any future assistant-self memory must use a separate explicit provenance type and opt-in path.
+
+Interactive assistant Ctrl+C during generation raises internal `GenerationInterrupted` control flow; the turn is rolled back, partial output is not saved, and no proposal is generated. Ctrl+C at input exits cleanly.

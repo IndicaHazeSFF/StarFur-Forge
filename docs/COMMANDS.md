@@ -60,6 +60,33 @@ Aliases also work:
 
 ---
 
+## Assistant Persona Configuration
+
+The assistant persona is loaded from the path configured in `config/assistant.json`:
+
+    {
+      "persona_path": "persona/default.md"
+    }
+
+Persona files control presentation and style only. Memory retrieval, policy, safety,
+commands, proposals, and provenance remain engine responsibilities. If the file is
+missing, unreadable, empty, or invalid, StarFur uses a neutral built-in persona.
+
+## Assistant Proposal Provenance
+
+Automatic assistant-memory proposals are derived from user observations only.
+Questions, information requests, and assistant-generated answers are not canonical
+memory evidence. Explicit `remember this:` commands and user corrections remain
+valid memory sources. Future assistant-self memory, if added, must use a separate
+explicit provenance type and opt-in behavior.
+
+## Interrupting Generation
+
+Press Ctrl+C during a streamed response to stop that generation and return to the
+assistant prompt. The partial response is not saved to conversation history and does
+not produce a memory proposal. Press Ctrl+C while waiting at the input prompt to exit
+cleanly.
+
 ## Assistant Memory Review
 
 Start interactive Assistant Mode:

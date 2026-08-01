@@ -455,11 +455,11 @@ def database_stats():
 
         for table in tables:
 
-            count = connection.execute(
-                f"SELECT COUNT(*) FROM {table}"
-            ).fetchone()[0]
-
-            stats[table] = count
+            exists = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+                (table,),
+            ).fetchone()
+            stats[table] = connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] if exists else 0
 
         # Keep assistant-memory counts separate from lore-memory counts.
         stats["assistant_memories"] = connection.execute("SELECT COUNT(*) FROM assistant_memories").fetchone()[0]

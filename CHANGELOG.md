@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-08-01 - Clean assistant generation interrupts
+
+- Ctrl+C during streaming now stops the current turn without a traceback, history entry, memory proposal, or partial retrieval-ID update.
+- Ctrl+C at the input prompt continues to exit cleanly.
+- Added interruption regression tests.
+
+
+## 2026-08-01 - User-observation-only assistant proposals
+
+- Prevented assistant answers and information-request turns from generating canonical assistant-memory proposals.
+- Preserved user observations, explicit remember commands, corrections, and existing proposal workflows.
+- Added regression coverage and documented provenance boundaries.
+
+
+## 2026-07-31 - Dedicated persona layer
+
+- Added `pipeline/persona.py` with a string-compatible `Persona` interface and neutral fallback.
+- Assistant prompt assembly now consumes `Persona.render_prompt()` while preserving existing wording and behavior.
+- Added persona loading/fallback tests and configuration documentation.
+
+
 ## 2026-07-30 - Compact assistant record references
 
 - Added stable, domain-scoped `M-###` memory and `P-###` proposal references for chat output and commands.
