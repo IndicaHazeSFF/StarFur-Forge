@@ -80,6 +80,21 @@ memory evidence. Explicit `remember this:` commands and user corrections remain
 valid memory sources. Future assistant-self memory, if added, must use a separate
 explicit provenance type and opt-in behavior.
 
+## Assistant Memory Classification
+
+Assistant proposals use the existing stored types; no schema migration is required:
+
+- `preference` ? enduring likes, dislikes, choices, or settings.
+- `personal_fact` ? stable personal facts, including owned hardware/setup or cautiously stated health facts; never diagnoses.
+- `experience` ? completed or bounded personal events.
+- `project_context` ? facts about projects, systems, workstreams, or technical setup.
+- `relationship_context` ? relationships with people, pets, teams, or other social connections.
+- `ongoing_situation` ? current unresolved or time-sensitive circumstances.
+- `goal` ? intended outcomes or plans.
+- `routine` ? repeated habits, schedules, or usual practices.
+
+An explicit correction is classified as the corrected fact's underlying type and should identify the correction in its details. Ambiguous observations should produce no proposal.
+
 ## Interrupting Generation
 
 Press Ctrl+C during a streamed response to stop that generation and return to the
@@ -99,6 +114,9 @@ When a factual turn produces a proposal, review it in chat:
     proposal inspect <id>
     proposal approve <id>
     proposal reject <id>
+    proposal approve all
+
+`proposal approve all` previews all pending proposals in the active domain and shows low-confidence warnings. It only proceeds when the next input is exactly `approve all`; any other input cancels the batch. Approval preserves normal provenance and reports individual results.
 
 Inspect approved memories:
 
@@ -366,6 +384,11 @@ Conversational introspection recognizes questions such as ?what do you remember 
 
 
 Interactive `assistant` responses stream incrementally in the terminal while the complete response remains buffered for history and proposal processing.
+
+
+    context stats
+
+Interactive assistant command that displays the bounded diagnostics snapshot for the latest completed or interrupted conversational turn: model/provider, prompt and response character counts, estimated token counts, recent-context size, selected memory IDs with deterministic scores/reasons, latency, stream first-token timing, and proposal outcome. It is read-only: it does not invoke a model, query/write memory stores, or retain raw prompts/conversation text.
 
 
 Hidden development reset (not shown in normal help):

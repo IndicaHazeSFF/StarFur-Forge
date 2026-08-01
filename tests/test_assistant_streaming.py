@@ -1,5 +1,7 @@
 import unittest
 from pathlib import Path
+from unittest.mock import patch
+from pipeline import assistant as assistant_module
 from pipeline.assistant import AssistantConfig, AssistantSession, GenerationInterrupted, run_interactive
 class Message:
  def __init__(self, content, thinking=""): self.content=content; self.thinking=thinking
@@ -49,7 +51,8 @@ class StreamingTests(unittest.TestCase):
  def test_ctrl_c_at_input_prompt_exits_cleanly(self):
   output=[]
   def interrupted(_): raise KeyboardInterrupt()
-  run_interactive(input_fn=interrupted, output_fn=output.append)
+  with patch.object(assistant_module.ollama, "chat", lambda **kwargs: {"message": {"content": "unused"}}, create=True):
+   run_interactive(input_fn=interrupted, output_fn=output.append)
   self.assertTrue(any("Goodbye." in line for line in output))
 
 if __name__ == "__main__": unittest.main()

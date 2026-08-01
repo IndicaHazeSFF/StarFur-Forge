@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-08-01 - Confirmation-gated batch proposal approval
+
+- Added `proposal approve all` to Assistant Mode with active-domain preview, low-confidence warnings, and exact `approve all` confirmation.
+- Batch approval uses the existing per-proposal approval/provenance path, reports individual results, and cancels safely on any other follow-up input.
+- Added temporary-SQLite regression coverage for confirmation, cancellation, pending-only approval, and domain isolation.
+
+## 2026-08-01 - Read-only assistant context diagnostics
+
+- Added the interactive `context stats` command and bounded per-turn diagnostics in `pipeline/assistant.py`.
+- Reports model/provider, persona/policy/recent-context sizes, estimated tokens, selected deterministic memory IDs with scores/reasons, response/first-token timing, and proposal outcome without retaining raw prompts.
+- Preserves streaming, retrieval, proposal, persona, and interruption behavior; diagnostics perform no model, SQLite, or Chroma action when rendered.
+- Added deterministic fake-client regression coverage in `tests/test_assistant_context_stats.py` (8 focused tests) and made the existing interactive Ctrl+C test inject its own Ollama fake.
+
+
 ## 2026-08-01 - Assistant proposal classification guidance
 
 - Centralized the existing eight assistant memory types with explicit extraction guidance; no schema migration or stored-type change was required.

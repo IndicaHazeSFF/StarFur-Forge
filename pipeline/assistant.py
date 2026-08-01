@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 import json
 import re
+import time
 from pathlib import Path
 
 import ollama
@@ -108,6 +109,11 @@ class GenerationInterrupted(Exception):
     """Internal control flow for a user-interrupted model generation."""
 
 
+def estimate_tokens(text):
+    """Return a deliberately rough, provider-independent token estimate."""
+    return (len(text or "") + 3) // 4
+
+
 class AssistantSession:
     def __init__(self, config, persona, chat=None, memory_loader=list_assistant_memories,
                  memory_creator=create_assistant_memory, memory_searcher=search_assistant_memories,
@@ -118,6 +124,7 @@ class AssistantSession:
         self.persona = persona if hasattr(persona, "render_prompt") else Persona(str(persona))
         self.policy = policy or load_policy()
         self.chat = chat or ollama.chat
+        self._provider_name = "Ollama" if chat is None else "custom chat client"
         self.memory_loader = memory_loader
         self.memory_creator = memory_creator
         self.memory_searcher = memory_searcher
@@ -128,8 +135,101 @@ class AssistantSession:
         self.messages = []
         self.proposals = []
         self.last_memory_ids = []
+        self._pending_bulk_proposal_ids = None
+        self.last_turn_diagnostics = None
+        self._current_context_diagnostics = None
+        self._current_proposal_diagnostics = {"ran": False, "outcome": "skipped"}
+        self._generation_started_at = None
+        self._first_token_seconds = None
         self.debug_level = normalize_debug_level(debug_level or getattr(config, "debug_level", "off"))
         self.trace = RetrievalTrace(self.debug_level)
+
+    def _display_memory_id(self, memory):
+        memory_id = memory.get("id")
+        if memory_id is None:
+            return "unknown"
+        if self.memory_loader is list_assistant_memories:
+            return assistant_public_id("memory", memory_id, self.config.domain)
+        return f"M-{int(memory_id):03d}"
+
+    def _begin_turn_diagnostics(self, messages, retrieved, recent):
+        selected = []
+        for item in retrieved:
+            memory = item.get("memory", {})
+            selected.append({
+                "public_id": self._display_memory_id(memory),
+                "score": item.get("score"),
+                "reasons": list(item.get("reasons") or []),
+            })
+        prompt_text = "".join(str(message.get("content") or "") for message in messages)
+        recent_text = "".join(str(message.get("content") or "") for message in recent)
+        self._current_context_diagnostics = {
+            "model": self.config.chat_model,
+            "provider": self._provider_name,
+            "persona_characters": len(self.persona.render_prompt()),
+            "policy_characters": len(self.policy),
+            "recent_message_count": len(recent),
+            "recent_characters": len(recent_text),
+            "recent_estimated_tokens": estimate_tokens(recent_text),
+            "retrieved": selected,
+            "prompt_characters": len(prompt_text),
+            "prompt_estimated_tokens": estimate_tokens(prompt_text),
+        }
+
+    def _finish_turn_diagnostics(self, *, completed, response, latency_seconds, proposal=None, status=None):
+        context = self._current_context_diagnostics or {}
+        self.last_turn_diagnostics = {
+            **context,
+            "completed": completed,
+            "turn_status": status or ("completed" if completed else "interrupted"),
+            "response_characters": len(response or ""),
+            "response_latency_ms": round(latency_seconds * 1000, 2),
+            "time_to_first_token_ms": (
+                round(self._first_token_seconds * 1000, 2)
+                if self._first_token_seconds is not None else None
+            ),
+            "proposal_ran": bool((proposal or {}).get("ran")),
+            "proposal_outcome": (proposal or {}).get("outcome", "skipped"),
+        }
+        self._current_context_diagnostics = None
+        self._generation_started_at = None
+        self._first_token_seconds = None
+
+    def context_stats(self):
+        """Render the bounded diagnostics snapshot without touching any service."""
+        snapshot = self.last_turn_diagnostics
+        if snapshot is None:
+            return "No turn diagnostics are available yet."
+        persona_chars = snapshot.get("persona_characters", 0)
+        policy_chars = snapshot.get("policy_characters", 0)
+        lines = [
+            "=== CONTEXT STATS ===",
+            f"Turn: {snapshot.get('turn_status', 'completed' if snapshot.get('completed') else 'interrupted')}",
+            f"Provider: {snapshot.get('provider', 'unknown')}",
+            f"Model: {snapshot.get('model', 'unknown')}",
+            f"Persona: {persona_chars} characters (estimated {(persona_chars + 3) // 4} tokens)",
+            f"Policy: {policy_chars} characters (estimated {(policy_chars + 3) // 4} tokens)",
+            f"Recent conversation: {snapshot.get('recent_message_count', 0)} messages, {snapshot.get('recent_characters', 0)} characters (estimated {snapshot.get('recent_estimated_tokens', 0)} tokens)",
+            f"Retrieved memories: {len(snapshot.get('retrieved', []))}",
+        ]
+        selected = snapshot.get("retrieved", [])
+        lines.append("Selected memory IDs: " + (", ".join(item["public_id"] for item in selected) if selected else "(none)"))
+        if selected:
+            lines.append("Retrieval details:")
+            for item in selected:
+                score = "unscored" if item["score"] is None else f"{item['score']:.6g}"
+                lines.append(f"  {item['public_id']} score={score}")
+                lines.append("    reasons: " + ("; ".join(item["reasons"]) if item["reasons"] else "(none)"))
+        lines.extend([
+            f"Prompt: {snapshot.get('prompt_characters', 0)} characters (estimated {snapshot.get('prompt_estimated_tokens', 0)} tokens)",
+            f"Response: {snapshot.get('response_characters', 0)} characters",
+            f"Response latency: {snapshot.get('response_latency_ms', 0):.2f} ms",
+            "Time to first streamed token: " + (f"{snapshot['time_to_first_token_ms']:.2f} ms" if snapshot.get("time_to_first_token_ms") is not None else "unavailable"),
+            f"Proposal extraction ran: {'yes' if snapshot.get('proposal_ran') else 'no'}",
+            f"Proposal outcome: {snapshot.get('proposal_outcome', 'skipped')}",
+            "=== END CONTEXT STATS ===",
+        ])
+        return "\n".join(lines)
 
     def _chat_complete(self, messages, *, model=None, stream=None):
         """Return complete content while optionally rendering streamed chunks."""
@@ -151,6 +251,8 @@ class AssistantSession:
                     message = getattr(chunk, "message", None)
                     piece = getattr(message, "content", "") if message is not None else ""
                 if piece:
+                    if self._generation_started_at is not None and self._first_token_seconds is None:
+                        self._first_token_seconds = time.perf_counter() - self._generation_started_at
                     parts.append(piece)
                     if self.stream_writer:
                         self.stream_writer(piece)
@@ -171,13 +273,16 @@ class AssistantSession:
         memory_text = "\n".join(f"- {memory['summary']}" for memory in memories) or "(none)"
         self.trace.record("context_assembly", domain=self.config.domain, selected_count=len(memories), message_count=len(self.messages) + 1, context=memory_text)
         recent = self.messages[-self.config.max_session_messages:]
-        return [
+        messages = [
             {"role": "system", "content": f"{self.persona.render_prompt()}\n\nENGINE POLICY:\n{self.policy}\n\nRETRIEVED MEMORY (factual context):\n{memory_text}\n\nEND RETRIEVED MEMORY"},
             *recent,
             {"role": "user", "content": user_text},
         ]
+        self._begin_turn_diagnostics(messages, retrieved, recent)
+        return messages
 
     def _proposal(self, user_text, assistant_text=None):
+        self._current_proposal_diagnostics = {"ran": False, "outcome": "skipped"}
         if self.config.memory_policy == "off":
             return None
         # Questions and information requests are not user observations. This
@@ -187,6 +292,7 @@ class AssistantSession:
         if normalized.endswith("?") or normalized.startswith(question_starters):
             self.trace.record("proposal_skipped", reason="user_question", source="user_observation")
             return None
+        self._current_proposal_diagnostics["ran"] = True
         taxonomy = assistant_memory_type_prompt()
         system_prompt = (
             "Return ONLY one JSON object. Extract facts ONLY from the USER OBSERVATION below. "
@@ -237,7 +343,13 @@ class AssistantSession:
         if proposal["store"] and self.proposal_creator:
             result = self.proposal_creator(proposal, domain=self.config.domain, observation_text=user_text)
             proposal["id"] = result.get("proposal_id", result) if isinstance(result, dict) else result
-            self.trace.record("proposal_persisted", proposal_id=proposal["id"], status=result.get("action", "pending") if isinstance(result, dict) else "pending")
+            action = result.get("action", "created") if isinstance(result, dict) else "created"
+            self._current_proposal_diagnostics["outcome"] = action
+            self.trace.record("proposal_persisted", proposal_id=proposal["id"], status=action)
+        elif proposal["store"]:
+            self._current_proposal_diagnostics["outcome"] = "created"
+        else:
+            self._current_proposal_diagnostics["outcome"] = "store_false"
         self.proposals.append(proposal)
         return proposal
 
@@ -260,8 +372,49 @@ class AssistantSession:
         self.memory_updater(memory["id"], domain=self.config.domain, status="forgotten")
         return f"Forgotten memory {assistant_public_id('memory', memory['id'], self.config.domain)}."
 
+    def _approve_all_pending(self):
+        proposal_ids = self._pending_bulk_proposal_ids or []
+        self._pending_bulk_proposal_ids = None
+        approved = []
+        failed = []
+        for proposal_id in proposal_ids:
+            try:
+                memory = approve_assistant_memory_proposal(proposal_id, domain=self.config.domain)
+                approved.append((proposal_id, memory["id"] if memory else None))
+            except ValueError as error:
+                failed.append((proposal_id, str(error)))
+        lines = [f"Approved {len(approved)} proposal(s)."]
+        for proposal_id, memory_id in approved:
+            memory_ref = assistant_public_id("memory", memory_id, self.config.domain) if memory_id is not None else "(memory unavailable)"
+            lines.append(f"  {assistant_public_id('proposal', proposal_id, self.config.domain)} -> {memory_ref}")
+        if failed:
+            lines.append(f"Skipped {len(failed)} proposal(s) that were no longer pending.")
+            for proposal_id, error in failed:
+                lines.append(f"  {assistant_public_id('proposal', proposal_id, self.config.domain)}: {error}")
+        return "\n".join(lines)
+
+    def _review_bulk_approval(self):
+        rows = list_assistant_memory_proposals(domain=self.config.domain, status="pending")
+        if not rows:
+            self._pending_bulk_proposal_ids = None
+            return "No pending assistant proposals."
+        self._pending_bulk_proposal_ids = [row["id"] for row in rows]
+        lines = [f"Pending proposals in domain {self.config.domain}:"]
+        warnings = []
+        for row in rows:
+            lines.append(f"  {assistant_public_id('proposal', row['id'], self.config.domain)} [{row['memory_type']}] {row['summary']} (confidence {row.get('confidence', 'unknown')}, importance {row.get('importance', 'unknown')})")
+            if isinstance(row.get("confidence"), (int, float)) and row["confidence"] < 0.7:
+                warnings.append(f"{assistant_public_id('proposal', row['id'], self.config.domain)} has low confidence")
+        if warnings:
+            lines.append("Warnings:")
+            lines.extend(f"  - {warning}" for warning in warnings)
+        lines.append('Type "approve all" to continue, or anything else to cancel.')
+        return "\n".join(lines)
+
     def command(self, text):
         lowered = text.strip().casefold()
+        if lowered == "context stats":
+            return self.context_stats()
         if lowered.startswith("remember this:") or lowered.startswith("remember:"):
             return self.explicit_remember(text.split(":", 1)[1])
         if lowered.startswith("forget this:") or lowered.startswith("forget:"):
@@ -275,6 +428,8 @@ class AssistantSession:
         if lowered == "proposal list":
             rows = list_assistant_memory_proposals(domain=self.config.domain)
             return "\n".join(f"{assistant_public_id('proposal', row['id'], self.config.domain)} [{row['memory_type']}] {row['summary']}" for row in rows) or "No pending assistant proposals."
+        if lowered == "proposal approve all":
+            return self._review_bulk_approval()
         if lowered.startswith("memory inspect"):
             parts = text.strip().split()
             if len(parts) != 3:
@@ -342,15 +497,41 @@ class AssistantSession:
         if explanation["status"] == "no_match": return "I do not have an active canonical memory that matches that."
         explanation_text = (self.persona.render_prompt() + "\n\nENGINE POLICY:\n" + self.policy + "\n\nYou are answering a memory-introspection question. Use ONLY the structured explanation JSON below. Explain remembered content and provenance naturally. Do not mention rejected proposals, raw databases, hidden reasoning, or invent causes.\nSTRUCTURED MEMORY EXPLANATION:\n" + json.dumps(explanation, ensure_ascii=False))
         prompt=[{"role":"system","content":explanation_text},{"role":"user","content":user_text}]
+        retrieved = [
+            {
+                "memory": {"id": item["memory_id"]},
+                "score": None,
+                "reasons": item.get("retrieval_reasons", []),
+            }
+            for item in explanation["memories"]
+        ]
+        self._begin_turn_diagnostics(prompt, retrieved, [])
         self.trace.record("memory_explanation", query=query, memory_ids=[item["memory_id"] for item in explanation["memories"]], payload=explanation)
-        content=self._chat_complete(prompt).strip()
-        if not content: raise RuntimeError("Assistant model returned empty content.")
+        self._generation_started_at = time.perf_counter()
+        self._first_token_seconds = None
+        try:
+            content=self._chat_complete(prompt).strip()
+        except GenerationInterrupted:
+            self._finish_turn_diagnostics(completed=False, response="", latency_seconds=time.perf_counter() - self._generation_started_at, proposal={"ran": False, "outcome": "interrupted"})
+            raise
+        latency_seconds = time.perf_counter() - self._generation_started_at
+        if not content:
+            self._finish_turn_diagnostics(completed=False, response="", latency_seconds=latency_seconds, proposal={"ran": False, "outcome": "skipped"}, status="failed")
+            raise RuntimeError("Assistant model returned empty content.")
+        self._finish_turn_diagnostics(completed=True, response=content, latency_seconds=latency_seconds, proposal={"ran": False, "outcome": "skipped"})
         return content
 
     def respond(self, user_text):
         user_text = user_text.strip()
         if not user_text:
             return ""
+        if self._pending_bulk_proposal_ids is not None:
+            if user_text == "approve all":
+                return self._approve_all_pending()
+            self._pending_bulk_proposal_ids = None
+            return "Bulk approval cancelled."
+        if user_text.casefold() == "context stats":
+            return self.context_stats()
         command_result = self.command(user_text)
         if command_result is None:
             introspection = self._memory_introspection(user_text)
@@ -362,12 +543,28 @@ class AssistantSession:
         previous_memory_ids = list(self.last_memory_ids)
         messages = self._context_messages(user_text)
         self.trace.record("model_request", model=self.config.chat_model, message_count=len(messages), messages=messages)
+        self._generation_started_at = time.perf_counter()
+        self._first_token_seconds = None
         try:
             content = self._chat_complete(messages).strip()
         except GenerationInterrupted:
             self.last_memory_ids = previous_memory_ids
+            self._finish_turn_diagnostics(
+                completed=False,
+                response="",
+                latency_seconds=time.perf_counter() - self._generation_started_at,
+                proposal={"ran": False, "outcome": "interrupted"},
+            )
             raise
+        latency_seconds = time.perf_counter() - self._generation_started_at
         if not content:
+            self._finish_turn_diagnostics(
+                completed=False,
+                response="",
+                latency_seconds=latency_seconds,
+                proposal={"ran": False, "outcome": "skipped"},
+                status="failed",
+            )
             self.trace.record("model_response", model=self.config.chat_model, status="empty")
             raise RuntimeError("Assistant model returned empty content.")
         self.trace.record("model_response", model=self.config.chat_model, status="ok", response=content)
@@ -376,7 +573,14 @@ class AssistantSession:
         try:
             self._proposal(user_text, content)
         except Exception as error:
+            self._current_proposal_diagnostics = {"ran": True, "outcome": "skipped"}
             self.trace.record("proposal_error", status="rejected", error=str(error))
+        self._finish_turn_diagnostics(
+            completed=True,
+            response=content,
+            latency_seconds=latency_seconds,
+            proposal=self._current_proposal_diagnostics,
+        )
         return content
 
 def format_assistant_memory(inspected):
@@ -410,7 +614,7 @@ def run_interactive(config_path=DEFAULT_CONFIG_PATH, input_fn=input, output_fn=p
             print("StarFur: ", end="", flush=True); stream_started["value"] = True
         print(text, end="", flush=True)
     session = AssistantSession(config, load_persona(config.persona_path), policy=load_policy(config.policy_path), debug_level=debug_level, proposal_creator=upsert_assistant_memory_proposal, stream=True, stream_writer=stream_writer)
-    output_fn("StarFur Assistant (remember/forget, memory list/search/inspect, proposal list/inspect/approve/reject; quit to exit)")
+    output_fn("StarFur Assistant (remember/forget, memory list/search/inspect, proposal list/inspect/approve/reject/approve all, context stats; quit to exit)")
     while True:
         try:
             user_text = input_fn("You: ")

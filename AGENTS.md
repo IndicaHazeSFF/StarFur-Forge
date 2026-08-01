@@ -19,6 +19,8 @@
 - Assistant pending proposals use deterministic normalized proposal keys and atomic reinforcement. Equivalent pending evidence increments evidence_count, records unique provenance in assistant_memory_proposal_evidence, and raises confidence by a bounded 0.05 increment without approval.
 - Proposal review notifications are emitted only when the current turn creates a new proposal; stale session proposals must not be announced after list/approve/reject or unrelated turns.
 
+- `proposal approve all` is a confirmation-gated, active-domain-only batch operation. It previews pending proposals and warnings, then requires the exact follow-up `approve all`; any other input cancels without model or cross-domain access. Each proposal retains the normal approval/provenance path and failures are reported individually.
+
 
 - pipeline/prechunker.py converts canon/manuscript/manuscript.txt into chapter Markdown under canon/chapters/.
 - pipeline/chunker.py extracts frontmatter, splits scenes, accumulates paragraph/sentence units, preserves the nearest heading, and emits chunk dictionaries. It is shared by structured analysis and semantic ingestion.
@@ -126,3 +128,5 @@ Assistant automatic proposal extraction is user-observation-only by default. Ass
 Interactive assistant Ctrl+C during generation raises internal `GenerationInterrupted` control flow; the turn is rolled back, partial output is not saved, and no proposal is generated. Ctrl+C at input exits cleanly.
 
 Assistant proposal classification uses the existing eight stored memory types only (`preference`, `personal_fact`, `experience`, `project_context`, `relationship_context`, `ongoing_situation`, `goal`, `routine`). Corrections use the corrected fact's underlying type; ambiguous observations must return `store=false`. No migration is required and legacy rows remain valid.
+
+Interactive `context stats` renders only the latest bounded `AssistantSession` turn snapshot. It must remain read-only: never call a model, rerun retrieval, access SQLite/Chroma, generate proposals, or retain raw prompt/conversation content. Token figures are provider-independent estimates; selected memory IDs, existing retrieval scores/reasons, response latency, first streamed-token timing, and proposal outcomes are captured during the original turn.
