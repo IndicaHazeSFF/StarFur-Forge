@@ -72,6 +72,15 @@ Persona files control presentation and style only. Memory retrieval, policy, saf
 commands, proposals, and provenance remain engine responsibilities. If the file is
 missing, unreadable, empty, or invalid, StarFur uses a neutral built-in persona.
 
+## Runtime Ollama Model Selection
+
+`config/assistant.json` `chat_model` is the startup default. Inside Assistant Mode, select from models installed locally in Ollama without restarting:
+
+    model list
+    model current
+    model use <model-name>
+
+`model list` calls Ollama's Python client API and marks the active model. `model use` verifies the exact installed model (tags such as `qwen3:8b` are supported) and changes only the current assistant session; it does not rewrite configuration, conversation history, proposals, SQLite, or Chroma. The selected model is used for subsequent chat and proposal-extraction calls. `context stats` continues to show the model used for its recorded turn.
 ## Assistant Proposal Provenance
 
 Automatic assistant-memory proposals are derived from user observations only.
@@ -268,9 +277,11 @@ Local inference:
 
     Ollama
 
-Primary model:
+Startup model default:
 
-    qwen3:8b
+    config/assistant.json -> chat_model (currently qwen3:8b)
+
+The interactive `model use` command can override this for the current session only.
 
 Main CLI:
 
@@ -384,6 +395,11 @@ Conversational introspection recognizes questions such as ?what do you remember 
 
 
 Interactive `assistant` responses stream incrementally in the terminal while the complete response remains buffered for history and proposal processing.
+
+
+### Assistant Context Assembly
+
+Assistant prompt construction is deterministic and read-only. The context layer combines the configured persona and engine policy with already-retrieved active memories (including each selected memory's non-empty details), the bounded recent conversation window, and the current user message. It does not retrieve memories, write data, call a model, summarize history, or apply token budgeting. When a selected memory directly answers a question, engine policy requires the factual answer first; persona warmth may follow. `context stats` reports the same plan's bounded size/accounting metadata.
 
 
     context stats

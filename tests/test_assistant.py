@@ -179,6 +179,9 @@ class AssistantTests(unittest.TestCase):
     def test_policy_allows_persona_after_grounded_answer(self):
         policy = load_policy()
         self.assertIn("Answer the user's actual question accurately and directly.", policy)
+        self.assertIn("state that answer first", policy)
+        self.assertIn("summary and details faithfully", policy)
+        self.assertIn("Do not reinterpret a directly relevant memory", policy)
         self.assertIn("preserve the persona's natural warmth", policy)
         self.assertIn("must not replace, contradict, bury, or overwhelm", policy)
 

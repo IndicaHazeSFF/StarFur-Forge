@@ -1,4 +1,31 @@
+## 2026-08-01 - Direct-memory grounding reliability
+
+- Fixed selected assistant-memory prompt context in `pipeline/context.py` to include non-empty `details` as well as summaries; retrieval already ranked details but chat had not received them.
+- Strengthened `config/assistant_policy.md`: directly answering retrieved facts must be stated first, with persona style allowed afterward but not as a substitute.
+- Added regression coverage for detail injection and grounding-policy wording.
+- No retrieval-ranking, schema, SQLite, Chroma, or production-data changes.
+## 2026-08-01 - Runtime Ollama model selection
+
+- Added interactive `model list`, `model current`, and `model use <model-name>` commands in `pipeline/assistant.py`.
+- The configured `chat_model` remains the startup default; a selected installed Ollama model is session-only and is used by subsequent chat, proposal, and repair calls.
+- Preserved memory, Chroma, conversation, persona, policy, streaming, and ContextManager behavior; recorded context diagnostics retain the model actually used for each completed turn.
+- Added deterministic fake-client tests in `tests/test_assistant_model_selection.py` for stable listing, tags, switching, command isolation, unavailable/unknown models, proposal routing, and diagnostic accuracy.
+- No schema, migration, SQLite, Chroma, or production-data changes.
+
+## 2026-08-01 - Roadmap v2
+
+- Reorganized ROADMAP.md around the implemented StarFur Forge foundation, current stabilization priorities, assistant/lore/platform phases, and future capability routing.
+- Preserved the prior roadmap text as ROADMAP.original.md.
+- Documentation-only change; no runtime, schema, SQLite, or Chroma behavior changed.
+
 # Changelog
+
+## 2026-08-01 - Read-only assistant context planning
+
+- Added `pipeline/context.py` with `ContextSection`, `ContextPlan`, and `ContextManager` for deterministic normal-chat and introspection prompt construction.
+- Moved model-message assembly and section/token accounting out of `AssistantSession` while retaining existing retrieval, message ordering, prompt text, diagnostics, streaming, and proposal behavior.
+- Added exact-message, selected-memory, no-memory, introspection, custom-loader, and read-only planning regressions in `tests/test_context.py`.
+- No SQLite schema, Chroma, configuration, or data migration changes.
 
 ## 2026-08-01 - Confirmation-gated batch proposal approval
 

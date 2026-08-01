@@ -22,6 +22,7 @@ from pipeline.db import (
 from pipeline.domains import normalize_domain
 from pipeline.retrieval_debug import RetrievalTrace, normalize_debug_level
 from pipeline.persona import Persona, load_persona
+from pipeline.context import ContextManager, ContextPlan, estimate_tokens
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config" / "assistant.json"
@@ -109,22 +110,23 @@ class GenerationInterrupted(Exception):
     """Internal control flow for a user-interrupted model generation."""
 
 
-def estimate_tokens(text):
-    """Return a deliberately rough, provider-independent token estimate."""
-    return (len(text or "") + 3) // 4
-
-
 class AssistantSession:
     def __init__(self, config, persona, chat=None, memory_loader=list_assistant_memories,
                  memory_creator=create_assistant_memory, memory_searcher=search_assistant_memories,
-                 memory_updater=update_assistant_memory, debug_level=None, policy=None, proposal_creator=None, stream=False, stream_writer=None):
+                 memory_updater=update_assistant_memory, debug_level=None, policy=None, proposal_creator=None,
+                 stream=False, stream_writer=None, model_lister=None):
         if config.max_session_messages <= 0:
             raise ValueError("max_session_messages must be positive")
         self.config = config
         self.persona = persona if hasattr(persona, "render_prompt") else Persona(str(persona))
         self.policy = policy or load_policy()
+        self.context_manager = ContextManager()
         self.chat = chat or ollama.chat
         self._provider_name = "Ollama" if chat is None else "custom chat client"
+        # Configuration remains the startup default. Switching is deliberately
+        # session-only so it cannot rewrite a user's configuration or data.
+        self.active_model = config.chat_model
+        self.model_lister = model_lister
         self.memory_loader = memory_loader
         self.memory_creator = memory_creator
         self.memory_searcher = memory_searcher
@@ -152,7 +154,7 @@ class AssistantSession:
             return assistant_public_id("memory", memory_id, self.config.domain)
         return f"M-{int(memory_id):03d}"
 
-    def _begin_turn_diagnostics(self, messages, retrieved, recent):
+    def _begin_turn_diagnostics(self, plan: ContextPlan, retrieved):
         selected = []
         for item in retrieved:
             memory = item.get("memory", {})
@@ -161,19 +163,17 @@ class AssistantSession:
                 "score": item.get("score"),
                 "reasons": list(item.get("reasons") or []),
             })
-        prompt_text = "".join(str(message.get("content") or "") for message in messages)
-        recent_text = "".join(str(message.get("content") or "") for message in recent)
         self._current_context_diagnostics = {
-            "model": self.config.chat_model,
+            "model": self.active_model,
             "provider": self._provider_name,
-            "persona_characters": len(self.persona.render_prompt()),
-            "policy_characters": len(self.policy),
-            "recent_message_count": len(recent),
-            "recent_characters": len(recent_text),
-            "recent_estimated_tokens": estimate_tokens(recent_text),
+            "persona_characters": plan.persona.characters,
+            "policy_characters": plan.policy.characters,
+            "recent_message_count": len(plan.messages) - 2,
+            "recent_characters": plan.recent_conversation.characters,
+            "recent_estimated_tokens": plan.recent_conversation.estimated_tokens,
             "retrieved": selected,
-            "prompt_characters": len(prompt_text),
-            "prompt_estimated_tokens": estimate_tokens(prompt_text),
+            "prompt_characters": plan.prompt_characters,
+            "prompt_estimated_tokens": plan.prompt_estimated_tokens,
         }
 
     def _finish_turn_diagnostics(self, *, completed, response, latency_seconds, proposal=None, status=None):
@@ -234,7 +234,7 @@ class AssistantSession:
     def _chat_complete(self, messages, *, model=None, stream=None):
         """Return complete content while optionally rendering streamed chunks."""
         use_stream = self.stream if stream is None else stream
-        kwargs = {"model": model or self.config.chat_model, "messages": messages}
+        kwargs = {"model": model or self.active_model, "messages": messages}
         if not use_stream:
             response = self.chat(**kwargs)
             return response.get("message", {}).get("content", "")
@@ -260,26 +260,50 @@ class AssistantSession:
         except KeyboardInterrupt as error:
             raise GenerationInterrupted() from error
 
-    def _context_messages(self, user_text):
+    def _context_plan(self, user_text):
         self.trace = RetrievalTrace(self.debug_level)
         if self.memory_loader is list_assistant_memories:
-            retrieved = retrieve_assistant_memories(user_text, domain=self.config.domain, limit=max(1, self.config.max_memories))
+            retrieved = retrieve_assistant_memories(
+                user_text,
+                domain=self.config.domain,
+                limit=max(1, self.config.max_memories),
+            )
             memories = [item["memory"] for item in retrieved]
         else:
-            memories = self.memory_loader(domain=self.config.domain, status="active", limit=self.config.max_memories)
-            retrieved = [{"memory": memory, "score": None, "reasons": ["custom memory loader"]} for memory in memories]
-        self.last_memory_ids = [memory["id"] for memory in memories if memory.get("id") is not None]
-        self.trace.record("memory_lookup", domain=self.config.domain, count=len(memories), query=user_text, results=retrieved)
-        memory_text = "\n".join(f"- {memory['summary']}" for memory in memories) or "(none)"
-        self.trace.record("context_assembly", domain=self.config.domain, selected_count=len(memories), message_count=len(self.messages) + 1, context=memory_text)
+            memories = self.memory_loader(
+                domain=self.config.domain,
+                status="active",
+                limit=self.config.max_memories,
+            )
+            retrieved = [
+                {"memory": memory, "score": None, "reasons": ["custom memory loader"]}
+                for memory in memories
+            ]
         recent = self.messages[-self.config.max_session_messages:]
-        messages = [
-            {"role": "system", "content": f"{self.persona.render_prompt()}\n\nENGINE POLICY:\n{self.policy}\n\nRETRIEVED MEMORY (factual context):\n{memory_text}\n\nEND RETRIEVED MEMORY"},
-            *recent,
-            {"role": "user", "content": user_text},
-        ]
-        self._begin_turn_diagnostics(messages, retrieved, recent)
-        return messages
+        plan = self.context_manager.build_chat(
+            persona_text=self.persona.render_prompt(),
+            policy_text=self.policy,
+            recent_messages=recent,
+            retrieved_memories=memories,
+            user_text=user_text,
+        )
+        self.last_memory_ids = list(plan.selected_memory_ids)
+        self.trace.record(
+            "memory_lookup",
+            domain=self.config.domain,
+            count=len(memories),
+            query=user_text,
+            results=retrieved,
+        )
+        self.trace.record(
+            "context_assembly",
+            domain=self.config.domain,
+            selected_count=len(memories),
+            message_count=len(self.messages) + 1,
+            context=plan.retrieved_memory.text,
+        )
+        self._begin_turn_diagnostics(plan, retrieved)
+        return plan
 
     def _proposal(self, user_text, assistant_text=None):
         self._current_proposal_diagnostics = {"ran": False, "outcome": "skipped"}
@@ -312,8 +336,8 @@ class AssistantSession:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"USER OBSERVATION (sole evidence source):\n{user_text}"},
         ]
-        self.trace.record("proposal_request", model=self.config.chat_model, messages=prompt, domain=self.config.domain, source="assistant_turn_proposal")
-        response = self.chat(model=self.config.chat_model, messages=prompt)
+        self.trace.record("proposal_request", model=self.active_model, messages=prompt, domain=self.config.domain, source="assistant_turn_proposal")
+        response = self.chat(model=self.active_model, messages=prompt)
         content = response.get("message", {}).get("content", "").strip()
         self.trace.record("proposal_response", status="received" if content else "empty", response=content)
         try:
@@ -330,7 +354,7 @@ class AssistantSession:
                 {"role": "user", "content": f"Invalid proposal: {content}\nValidation error: {error}\nMEMORY TYPE TAXONOMY:\n{taxonomy}\nAllowed retention: session, short_term, long_term"},
             ]
             self.trace.record("proposal_repair_request", attempt=1, messages=repair_prompt)
-            repaired = self.chat(model=self.config.chat_model, messages=repair_prompt)
+            repaired = self.chat(model=self.active_model, messages=repair_prompt)
             repaired_content = repaired.get("message", {}).get("content", "").strip()
             self.trace.record("proposal_repair_response", status="received" if repaired_content else "empty", response=repaired_content)
             raw = json.loads(repaired_content)
@@ -411,10 +435,70 @@ class AssistantSession:
         lines.append('Type "approve all" to continue, or anything else to cancel.')
         return "\n".join(lines)
 
+    def _installed_model_names(self):
+        """Return normalized installed Ollama model names in stable order."""
+        lister = self.model_lister or getattr(ollama, "list", None)
+        if not callable(lister):
+            raise RuntimeError("Unable to list Ollama models: Ollama model listing is unavailable.")
+        try:
+            response = lister()
+        except Exception as error:
+            raise RuntimeError(f"Unable to list Ollama models: {error}") from error
+        models = response.get("models", []) if isinstance(response, dict) else getattr(response, "models", [])
+        names = []
+        for model in models or []:
+            if isinstance(model, dict):
+                name = model.get("model") or model.get("name")
+            else:
+                name = getattr(model, "model", None) or getattr(model, "name", None)
+            if isinstance(name, str) and name.strip():
+                names.append(name.strip())
+        return sorted(set(names), key=str.casefold)
+
+    def model_list(self):
+        names = self._installed_model_names()
+        if not names:
+            return "No Ollama models are installed."
+        lines = ["Installed Ollama models:"]
+        for name in names:
+            marker = "*" if name == self.active_model else " "
+            suffix = " (active)" if name == self.active_model else ""
+            lines.append(f"{marker} {name}{suffix}")
+        return "\n".join(lines)
+
+    def model_current(self):
+        return f"Active model: {self.active_model}"
+
+    def model_use(self, requested_name):
+        requested_name = requested_name.strip()
+        if not requested_name:
+            return "Usage: model use <model-name>"
+        names = self._installed_model_names()
+        selected = next((name for name in names if name.casefold() == requested_name.casefold()), None)
+        if selected is None:
+            return f"Model not installed: {requested_name}"
+        if selected == self.active_model:
+            return f"Model is already active: {selected}"
+        self.active_model = selected
+        self.trace.record("model_selected", model=selected)
+        return f"Active model set to: {selected}"
+
     def command(self, text):
         lowered = text.strip().casefold()
         if lowered == "context stats":
             return self.context_stats()
+        if lowered == "model list":
+            try:
+                return self.model_list()
+            except RuntimeError as error:
+                return str(error)
+        if lowered == "model current":
+            return self.model_current()
+        if lowered == "model use" or lowered.startswith("model use "):
+            try:
+                return self.model_use(text.strip()[len("model use"):])
+            except RuntimeError as error:
+                return str(error)
         if lowered.startswith("remember this:") or lowered.startswith("remember:"):
             return self.explicit_remember(text.split(":", 1)[1])
         if lowered.startswith("forget this:") or lowered.startswith("forget:"):
@@ -495,8 +579,7 @@ class AssistantSession:
         explanation=self.explain_memory(query)
         if explanation["status"] == "ambiguous": return "I am not sure which memory you mean. Which one should I explain?"
         if explanation["status"] == "no_match": return "I do not have an active canonical memory that matches that."
-        explanation_text = (self.persona.render_prompt() + "\n\nENGINE POLICY:\n" + self.policy + "\n\nYou are answering a memory-introspection question. Use ONLY the structured explanation JSON below. Explain remembered content and provenance naturally. Do not mention rejected proposals, raw databases, hidden reasoning, or invent causes.\nSTRUCTURED MEMORY EXPLANATION:\n" + json.dumps(explanation, ensure_ascii=False))
-        prompt=[{"role":"system","content":explanation_text},{"role":"user","content":user_text}]
+        explanation_json = json.dumps(explanation, ensure_ascii=False)
         retrieved = [
             {
                 "memory": {"id": item["memory_id"]},
@@ -505,7 +588,15 @@ class AssistantSession:
             }
             for item in explanation["memories"]
         ]
-        self._begin_turn_diagnostics(prompt, retrieved, [])
+        plan = self.context_manager.build_introspection(
+            persona_text=self.persona.render_prompt(),
+            policy_text=self.policy,
+            explanation_json=explanation_json,
+            user_text=user_text,
+            selected_memory_ids=[item["memory_id"] for item in explanation["memories"]],
+        )
+        prompt = plan.model_messages()
+        self._begin_turn_diagnostics(plan, retrieved)
         self.trace.record("memory_explanation", query=query, memory_ids=[item["memory_id"] for item in explanation["memories"]], payload=explanation)
         self._generation_started_at = time.perf_counter()
         self._first_token_seconds = None
@@ -541,8 +632,9 @@ class AssistantSession:
             self.trace.record("command", command=user_text)
             return command_result
         previous_memory_ids = list(self.last_memory_ids)
-        messages = self._context_messages(user_text)
-        self.trace.record("model_request", model=self.config.chat_model, message_count=len(messages), messages=messages)
+        plan = self._context_plan(user_text)
+        messages = plan.model_messages()
+        self.trace.record("model_request", model=self.active_model, message_count=len(messages), messages=messages)
         self._generation_started_at = time.perf_counter()
         self._first_token_seconds = None
         try:
@@ -565,9 +657,9 @@ class AssistantSession:
                 proposal={"ran": False, "outcome": "skipped"},
                 status="failed",
             )
-            self.trace.record("model_response", model=self.config.chat_model, status="empty")
+            self.trace.record("model_response", model=self.active_model, status="empty")
             raise RuntimeError("Assistant model returned empty content.")
-        self.trace.record("model_response", model=self.config.chat_model, status="ok", response=content)
+        self.trace.record("model_response", model=self.active_model, status="ok", response=content)
         self.messages.extend([{"role": "user", "content": user_text}, {"role": "assistant", "content": content}])
         self.messages = self.messages[-self.config.max_session_messages:]
         try:
@@ -614,7 +706,7 @@ def run_interactive(config_path=DEFAULT_CONFIG_PATH, input_fn=input, output_fn=p
             print("StarFur: ", end="", flush=True); stream_started["value"] = True
         print(text, end="", flush=True)
     session = AssistantSession(config, load_persona(config.persona_path), policy=load_policy(config.policy_path), debug_level=debug_level, proposal_creator=upsert_assistant_memory_proposal, stream=True, stream_writer=stream_writer)
-    output_fn("StarFur Assistant (remember/forget, memory list/search/inspect, proposal list/inspect/approve/reject/approve all, context stats; quit to exit)")
+    output_fn("StarFur Assistant (model list/current/use, remember/forget, memory list/search/inspect, proposal list/inspect/approve/reject/approve all, context stats; quit to exit)")
     while True:
         try:
             user_text = input_fn("You: ")

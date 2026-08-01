@@ -1,587 +1,148 @@
-# ROADMAP UPDATE — POV / Perspective Tracking
+# StarFur Forge Roadmap v2
 
-## Add after “11. NEXT PHASE — Extraction Validation”
+**Last updated:** 2026-08-01
 
-# 12. POV and Perspective Tracking
+This is the authoritative roadmap. `ROADMAP.original.md` preserves the previous roadmap text for historical reference.
 
-**HIGH-PRIORITY NARRATIVE-MEMORY FEATURE**
+## Project direction
 
-*Crown of Claws* is fundamentally a multi-perspective novel.
+StarFur Forge is a local-first memory and assistant engine with two closely related uses:
 
-The narrative regularly moves between:
+1. **Assistant Mode** — a configurable persona using personal/project memory safely and transparently.
+2. **Crown of Claws Mode** — manuscript analysis and narrative memory for the multi-POV novel.
 
-* the three primary character viewpoints;
-* Quiet Accord as an important non-character perspective;
-* secondary or third-party viewpoints such as Murr Lavenfur;
-* occasional other viewpoint characters;
-* potentially external or narrator-level information.
+The engine should remain shared. Persona, domain, retrieval, provider, and policy boundaries should make the modes configurable without duplicating the core.
 
-Because of this structure, StarFur must distinguish between:
+## Completed foundation
 
-**what exists in canon**
+### Manuscript and lore pipeline
 
-and
+- Prechunker-generated `canon/chapters/*.md` is the authoritative manuscript analysis corpus.
+- Prechunker → Mr. Chonker → Mr. Annotator pipeline is operational.
+- Chunking and annotation have defensive validation, retries, failure recording, and regression tests.
+- Structured lore memory preserves source provenance and performs normal source cleanup.
+- Semantic indexing supports invalidation/version changes without destroying the normal incremental fast path.
+- Targeted chapter reanalysis is available and constrained to the authoritative corpus.
+- Fact durability/type classification is stored without discarding temporary scene-state facts.
+- Classification guidance covers physical attributes, behavioral tendencies, temporary scene state, and subject attribution.
+- Assistant/lore corpus contracts are documented separately; production data formats remain conservative.
 
-**who actually knows or observes it.**
+### Shared memory and assistant memory
 
-These are not equivalent.
+- Additive domain/namespace support exists, including personal and project-style domains.
+- Lore memory and assistant memory are separate subsystems.
+- Dedicated `assistant_memories` storage supports validated memory types, retention, confidence, importance, status, provenance, CRUD, search, correction, and soft forgetting.
+- Durable assistant proposals support pending/approved/rejected lifecycle, review commands, evidence records, deterministic identity, exact-evidence idempotency, reinforcement, duplicate-evidence no-op behavior, and approval linkage.
+- Proposal inspection exposes identity, provenance, evidence, and review state without mutation.
+- Assistant responses are not proposal evidence by default; proposals derive from user observations and explicit remember requests.
 
-A fact revealed during a Quiet Accord sequence may be established for the reader without being known by Elias, Maeve, Murr, or another character.
+### Assistant runtime
 
-Likewise, information observed from one character's perspective should not automatically become knowledge possessed by every other character.
+- Interactive local Assistant Mode uses Ollama with configurable model and persona.
+- Persona instructions are loaded through a dedicated persona layer with neutral fallback behavior.
+- Policy, persona, retrieval, provenance/introspection, and command parsing remain separate concerns.
+- Recent conversation context is bounded in memory.
+- Streaming output works, including clean Ctrl+C interruption and rollback of incomplete turns.
+- Deterministic retrieval supports ranking, explanations, context assembly, benchmark fixtures, and read-only diagnostics.
+- Conversational memory introspection can explain selected active memories and approved provenance without exposing rejected proposals or hidden reasoning.
+- A read-only `context stats` command reports bounded diagnostics for the most recent turn.
+- A read-only `ContextManager` assembles persona, policy, recent conversation, retrieved memory, and user-message sections while preserving the established payload format.
+- Runtime Ollama model selection (`model list`, `model current`, `model use`) is the next active implementation target.
+- Factory reset/restore tooling exists with confirmation and backup safeguards.
 
-### Initial Perspective Tracking
+## Current stabilization priorities
 
-The first implementation should identify and store the dominant perspective associated with a scene or chunk.
+1. ~~Finish and verify runtime model selection across Ollama environments.~~ **COMPLETED 2026-08-01**
+2. Compare installed models using the retrieval benchmark, context diagnostics, and representative assistant conversations.
+3. Improve proposal classification and quality using observed failures, without changing lifecycle or provenance semantics.
+4. Run longer isolated assistant tests and record retrieval quality, proposal precision, latency, prompt size, and interruption behavior.
+5. Keep the full test suite green in WSL; treat host-only filesystem failures as environment-specific until reproduced in WSL.
 
-Possible metadata:
+## Near-term assistant roadmap
 
-```text
-Perspective Type:
-    character
-    location
-    external
-    narrator
-    unknown
+### Stage A — Provider and context boundaries
 
-Perspective Entity:
-    Maeve
-    Elias Voss
-    Murr Lavenfur
-    Quiet Accord
-    etc.
+- ~~Complete runtime model selection.~~ **COMPLETED 2026-08-01**
+- Add a narrow text-provider interface after model selection is stable; preserve Ollama compatibility and fake-client tests.
+- Keep ContextManager deterministic and read-only.
+- Add provider/model information to diagnostics and clear unavailable-provider errors.
+- Do not add automatic routing or dynamic context budgets yet.
 
-Perspective Confidence:
-    confirmed
-    inferred
-    uncertain
+### Stage B — Assistant quality
+
+- ~~Ensure direct-answer grounding includes selected memory details and keeps persona flavor after, not instead of, the factual answer.~~ **COMPLETED 2026-08-01**
+- Improve retrieval scoring and evaluation fixtures.
+- Add conservative proposal classification improvements and correction handling.
+- Add optional proposal-review usability improvements.
+- Test persona quality separately from factual grounding.
+- Add bounded long-duration regression/simulation tests before changing retrieval algorithms.
+
+### Stage C — Multiple personas and integrations
+
+- Support multiple configured personas without runtime switching until the configuration contract is proven.
+- Add LM Studio as a provider adapter if it improves accessibility for testers.
+- Preserve shared memory domains and explicit provenance across personas.
+- Keep persona presentation separate from factual/system policy.
+
+## Crown of Claws roadmap
+
+### Narrative provenance and perspective
+
+- Add scene/chunk perspective metadata for the three main characters, Murr, Quiet Accord, and other third-party/external viewpoints.
+- Treat perspective as provenance, not merely presentation metadata.
+- Distinguish world truth, reader knowledge, character knowledge, belief, lie, and revelation.
+- Prefer explicit manuscript metadata over inference; store uncertainty when POV is ambiguous.
+
+### Narrative intelligence
+
+- Relationship and event extraction with evidence.
+- Timeline and temporal reasoning, including narrative versus chronological order.
+- Character knowledge-state tracking and revelation detection.
+- Contradiction and continuity audits.
+- Writing assistance with draft/canon separation and human review.
+
+## Platform and control center
+
+- Shared application/service layer for CLI, future Textual TUI, and future web API/dashboard.
+- Web configuration, proposal review, memory inspection, corpus status, and performance dashboards.
+- Project abstraction so Crown of Claws is one project domain rather than a hard-coded engine assumption.
+- Permissioned tools for files, applications, system information, and automation.
+- Voice input/output and interruption-aware conversation.
+- Desktop fursona with animation, emotion signaling, lip sync, and Live2D/3D support.
+
+## Future architecture: capability routing and native media
+
+After manual model selection, provider boundaries, and diagnostics are stable, add an explicit capability router. It should classify a request into capabilities such as `text`, `code`, `image_generate`, `image_edit`, `vision`, `tts`, or `stt`, then select a configured provider.
+
+Use adapters, not backend-specific logic in the assistant core:
+
+```python
+class ImageProvider(Protocol):
+    def generate(self, prompt, *, model=None, options=None) -> ImageResult:
+        ...
 ```
 
-Perspective should not be restricted to characters.
+Stable Diffusion, ComfyUI, a native local image model, and hosted APIs should be interchangeable providers. A provider may be loaded, warmed, used, and unloaded according to a configurable VRAM/lifecycle policy. Return structured artifact metadata (path/handle, provider, model, timing, and errors); do not put binary media in memory tables or prompts.
 
-Quiet Accord is an important narrative perspective despite being a place rather than a person.
+The first slice should use explicit configuration and fake-provider tests. Automatic routing should wait for real usage data and must expose capability, provider, model, fallback reason, latency, and lifecycle events. A specialist result may pass through a persona-rendering step, but persona code must not alter factual tool output or provenance.
 
-The schema should therefore reference general entities where practical instead of assuming:
+## Future research
 
-```text
-POV == character
-```
+- Semantic/association memory layer and later temporal relationships.
+- Emotional state as a separate contextual layer, not arbitrary permanent fields on every memory.
+- Discussion sandbox with seeded memories, multiple personas, scheduled events, deterministic seeds, and retrieval/proposal metrics.
+- Hybrid deterministic/semantic retrieval experiments against the checked-in benchmark corpus.
+- POV-aware retrieval and writing-partner mode.
 
-### Perspective Provenance
+## Development invariants
 
-Extracted knowledge should eventually retain perspective alongside ordinary source provenance.
+- Preserve authoritative manuscript Markdown and existing data formats unless a migration is explicitly planned.
+- Prefer additive, reversible migrations and soft status transitions.
+- Do not mutate production SQLite or Chroma during tests.
+- Keep lore memory separate from assistant memory.
+- Keep persona, policy, retrieval, provenance, proposal, and provider concerns separate.
+- Every behavior change gets focused regression tests and a changelog entry.
 
-Conceptually:
+## End-state vision
 
-```text
-FACT
-   │
-   ├── evidence
-   ├── source
-   ├── scene
-   ├── chunk
-   └── perspective
-```
-
-Example:
-
-```text
-FACT:
-C.E.P.H.A.L.O.N performs X.
-
-Source:
-Chapter 9
-
-Perspective:
-Quiet Accord
-
-Established for:
-Reader / world-state
-
-Automatically known by Maeve:
-No
-
-Automatically known by Elias:
-No
-```
-
-This prevents StarFur from confusing reader knowledge with character knowledge.
-
-### Perspective Detection
-
-Perspective may initially be established through:
-
-* explicit chapter/scene metadata;
-* deterministic manuscript structure;
-* character names and viewpoint cues;
-* annotator classification;
-* human confirmation where uncertain.
-
-Where possible, explicit metadata should outrank LLM inference.
-
-StarFur should not invent a viewpoint when the source does not establish one clearly.
-
-### Future Character Knowledge State
-
-Perspective tracking provides the foundation for explicit character knowledge.
-
-Eventually StarFur should be able to represent:
-
-```text
-WORLD / READER KNOWLEDGE
-        │
-        ├── Elias knows
-        ├── Maeve knows
-        ├── Murr knows
-        └── other characters know
-```
-
-Knowledge may propagate through events.
-
-Example:
-
-```text
-Quiet Accord reveals information to reader
-        │
-        ▼
-Reader knows
-
-Maeve later discovers the information
-        │
-        ▼
-Maeve knows
-```
-
-This enables StarFur to distinguish:
-
-* world truth;
-* reader knowledge;
-* character knowledge;
-* character belief;
-* mistaken belief;
-* lies;
-* withheld information;
-* revelations.
-
-### Why This Matters
-
-Perspective tracking enables questions such as:
-
-> Whose POV is this scene?
-
-> What does Maeve know about Ceph at this point?
-
-> Has Elias learned this yet?
-
-> Does Murr know what happened at Quiet Accord?
-
-> Is this information known to the character, or only to the reader?
-
-> Would this dialogue accidentally reveal knowledge this character should not possess?
-
-This makes perspective tracking foundational for later:
-
-* relationship interpretation;
-* event extraction;
-* timeline reasoning;
-* revelation tracking;
-* continuity audits;
-* contradiction detection;
-* scene preparation;
-* writing assistance.
-
-For a multi-POV novel, perspective is therefore part of provenance rather than merely presentation metadata.
-
----
-
-## Renumber the existing major sections after this insertion
-
-Current:
-
-```text
-12. Relationship Extraction
-13. Event Extraction
-14. Timeline Memory
-15. Canon Audit and Contradiction Detection
-16. Provenance as a Core Principle
-17. Improved RAG
-18. Query Planning
-19. Writing Assistant Mode
-20. Draft → Review → Canon Workflow
-21. Web Interface
-22. Separate the Engine From Crown of Claws
-23. StarFur Service/API
-24. General Personal Memory
-25. Tool System
-26. Voice
-27. Personality Layer
-28. Desktop Companion
-29. Emotional/Animation Signaling
-30. THE END GOAL
-31. Development Philosophy
-32. Milestone Map
-```
-
-Becomes:
-
-```text
-13. Relationship Extraction
-14. Event Extraction
-15. Timeline Memory
-16. Canon Audit and Contradiction Detection
-17. Provenance as a Core Principle
-18. Improved RAG
-19. Query Planning
-20. Writing Assistant Mode
-21. Draft → Review → Canon Workflow
-22. Web Interface
-23. Separate the Engine From Crown of Claws
-24. StarFur Service/API
-25. General Personal Memory
-26. Tool System
-27. Voice
-28. Personality Layer
-29. Desktop Companion
-30. Emotional/Animation Signaling
-31. THE END GOAL
-32. Development Philosophy
-33. Milestone Map
-```
-
----
-
-# Replace the Milestone Map from Phase 3 onward with:
-
-## Phase 3 — Knowledge Quality & Perspective Foundations
-
-**NEXT**
-
-* validate full-corpus extraction
-* improve entity recall
-* improve appearance recall
-* tune fact extraction
-* semantic fact deduplication
-* improve chunking where necessary
-* improve RAG retrieval
-* establish scene/chunk perspective metadata
-* detect dominant POV
-* support non-character perspectives such as Quiet Accord
-* attach perspective provenance to extracted knowledge
-* validate perspective detection against manuscript structure
-
-## Phase 4 — Knowledge Graph
-
-* relationship extraction
-* relationship evidence
-* relationship review
-* perspective-aware relationships where relevant
-* graph querying
-* graph visualization
-
-## Phase 5 — Narrative Memory
-
-* event extraction
-* participants
-* locations
-* consequences
-* timeline
-* temporal reasoning
-* narrative-order versus chronological-order tracking
-* perspective associated with events
-* revelation events
-* initial character knowledge-state tracking
-
-## Phase 6 — Canon Intelligence
-
-* contradiction detection
-* continuity audits
-* perspective-aware continuity checking
-* character knowledge-state reasoning
-* reader knowledge versus character knowledge
-* detect premature knowledge/revelations
-* draft/canon separation
-* manuscript review
-* scene preparation
-* writing assistance
-
-## Phase 7 — StarFur Engine
-
-* separate engine from *Crown of Claws*
-* project abstraction
-* hybrid retrieval
-* query planner
-* perspective-aware retrieval
-* local API
-* reusable memory domains
-
-## Phase 8 — Control Center
-
-* web UI
-* entity browser
-* graph explorer
-* perspective/POV browser
-* proposal review
-* performance dashboards
-* system administration
-
-## Phase 9 — Personal Assistant
-
-* personal/project memory
-* model-directed memory proposals
-* semantic conversational memory
-* structured personal memory
-* memory retention/importance policy
-* tool framework
-* permissions
-* application launching
-* file interaction
-* system information
-* automation
-
-## Phase 10 — Voice
-
-* speech-to-text
-* text-to-speech
-* conversational voice mode
-* interruption handling
-* wake/sleep behavior
-
-## Phase 11 — Desktop Fursona
-
-* transparent desktop companion
-* animation states
-* emotion signaling
-* lip sync
-* Live2D/3D evolution
-
-## Phase 12 — StarFur
-
-**END-STATE VISION**
-
-A persistent, local-first furry AI companion that can:
-
-> understand your fictional worlds,
-
-> distinguish world truth, reader knowledge, and character knowledge,
-
-> understand whose perspective information came from,
-
-> remember structured knowledge,
-
-> help write and maintain those worlds,
-
-> understand your projects,
-
-> selectively retain useful personal memory,
-
-> operate approved computer tools,
-
-> converse naturally through text and voice,
-
-> visibly inhabit the desktop,
-
-> and retain a transparent, inspectable memory of what it knows, who knows it, and why.
-
-
-Future Research & Long-Term Ideas
-
-The following ideas are intentionally outside the current roadmap. They represent promising directions once the core assistant, memory architecture, and user experience have matured.
-
-Persona Layer
-
-Separate personality from assistant logic.
-
-Current persona instructions are embedded within the assistant prompt. Future versions should move persona into its own configurable layer so that personality can be changed independently of memory retrieval, safety behavior, and reasoning.
-
-Potential goals:
-
-Swappable personas
-Cleaner prompts
-Better consistency on smaller models
-Easier community-created personas
-Neutral default persona for non-furry users
-Persona Library
-
-Allow users to install or create multiple personas.
-
-Examples:
-
-Neutral Assistant
-StarFur (default)
-Fox Mom
-Technical Mentor
-Creative Writer
-Custom user personas
-
-Personas should influence tone, style, and mannerisms without changing factual behavior or memory handling.
-
-Adaptive Model Profiles
-
-(The section you already added.)
-
-Automatically tune retrieval budgets, summarization, and context allocation based on the currently selected model.
-
-Context Manager
-
-Introduce a dedicated context assembly system responsible for intelligently constructing prompts.
-
-Responsibilities may include:
-
-Context budgeting
-Memory ranking
-Memory compression
-Conversation summarization
-Persona injection
-Token reservation
-Context diagnostics
-
-The Context Manager should become responsible for deciding what enters the model's context window.
-
-Conversation Summarization
-
-Replace extremely long conversation histories with progressively generated summaries.
-
-Goals:
-
-Reduce context usage
-Preserve continuity
-Improve small-model performance
-Allow effectively unlimited conversation length
-Memory Compression
-
-Investigate methods for combining related memories into more compact representations.
-
-Examples:
-
-Merge duplicate preferences
-Combine evolving goals
-Summarize historical context
-Detect obsolete memories
-
-The objective is to maximize information density while minimizing context consumption.
-
-Operational Memory
-
-Investigate a fourth memory domain dedicated to assistant operation rather than user knowledge.
-
-Possible responsibilities:
-
-Active context budgeting
-Retrieval diagnostics
-Session state
-Context planning
-Prompt assembly metadata
-Recently injected memories
-Provider capabilities
-
-This memory would not appear as user-visible long-term memory.
-
-Multiple Provider Support
-
-Expand beyond Ollama.
-
-Potential providers:
-
-LM Studio
-OpenAI-compatible APIs
-OpenRouter
-Local custom providers
-Future inference engines
-
-Provider selection should be abstracted behind a common interface.
-
-Open WebUI Integration
-
-Provide an OpenAI-compatible API allowing StarFur Forge to operate as a backend for Open WebUI.
-
-Goals:
-
-Browser-based chat
-Streaming responses
-Multi-session support
-Memory introspection
-Proposal review
-Full StarFur functionality outside the terminal
-Desktop Launcher
-
-Develop a graphical launcher for StarFur Forge.
-
-Possible features:
-
-Model selection
-Persona selection
-Provider selection
-Memory statistics
-Context diagnostics
-Launch configuration
-Profile management
-
-The launcher should make StarFur accessible to non-technical users.
-
-Telemetry-Based Optimization
-
-Allow StarFur to anonymously (or locally) learn how different models perform.
-
-Potential metrics:
-
-Retrieval success
-Context utilization
-Average prompt size
-Response latency
-Memory usefulness
-Summarization frequency
-
-The goal is to improve default configuration automatically over time.
-
-Plugin Architecture
-
-Provide extension points without requiring modification of the core assistant.
-
-Potential plugin categories:
-
-Retrieval strategies
-Persona packs
-Memory processors
-Exporters
-External tools
-Custom commands
-Multi-Agent Research
-
-Investigate specialized internal agents.
-
-Possible examples:
-
-Memory reviewer
-Context planner
-Persona manager
-Retrieval optimizer
-Proposal reviewer
-
-These should remain deterministic components rather than autonomous independent assistants.
-
-Distributed Knowledge Sources
-
-Allow retrieval from multiple simultaneous knowledge domains.
-
-Examples:
-
-User memories
-Novel canon
-Project documentation
-Git repositories
-Local notes
-External databases
-
-All should participate in retrieval while preserving provenance.
-
-Packaging & Distribution
-
-Long-term release goals:
-
-One-click installer
-Automatic dependency setup
-Model detection
-Guided first launch
-Configuration wizard
-Portable mode
-Cross-platform support
+A persistent, local-first StarFur companion that understands fictional worlds and personal context, remembers selectively and transparently, knows why it retrieved information, supports text/voice/media capabilities through interchangeable providers, helps write and maintain narratives, and can inhabit the desktop without sacrificing inspectability or user control.
