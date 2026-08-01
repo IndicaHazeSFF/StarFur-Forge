@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-01 - Assistant proposal classification guidance
+
+- Centralized the existing eight assistant memory types with explicit extraction guidance; no schema migration or stored-type change was required.
+- Tightened proposal/repair prompts for specific classification, correction handling, and ambiguous-observation rejection.
+- Added deterministic classification regressions while preserving lifecycle, approval, provenance, and legacy rows.
+
+
 ## 2026-08-01 - Clean assistant generation interrupts
 
 - Ctrl+C during streaming now stops the current turn without a traceback, history entry, memory proposal, or partial retrieval-ID update.

@@ -20,7 +20,17 @@ class AssistantProposalTests(unittest.TestCase):
         stored = db.get_assistant_memory_proposal(proposal_id)
         self.assertEqual(stored["status"], "approved")
         self.assertEqual(stored["approved_memory_id"], memory["id"])
-        with self.assertRaises(ValueError): db.approve_assistant_memory_proposal(proposal_id)
+        repeated = db.approve_assistant_memory_proposal(proposal_id)
+        self.assertEqual(repeated["id"], memory["id"])
+    def test_approval_links_all_evidence_and_memory_inspection_reads_it(self):
+        proposal = {"subject":"Roger","memory_type":"preference","summary":"Likes rice","details":"","importance":0.7,"confidence":0.8,"retention":"long_term"}
+        result = db.upsert_assistant_memory_proposal(proposal, observation_text="I like jasmine rice")
+        memory = db.approve_assistant_memory_proposal(result["proposal_id"])
+        inspected = db.inspect_assistant_memory(memory["id"])
+        self.assertEqual(len(inspected["evidence"]), 1)
+        self.assertEqual(inspected["evidence"][0]["memory_id"], memory["id"])
+        self.assertEqual(inspected["evidence"][0]["proposal_id"], result["proposal_id"])
+
     def test_rejection_preserves_proposal_without_memory(self):
         proposal_id = db.create_assistant_memory_proposal({"subject":"Roger","memory_type":"goal","summary":"Reject me","details":"","importance":0.5,"confidence":0.5,"retention":"session"})
         db.reject_assistant_memory_proposal(proposal_id)

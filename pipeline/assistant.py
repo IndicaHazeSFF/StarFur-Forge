@@ -16,6 +16,7 @@ from pipeline.db import (
     list_assistant_memories,
     search_assistant_memories, retrieve_assistant_memories,
     update_assistant_memory,
+    assistant_memory_type_prompt,
 )
 from pipeline.domains import normalize_domain
 from pipeline.retrieval_debug import RetrievalTrace, normalize_debug_level
@@ -182,12 +183,27 @@ class AssistantSession:
         # Questions and information requests are not user observations. This
         # application-level guard prevents model answers from becoming memory.
         normalized = user_text.strip().casefold()
-        question_starters = ("who ", "what ", "when ", "where ", "why ", "how ", "can ", "could ", "would ", "do ", "does ", "did ", "is ", "are ", "will ")
+        question_starters = ("who ", "what ", "when ", "where ", "why ", "how ", "can ", "could ", "would ", "do ", "does ", "did ", "is ", "are ", "will ", "tell ", "explain ", "define ", "describe ", "list ", "give ", "show ", "summarize ", "help ")
         if normalized.endswith("?") or normalized.startswith(question_starters):
             self.trace.record("proposal_skipped", reason="user_question", source="user_observation")
             return None
+        taxonomy = assistant_memory_type_prompt()
+        system_prompt = (
+            "Return ONLY one JSON object. Extract facts ONLY from the USER OBSERVATION below. "
+            "The user observation is the sole authoritative source. Never use assistant-generated content, "
+            "general knowledge, answers, questions, requests, roleplay, jokes, metaphors, hypotheticals, "
+            "invented history, filler, or suggestions as memory evidence. If the user observation does not "
+            "clearly state a durable fact about the user or their project, return store=false. Choose the most "
+            "specific type below; never default broadly to personal_fact. For an explicit correction, classify "
+            "the corrected fact by its underlying type and state the correction in details. If the observation "
+            "is ambiguous, return store=false rather than guessing. MEMORY TYPE TAXONOMY:\n"
+            + taxonomy
+            + "\nAllowed retention values are exactly: session, short_term, long_term. importance and confidence "
+            "must be JSON numbers from 0.0 to 1.0, never labels. Required fields: store, subject, memory_type, "
+            "summary, details, importance, confidence, retention. The engine supplies domain and source."
+        )
         prompt = [
-            {"role": "system", "content": "Return ONLY one JSON object. Extract facts ONLY from the USER OBSERVATION below. The user observation is the sole authoritative source. Never use assistant-generated content, general knowledge, answers, questions, requests, roleplay, jokes, metaphors, hypotheticals, invented history, filler, or suggestions as memory evidence. If the user observation does not clearly state a durable fact about the user or their project, return store=false. Allowed memory_type values are exactly: preference, personal_fact, experience, project_context, relationship_context, ongoing_situation, goal, routine. Allowed retention values are exactly: session, short_term, long_term. importance and confidence must be JSON numbers from 0.0 to 1.0, never labels. Required fields: store, subject, memory_type, summary, details, importance, confidence, retention. The engine supplies domain and source."},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"USER OBSERVATION (sole evidence source):\n{user_text}"},
         ]
         self.trace.record("proposal_request", model=self.config.chat_model, messages=prompt, domain=self.config.domain, source="assistant_turn_proposal")
@@ -203,7 +219,10 @@ class AssistantSession:
             proposal = validate_memory_proposal(raw, self.config.domain)
         except Exception as error:
             self.trace.record("proposal_validation", status="invalid", error=str(error))
-            repair_prompt = [{"role": "system", "content": "Return ONLY corrected JSON. Do not add facts. Use only the allowed memory_type and retention values. Use numeric importance/confidence. Return store=false if uncertain."}, {"role": "user", "content": f"Invalid proposal: {content}\nValidation error: {error}\nAllowed memory_type: preference, personal_fact, experience, project_context, relationship_context, ongoing_situation, goal, routine\nAllowed retention: session, short_term, long_term"}]
+            repair_prompt = [
+                {"role": "system", "content": "Return ONLY corrected JSON. Do not add facts. Use the most specific valid memory_type from the taxonomy. Use numeric importance/confidence. Return store=false if uncertain or ambiguous."},
+                {"role": "user", "content": f"Invalid proposal: {content}\nValidation error: {error}\nMEMORY TYPE TAXONOMY:\n{taxonomy}\nAllowed retention: session, short_term, long_term"},
+            ]
             self.trace.record("proposal_repair_request", attempt=1, messages=repair_prompt)
             repaired = self.chat(model=self.config.chat_model, messages=repair_prompt)
             repaired_content = repaired.get("message", {}).get("content", "").strip()

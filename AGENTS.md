@@ -124,3 +124,5 @@ Assistant persona presentation is loaded through `pipeline.persona.Persona` and 
 Assistant automatic proposal extraction is user-observation-only by default. Assistant responses, general knowledge answers, questions, and requests are not canonical evidence. Any future assistant-self memory must use a separate explicit provenance type and opt-in path.
 
 Interactive assistant Ctrl+C during generation raises internal `GenerationInterrupted` control flow; the turn is rolled back, partial output is not saved, and no proposal is generated. Ctrl+C at input exits cleanly.
+
+Assistant proposal classification uses the existing eight stored memory types only (`preference`, `personal_fact`, `experience`, `project_context`, `relationship_context`, `ongoing_situation`, `goal`, `routine`). Corrections use the corrected fact's underlying type; ambiguous observations must return `store=false`. No migration is required and legacy rows remain valid.

@@ -23,6 +23,16 @@ ASSISTANT_MEMORY_TYPES = (
     "preference", "personal_fact", "experience", "project_context",
     "relationship_context", "ongoing_situation", "goal", "routine",
 )
+ASSISTANT_MEMORY_TYPE_GUIDANCE = {
+    "preference": "An enduring like, dislike, choice, taste, or personal setting.",
+    "personal_fact": "A stable fact about the user, including owned hardware/setup or a cautiously stated health-related fact; do not diagnose.",
+    "experience": "A completed or clearly bounded event the user personally experienced.",
+    "project_context": "A fact about a project, system, workstream, or its technical setup; use goal instead for an intended outcome.",
+    "relationship_context": "A fact about the user's relationship, family, friend, pet, team, or other social connection.",
+    "ongoing_situation": "A current, unresolved, or time-sensitive circumstance that is not a routine.",
+    "goal": "An intended outcome, plan, or objective the user wants to pursue.",
+    "routine": "A repeated habit, schedule, or usual practice rather than a one-time event.",
+}
 ASSISTANT_RETENTIONS = ("session", "short_term", "long_term")
 ASSISTANT_MEMORY_STATUSES = ("active", "superseded", "forgotten")
 
@@ -34,6 +44,13 @@ def _validated(value, allowed, label):
 def normalize_memory_type(value): return _validated(value, ASSISTANT_MEMORY_TYPES, "memory_type")
 def normalize_retention(value): return _validated(value, ASSISTANT_RETENTIONS, "retention")
 def normalize_memory_status(value): return _validated(value, ASSISTANT_MEMORY_STATUSES, "status")
+
+def assistant_memory_type_prompt():
+    """Return the canonical extraction taxonomy in stable stored-type order."""
+    return "\n".join(
+        f"- {memory_type}: {ASSISTANT_MEMORY_TYPE_GUIDANCE[memory_type]}"
+        for memory_type in ASSISTANT_MEMORY_TYPES
+    )
 
 
 
