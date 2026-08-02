@@ -313,6 +313,15 @@ def main():
         help="Retrieval debugging detail level",
     )
 
+    serve_parser = subparsers.add_parser(
+        "serve",
+        help="Serve Assistant Mode through a local OpenAI-compatible API",
+    )
+    serve_parser.add_argument("--host", default="127.0.0.1")
+    serve_parser.add_argument("--port", type=int, default=8000)
+    serve_parser.add_argument("--config", help="Path to assistant JSON configuration")
+    serve_parser.add_argument("--api-key", help="Optional local API bearer token")
+    serve_parser.add_argument("--quiet", action="store_true", help="Suppress HTTP access logs")
     eval_parser = subparsers.add_parser("retrieval-eval", help="Run the checked-in assistant retrieval benchmark")
     eval_parser.add_argument("--strategy", choices=("deterministic", "semantic", "hybrid"), default="deterministic")
 
@@ -442,6 +451,10 @@ def main():
 
     elif args.command == "assistant":
         run_interactive(args.config, debug_level=args.debug) if args.config else run_interactive(debug_level=args.debug)
+
+    elif args.command == "serve":
+        from pipeline.api import serve
+        serve(host=args.host, port=args.port, config_path=args.config, api_key=args.api_key, quiet=args.quiet)
 
     elif args.command == "retrieval-eval":
         from pipeline.retrieval_eval import run_benchmark

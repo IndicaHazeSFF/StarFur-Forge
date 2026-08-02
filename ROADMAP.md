@@ -38,6 +38,7 @@ The engine should remain shared. Persona, domain, retrieval, provider, and polic
 
 ### Assistant runtime
 
+- ~~Local OpenAI-compatible `/v1` API adapter for external chat UIs, with health/model/chat endpoints and SSE streaming.~~ **COMPLETED 2026-08-02**
 - Interactive local Assistant Mode uses Ollama with configurable model and persona.
 - Persona instructions are loaded through a dedicated persona layer with neutral fallback behavior.
 - Policy, persona, retrieval, provenance/introspection, and command parsing remain separate concerns.

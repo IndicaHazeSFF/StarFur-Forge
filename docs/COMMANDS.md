@@ -72,6 +72,24 @@ Persona files control presentation and style only. Memory retrieval, policy, saf
 commands, proposals, and provenance remain engine responsibilities. If the file is
 missing, unreadable, empty, or invalid, StarFur uses a neutral built-in persona.
 
+## External Web UI API
+
+Run the local OpenAI-compatible Assistant API:
+
+    python starfur.py serve
+
+        python starfur.py serve \
+  	--host 0.0.0.0 \
+  	--port 8001 \
+  	--api-key starfur-local
+
+Endpoints:
+
+    GET  /health
+    GET  /v1/models
+    POST /v1/chat/completions
+
+In OpenWebUI, add an OpenAI connection with base URL `http://127.0.0.1:8000/v1` and model `starfur-assistant`. The adapter preserves StarFur persona, retrieval, policy, proposals, and session state; it does not expose SQLite or Chroma. Use `--api-key <token>` for a bearer token. If OpenWebUI runs in Docker or another network namespace, bind explicitly with `--host 0.0.0.0` and use the host gateway address; do not expose an unauthenticated server beyond the local machine. Streaming uses OpenAI-compatible SSE chunks.
 ## Runtime Ollama Model Selection
 
 `config/assistant.json` `chat_model` is the startup default. Inside Assistant Mode, select from models installed locally in Ollama without restarting:

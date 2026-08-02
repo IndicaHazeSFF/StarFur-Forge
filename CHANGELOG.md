@@ -1,3 +1,10 @@
+## 2026-08-02 - Local OpenAI-compatible Assistant API
+
+- Added `pipeline/api.py` with a dependency-free local HTTP adapter exposing `/health`, `/v1/models`, and `/v1/chat/completions`.
+- Added `python starfur.py serve` with host, port, config, optional bearer-token, and quiet access-log options.
+- Preserved AssistantSession persona, retrieval, policy, proposal, model, and streaming behavior; external clients receive OpenAI-compatible JSON or SSE responses.
+- Added deterministic HTTP tests using fake sessions; no database or Chroma endpoints are exposed.
+- No schema, migration, SQLite, Chroma, or production-data changes.
 ## 2026-08-01 - Direct-memory grounding reliability
 
 - Fixed selected assistant-memory prompt context in `pipeline/context.py` to include non-empty `details` as well as summaries; retrieval already ranked details but chat had not received them.
