@@ -1,4 +1,4 @@
-# StarFur Forge — Command Reference
+# StarFur Forge ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Command Reference
 
 Temporary operator reference while StarFur Forge is under development.
 
@@ -72,16 +72,15 @@ Persona files control presentation and style only. Memory retrieval, policy, saf
 commands, proposals, and provenance remain engine responsibilities. If the file is
 missing, unreadable, empty, or invalid, StarFur uses a neutral built-in persona.
 
+## Assistant Memory Associations
+
+Assistant-memory associations are currently an engine/API foundation rather than an interactive command. They link two active assistant memories within one domain using explicit provenance, type, and bounded strength. Retrieval may include one-hop related context only when one endpoint directly matches the user request; `context stats` shows the association contribution in its retrieval reasons. Associations are never inferred or mutated during normal chat.
+
 ## External Web UI API
 
 Run the local OpenAI-compatible Assistant API:
 
     python starfur.py serve
-
-        python starfur.py serve \
-  	--host 0.0.0.0 \
-  	--port 8001 \
-  	--api-key starfur-local
 
 Endpoints:
 
@@ -89,7 +88,8 @@ Endpoints:
     GET  /v1/models
     POST /v1/chat/completions
 
-In OpenWebUI, add an OpenAI connection with base URL `http://127.0.0.1:8000/v1` and model `starfur-assistant`. The adapter preserves StarFur persona, retrieval, policy, proposals, and session state; it does not expose SQLite or Chroma. Use `--api-key <token>` for a bearer token. If OpenWebUI runs in Docker or another network namespace, bind explicitly with `--host 0.0.0.0` and use the host gateway address; do not expose an unauthenticated server beyond the local machine. Streaming uses OpenAI-compatible SSE chunks.
+In OpenWebUI running in Docker, add an OpenAI connection with base URL `http://host.docker.internal:8001/v1` and model `starfur-assistant`; use the port selected when starting `serve`. The adapter preserves StarFur persona, retrieval, policy, proposals, and session state; it does not expose SQLite or Chroma. Use `--api-key <token>` for a bearer token. If OpenWebUI runs in Docker or another network namespace, bind explicitly with `--host 0.0.0.0` and use the host gateway address; do not expose an unauthenticated server beyond the local machine. Streaming uses OpenAI-compatible SSE chunks.
+
 ## Runtime Ollama Model Selection
 
 `config/assistant.json` `chat_model` is the startup default. Inside Assistant Mode, select from models installed locally in Ollama without restarting:

@@ -35,6 +35,11 @@ ASSISTANT_MEMORY_TYPE_GUIDANCE = {
 }
 ASSISTANT_RETENTIONS = ("session", "short_term", "long_term")
 ASSISTANT_MEMORY_STATUSES = ("active", "superseded", "forgotten")
+ASSISTANT_ASSOCIATION_TYPES = (
+    "related", "supports", "conflicts", "topic", "temporal",
+)
+ASSISTANT_ASSOCIATION_STATUSES = ("active", "inactive")
+ASSOCIATION_RETRIEVAL_WEIGHT = 0.15
 
 def _validated(value, allowed, label):
     if value not in allowed:
@@ -44,6 +49,8 @@ def _validated(value, allowed, label):
 def normalize_memory_type(value): return _validated(value, ASSISTANT_MEMORY_TYPES, "memory_type")
 def normalize_retention(value): return _validated(value, ASSISTANT_RETENTIONS, "retention")
 def normalize_memory_status(value): return _validated(value, ASSISTANT_MEMORY_STATUSES, "status")
+def normalize_association_type(value): return _validated(value, ASSISTANT_ASSOCIATION_TYPES, "association_type")
+def normalize_association_status(value): return _validated(value, ASSISTANT_ASSOCIATION_STATUSES, "association_status")
 
 def assistant_memory_type_prompt():
     """Return the canonical extraction taxonomy in stable stored-type order."""
@@ -56,7 +63,7 @@ def assistant_memory_type_prompt():
 
 def normalize_proposal_text(value):
     text = unicodedata.normalize("NFKC", str(value)).casefold().strip()
-    text = text.replace("’", "'").replace("“", "").replace("”", "")
+    text = text.replace("Ã¢â‚¬â„¢", "'").replace("Ã¢â‚¬Å“", "").replace("Ã¢â‚¬Â", "")
     text = re.sub(r"\s+", " ", text)
     return re.sub(r"[.!?;:,]+$", "", text).strip()
 
@@ -176,6 +183,27 @@ def ensure_assistant_memories_schema(connection):
     if "memory_id" not in evidence_columns: connection.execute("ALTER TABLE assistant_memory_proposal_evidence ADD COLUMN memory_id INTEGER")
     connection.execute("CREATE INDEX IF NOT EXISTS idx_assistant_proposal_evidence_memory ON assistant_memory_proposal_evidence(memory_id)")
     connection.execute("CREATE INDEX IF NOT EXISTS idx_assistant_proposal_evidence_proposal ON assistant_memory_proposal_evidence(proposal_id)")
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS assistant_memory_associations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            domain TEXT NOT NULL,
+            source_memory_id INTEGER NOT NULL,
+            target_memory_id INTEGER NOT NULL,
+            association_type TEXT NOT NULL,
+            strength REAL NOT NULL DEFAULT 0.5,
+            source TEXT NOT NULL DEFAULT 'manual',
+            status TEXT NOT NULL DEFAULT 'active',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            CHECK (source_memory_id < target_memory_id),
+            CHECK (strength >= 0 AND strength <= 1),
+            UNIQUE(domain, source_memory_id, target_memory_id, association_type),
+            FOREIGN KEY(source_memory_id) REFERENCES assistant_memories(id),
+            FOREIGN KEY(target_memory_id) REFERENCES assistant_memories(id)
+        )
+    """)
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_assistant_associations_source ON assistant_memory_associations(domain, source_memory_id, status)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_assistant_associations_target ON assistant_memory_associations(domain, target_memory_id, status)")
 
 def connect():
     """
@@ -733,41 +761,191 @@ def list_assistant_memories(domain="personal", status="active", memory_type=None
     return [dict(row) for row in rows]
 
 
-def retrieve_assistant_memories(query, domain="personal", limit=8):
-    """Compatibility wrapper for the deterministic retriever."""
-    if not query or not query.strip():
-        raise ValueError("query must not be empty")
-    if limit <= 0: raise ValueError("limit must be positive")
-    tokens = set(re.findall(r"[\w']+", normalize_proposal_text(query)))
+def _assistant_association_pair(source_memory_id, target_memory_id):
+    if isinstance(source_memory_id, bool) or isinstance(target_memory_id, bool):
+        raise ValueError("memory IDs must be integers")
+    try:
+        source_memory_id = int(source_memory_id)
+        target_memory_id = int(target_memory_id)
+    except (TypeError, ValueError) as error:
+        raise ValueError("memory IDs must be integers") from error
+    if source_memory_id == target_memory_id:
+        raise ValueError("An association requires two distinct memories")
+    return tuple(sorted((source_memory_id, target_memory_id)))
+
+
+def create_assistant_memory_association(
+    source_memory_id, target_memory_id, association_type, *, strength=0.5,
+    source="manual", domain="personal",
+):
+    """Create a domain-scoped, undirected association between two memories."""
+    domain = normalize_domain(domain)
+    source_memory_id, target_memory_id = _assistant_association_pair(source_memory_id, target_memory_id)
+    association_type = normalize_association_type(association_type)
+    if isinstance(strength, bool) or not isinstance(strength, (int, float)) or not 0 <= strength <= 1:
+        raise ValueError("association strength must be between 0 and 1")
+    if not isinstance(source, str) or not source.strip():
+        raise ValueError("association source must be a non-empty string")
+    with connect() as connection:
+        memory_count = connection.execute(
+            "SELECT COUNT(*) FROM assistant_memories WHERE domain = ? AND id IN (?, ?)",
+            (domain, source_memory_id, target_memory_id),
+        ).fetchone()[0]
+        if memory_count != 2:
+            raise ValueError("Both memories must exist in the active domain")
+        cursor = connection.execute(
+            """INSERT INTO assistant_memory_associations
+            (domain, source_memory_id, target_memory_id, association_type, strength, source)
+            VALUES (?, ?, ?, ?, ?, ?)""",
+            (domain, source_memory_id, target_memory_id, association_type, float(strength), source.strip()),
+        )
+        connection.commit()
+    return cursor.lastrowid
+
+
+def get_assistant_memory_association(association_id, domain="personal"):
+    with connect() as connection:
+        row = connection.execute(
+            "SELECT * FROM assistant_memory_associations WHERE id = ? AND domain = ?",
+            (association_id, normalize_domain(domain)),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def list_assistant_memory_associations(domain="personal", memory_id=None, status="active", limit=100):
+    domain = normalize_domain(domain)
+    if limit <= 0:
+        raise ValueError("limit must be positive")
+    clauses = ["domain = ?"]
+    params = [domain]
+    if status is not None:
+        clauses.append("status = ?")
+        params.append(normalize_association_status(status))
+    if memory_id is not None:
+        if isinstance(memory_id, bool):
+            raise ValueError("memory ID must be an integer")
+        try:
+            memory_id = int(memory_id)
+        except (TypeError, ValueError) as error:
+            raise ValueError("memory ID must be an integer") from error
+        clauses.append("(source_memory_id = ? OR target_memory_id = ?)")
+        params.extend((memory_id, memory_id))
+    params.append(limit)
+    with connect() as connection:
+        rows = connection.execute(
+            f"SELECT * FROM assistant_memory_associations WHERE {' AND '.join(clauses)} ORDER BY created_at, id LIMIT ?",
+            params,
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def update_assistant_memory_association(association_id, *, domain="personal", strength=None, source=None, status=None):
+    changes = {}
+    if strength is not None:
+        if isinstance(strength, bool) or not isinstance(strength, (int, float)) or not 0 <= strength <= 1:
+            raise ValueError("association strength must be between 0 and 1")
+        changes["strength"] = float(strength)
+    if source is not None:
+        if not isinstance(source, str) or not source.strip():
+            raise ValueError("association source must be a non-empty string")
+        changes["source"] = source.strip()
+    if status is not None:
+        changes["status"] = normalize_association_status(status)
+    if not changes:
+        raise ValueError("No association changes supplied")
+    assignments = ", ".join(f"{column} = ?" for column in changes)
+    with connect() as connection:
+        cursor = connection.execute(
+            f"UPDATE assistant_memory_associations SET {assignments}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND domain = ?",
+            [*changes.values(), association_id, normalize_domain(domain)],
+        )
+        connection.commit()
+    if not cursor.rowcount:
+        raise ValueError("Association not found")
+    return get_assistant_memory_association(association_id, domain=domain)
+
+
+def deactivate_assistant_memory_association(association_id, domain="personal"):
+    return update_assistant_memory_association(association_id, domain=domain, status="inactive")
+
+
+def _rank_assistant_memories(query, domain):
+    normalized_query = normalize_proposal_text(query)
+    tokens = set(re.findall(r"[\w']+", normalized_query))
     rows = list_assistant_memories(domain=domain, status="active", limit=1000)
-    ranked = []
+    rows_by_id = {row["id"]: row for row in rows}
+    ranked = {}
+    direct_ids = set()
     for row in rows:
-        text = normalize_proposal_text(" ".join(str(row.get(k) or "") for k in ("subject", "summary", "details")))
-        row_tokens = set(re.findall(r"[\w']+", text)); overlap = len(tokens & row_tokens)
-        phrase = normalize_proposal_text(query) in text
-        if not overlap and not phrase: continue
+        text = normalize_proposal_text(" ".join(str(row.get(key) or "") for key in ("subject", "summary", "details")))
+        row_tokens = set(re.findall(r"[\w']+", text))
+        overlap = len(tokens & row_tokens)
+        phrase = normalized_query in text
+        if not overlap and not phrase:
+            continue
         score = overlap / max(len(tokens), 1) + (0.5 if phrase else 0) + float(row.get("confidence") or 0) * 0.2 + float(row.get("importance") or 0) * 0.1
         reasons = [f"{overlap} keyword overlap"]
-        if phrase: reasons.append("exact phrase")
-        ranked.append({"memory": row, "score": round(score, 6), "reasons": reasons})
-    ranked.sort(key=lambda item: (-item["score"], -int(item["memory"]["id"])))
-    return ranked[:limit]
+        if phrase:
+            reasons.append("exact phrase")
+        ranked[row["id"]] = {"memory": row, "score": score, "reasons": reasons}
+        direct_ids.add(row["id"])
+
+    if direct_ids:
+        for association in list_assistant_memory_associations(domain=domain, status="active", limit=10000):
+            source_id = association["source_memory_id"]
+            target_id = association["target_memory_id"]
+            if source_id not in direct_ids and target_id not in direct_ids:
+                continue
+            strength = float(association["strength"])
+            boost = strength * ASSOCIATION_RETRIEVAL_WEIGHT
+            if boost <= 0:
+                continue
+            for matched_id, related_id in ((source_id, target_id), (target_id, source_id)):
+                if matched_id not in direct_ids or related_id not in rows_by_id:
+                    continue
+                item = ranked.setdefault(related_id, {"memory": rows_by_id[related_id], "score": 0.0, "reasons": []})
+                item["score"] += boost
+                item["reasons"].append(
+                    f"association with memory #{matched_id}: {association['association_type']} "
+                    f"(strength {strength:.2f}; +{boost:.3f})"
+                )
+
+    output = []
+    for item in ranked.values():
+        output.append({**item, "score": round(item["score"], 6)})
+    return sorted(output, key=lambda item: (-item["score"], -int(item["memory"]["id"])))
+
+
+def retrieve_assistant_memories(query, domain="personal", limit=8):
+    """Return deterministic active-memory matches, including bounded association context."""
+    if not query or not query.strip():
+        raise ValueError("query must not be empty")
+    if limit <= 0:
+        raise ValueError("limit must be positive")
+    return _rank_assistant_memories(query, normalize_domain(domain))[:limit]
+
 
 def explain_assistant_memory_retrieval(query, domain="personal", limit=8):
-    selected = retrieve_assistant_memories(query, domain=domain, limit=limit)
+    if not query or not query.strip():
+        raise ValueError("query must not be empty")
+    if limit <= 0:
+        raise ValueError("limit must be positive")
+    domain = normalize_domain(domain)
+    ranked = _rank_assistant_memories(query, domain)
+    selected = ranked[:limit]
     selected_ids = {item["memory"]["id"] for item in selected}
-    candidates = list_assistant_memories(domain=domain, status="active", limit=1000)
+    ranked_by_id = {item["memory"]["id"]: item for item in ranked}
     not_selected = []
-    query_tokens = set(re.findall(r"[\w']+", normalize_proposal_text(query)))
-    for row in candidates:
-        if row["id"] in selected_ids: continue
-        text = normalize_proposal_text(" ".join(str(row.get(k) or "") for k in ("subject", "summary", "details")))
-        overlap = len(query_tokens & set(re.findall(r"[\w']+", text)))
-        score = round(overlap / max(len(query_tokens), 1) + float(row.get("confidence") or 0) * 0.2 + float(row.get("importance") or 0) * 0.1, 6)
-        not_selected.append({"memory": row, "score": score, "reason": "below selection cutoff"})
+    for row in list_assistant_memories(domain=domain, status="active", limit=1000):
+        if row["id"] in selected_ids:
+            continue
+        item = ranked_by_id.get(row["id"])
+        if item is None:
+            not_selected.append({"memory": row, "score": 0.0, "reason": "no lexical or association match"})
+        else:
+            not_selected.append({"memory": row, "score": item["score"], "reason": "below selection cutoff", "reasons": item["reasons"]})
     not_selected.sort(key=lambda item: (-item["score"], -int(item["memory"]["id"])))
     return {"selected": selected, "not_selected": not_selected}
-
 def search_assistant_memories(query, domain="personal", status="active", limit=20):
     if not query or not query.strip():
         raise ValueError("query must not be empty")
@@ -938,5 +1116,3 @@ def upsert_assistant_memory_proposal(proposal, domain="personal", source_referen
         connection.execute("INSERT INTO assistant_memory_proposal_evidence (proposal_id, source, source_reference, evidence_hash, raw_excerpt) VALUES (?, ?, ?, ?, ?)", (proposal_id, source, source_reference, evidence_hash, observation_text or proposal.get("summary")) )
         connection.commit()
     return {"proposal_id": proposal_id, "action": "created", "previous_evidence_count": 0, "evidence_count": 1}
-
-

@@ -8,8 +8,8 @@ This is the authoritative roadmap. `ROADMAP.original.md` preserves the previous 
 
 StarFur Forge is a local-first memory and assistant engine with two closely related uses:
 
-1. **Assistant Mode** — a configurable persona using personal/project memory safely and transparently.
-2. **Crown of Claws Mode** — manuscript analysis and narrative memory for the multi-POV novel.
+1. **Assistant Mode** â€” a configurable persona using personal/project memory safely and transparently.
+2. **Crown of Claws Mode** â€” manuscript analysis and narrative memory for the multi-POV novel.
 
 The engine should remain shared. Persona, domain, retrieval, provider, and policy boundaries should make the modes configurable without duplicating the core.
 
@@ -18,7 +18,7 @@ The engine should remain shared. Persona, domain, retrieval, provider, and polic
 ### Manuscript and lore pipeline
 
 - Prechunker-generated `canon/chapters/*.md` is the authoritative manuscript analysis corpus.
-- Prechunker → Mr. Chonker → Mr. Annotator pipeline is operational.
+- Prechunker â†’ Mr. Chonker â†’ Mr. Annotator pipeline is operational.
 - Chunking and annotation have defensive validation, retries, failure recording, and regression tests.
 - Structured lore memory preserves source provenance and performs normal source cleanup.
 - Semantic indexing supports invalidation/version changes without destroying the normal incremental fast path.
@@ -61,7 +61,7 @@ The engine should remain shared. Persona, domain, retrieval, provider, and polic
 
 ## Near-term assistant roadmap
 
-### Stage A — Provider and context boundaries
+### Stage A â€” Provider and context boundaries
 
 - ~~Complete runtime model selection.~~ **COMPLETED 2026-08-01**
 - Add a narrow text-provider interface after model selection is stable; preserve Ollama compatibility and fake-client tests.
@@ -69,16 +69,17 @@ The engine should remain shared. Persona, domain, retrieval, provider, and polic
 - Add provider/model information to diagnostics and clear unavailable-provider errors.
 - Do not add automatic routing or dynamic context budgets yet.
 
-### Stage B — Assistant quality
+### Stage B â€” Assistant quality
 
 - ~~Ensure direct-answer grounding includes selected memory details and keeps persona flavor after, not instead of, the factual answer.~~ **COMPLETED 2026-08-01**
 - Improve retrieval scoring and evaluation fixtures.
+- ~~Add a first additive association layer for domain-scoped assistant-memory edges and explainable one-hop deterministic retrieval context.~~ **COMPLETED 2026-08-02**
 - Add conservative proposal classification improvements and correction handling.
 - Add optional proposal-review usability improvements.
 - Test persona quality separately from factual grounding.
 - Add bounded long-duration regression/simulation tests before changing retrieval algorithms.
 
-### Stage C — Multiple personas and integrations
+### Stage C â€” Multiple personas and integrations
 
 - Support multiple configured personas without runtime switching until the configuration contract is proven.
 - Add LM Studio as a provider adapter if it improves accessibility for testers.
@@ -129,7 +130,7 @@ The first slice should use explicit configuration and fake-provider tests. Autom
 
 ## Future research
 
-- Semantic/association memory layer and later temporal relationships.
+- Extend the completed association foundation only after benchmarked usage: temporal relationships, carefully bounded multi-hop traversal, and richer relationship provenance.
 - Emotional state as a separate contextual layer, not arbitrary permanent fields on every memory.
 - Discussion sandbox with seeded memories, multiple personas, scheduled events, deterministic seeds, and retrieval/proposal metrics.
 - Hybrid deterministic/semantic retrieval experiments against the checked-in benchmark corpus.

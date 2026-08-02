@@ -1,3 +1,10 @@
+## 2026-08-02 - Assistant-memory association foundation
+
+- Added additive `assistant_memory_associations` SQLite storage with explicit type, bounded strength, source provenance, soft status, domain isolation, and indexes; no existing memory, proposal, or Chroma data is rewritten.
+- Added create/read/list/update/deactivate association primitives and a deterministic, one-hop retrieval boost from direct active-memory matches. Ranking diagnostics now identify association type, anchor memory, strength, and score contribution.
+- Added temporary-SQLite regression tests for canonicalized/domain-safe associations, deterministic association-aware retrieval/explanations, deactivation, explicit updates, and read-only retrieval behavior.
+- Files modified: `pipeline/db.py`, `tests/test_assistant_associations.py`, `tests/test_assistant.py`, `AGENTS.md`, `CHANGELOG.md`, `ROADMAP.md`, and `docs/COMMANDS.md`.
+
 ## 2026-08-02 - Local OpenAI-compatible Assistant API
 
 - Added `pipeline/api.py` with a dependency-free local HTTP adapter exposing `/health`, `/v1/models`, and `/v1/chat/completions`.
@@ -188,7 +195,7 @@
 - Behavior: observation-aware identity reinforces pending proposals, duplicate evidence is idempotent, and first summary/details are preserved.
 - Verification: full unittest suite run; no production sync or database/Chroma mutation.
 
-## 2026-07-28 — Deterministic assistant proposal idempotency
+## 2026-07-28 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Deterministic assistant proposal idempotency
 
 - Purpose: prevent duplicate pending assistant proposals while preserving repeated evidence and provenance.
 - Modified: pipeline/db.py, pipeline/assistant.py, tests/test_assistant_proposal_idempotency.py, AGENTS.md, and CHANGELOG.md.
@@ -196,7 +203,7 @@
 - Verification: python -m unittest discover -s tests -q (46 tests passed). No production sync, memory mutation, Chroma rebuild, or full analysis was run.
 
 
-## 2026-07-28 — Fix stale assistant proposal notifications
+## 2026-07-28 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Fix stale assistant proposal notifications
 
 - Purpose: prevent previously created proposals from being announced after unrelated commands or turns.
 - Modified: pipeline/assistant.py, tests/test_assistant.py, AGENTS.md, and CHANGELOG.md.
@@ -204,7 +211,7 @@
 - Verification: python -m unittest discover -s tests -q (43 tests passed).
 
 
-## 2026-07-28 — Durable assistant proposal storage foundation
+## 2026-07-28 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Durable assistant proposal storage foundation
 
 - Purpose: persist validated assistant proposals for restart-safe review without changing lore proposals or auto-approving memories.
 - Modified: pipeline/db.py, pipeline/init_db.py, pipeline/assistant.py, tests/test_assistant_proposals.py, AGENTS.md, and CHANGELOG.md.
@@ -212,7 +219,7 @@
 - Verification: python -m unittest discover -s tests -q (42 tests passed). No production sync, memory mutation, Chroma rebuild, or full analysis was run.
 
 
-## 2026-07-28 — Grounded assistant memory proposal extraction
+## 2026-07-28 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Grounded assistant memory proposal extraction
 
 - Purpose: improve proposal quality without weakening validation or allowing assistant roleplay to become user memory.
 - Modified: pipeline/assistant.py, tests/test_assistant.py, AGENTS.md, and CHANGELOG.md.
@@ -220,7 +227,7 @@
 - Verification: python -m unittest discover -s tests -q (40 tests passed). No production sync, memory mutation, Chroma rebuild, or full analysis was run.
 
 
-## 2026-07-28 — Proposal-path retrieval diagnostics
+## 2026-07-28 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Proposal-path retrieval diagnostics
 
 - Purpose: expose why conservative assistant memory proposals are accepted, rejected, empty, or unavailable without changing persistence behavior.
 - Modified: pipeline/assistant.py, tests/test_assistant.py, AGENTS.md, and CHANGELOG.md.
@@ -228,7 +235,7 @@
 - Verification: python -m unittest discover -s tests -q (40 tests passed). No production sync, memory mutation, Chroma rebuild, or full analysis was run.
 
 
-## 2026-07-28 — Balance grounded answers with persona expression
+## 2026-07-28 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Balance grounded answers with persona expression
 
 - Purpose: preserve the successful factual grounding fix without suppressing natural persona warmth.
 - Modified: config/assistant_policy.md, tests/test_assistant.py, AGENTS.md, and CHANGELOG.md.
@@ -236,7 +243,7 @@
 - Verification: python -m unittest discover -s tests -q (40 tests passed).
 
 
-## 2026-07-28 — Engine-owned assistant grounding policy
+## 2026-07-28 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Engine-owned assistant grounding policy
 
 - Purpose: ensure replaceable personas cannot override factual grounding or replace direct answers with unrelated roleplay.
 - Modified: pipeline/assistant.py, config/assistant.json, config/assistant_policy.md, tests/test_assistant.py, AGENTS.md, and CHANGELOG.md.
@@ -244,7 +251,7 @@
 - Verification: python -m unittest discover -s tests -q (39 tests passed). No production sync, memory mutation, Chroma rebuild, or full analysis was run.
 
 
-## 2026-07-28 — Retrieval debugging and observability
+## 2026-07-28 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Retrieval debugging and observability
 
 - Purpose: make assistant retrieval, context assembly, commands, and model grounding inspectable before further memory-quality changes.
 - Modified: pipeline/retrieval_debug.py, pipeline/assistant.py, starfur.py, config/assistant.json, tests/test_assistant.py, AGENTS.md, and CHANGELOG.md.
@@ -252,7 +259,7 @@
 - Verification: python -m unittest discover -s tests -v (38 tests passed). No production sync, memory mutation, Chroma rebuild, or full analysis was run.
 
 
-## 2026-07-27 — Stage 3 explicit memory controls and proposals
+## 2026-07-27 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Stage 3 explicit memory controls and proposals
 
 - Purpose: add user-controlled assistant memory commands and conservative review-only proposals.
 - Modified: pipeline/assistant.py, config/assistant.json, tests/test_assistant.py, AGENTS.md, and CHANGELOG.md.
@@ -260,7 +267,7 @@
 - Verification: python -m unittest discover -s tests -v (36 tests passed). No production sync, memory mutation, Chroma rebuild, or full analysis was run.
 
 
-## 2026-07-27 — Stage 2 conversational Assistant Mode
+## 2026-07-27 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Stage 2 conversational Assistant Mode
 
 - Purpose: provide the first usable local chat loop while keeping persona, memory storage, routing, and future services separate.
 - Modified: pipeline/assistant.py, starfur.py, config/assistant.json, persona/default.md, tests/test_assistant.py, AGENTS.md, and CHANGELOG.md.
@@ -268,7 +275,7 @@
 - Verification: python -m unittest discover -s tests -v (33 tests passed). No production sync, memory mutation, Chroma rebuild, or full analysis was run.
 
 
-## 2026-07-27 — Assistant structured memory foundation
+## 2026-07-27 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Assistant structured memory foundation
 
 - Purpose: add Sprint Stage 1.2 personal assistant memory storage without coupling it to fictional lore entities/facts.
 - Modified: pipeline/db.py, pipeline/init_db.py, tests/test_assistant_memory.py, AGENTS.md, and CHANGELOG.md.
@@ -276,7 +283,7 @@
 - Verification: python -m unittest discover -s tests -v (29 tests passed). No production sync, SQLite/Chroma mutation, or rebuild was run.
 
 
-## 2026-07-27 — POSIX-safe targeted reanalysis test
+## 2026-07-27 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â POSIX-safe targeted reanalysis test
 
 - Purpose: make manifest-entry verification portable across Windows and WSL/Linux path separators.
 - Modified: tests/test_targeted_reanalysis.py and CHANGELOG.md.
@@ -284,7 +291,7 @@
 - Verification: python -m unittest discover -s tests -v (26 tests passed).
 
 
-## 2026-07-27 — Additive memory domains
+## 2026-07-27 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Additive memory domains
 
 - Purpose: establish explicit personal/project namespaces without separating the StarFur Forge engine or changing existing Crown of Claws behavior.
 - Modified: pipeline/domains.py, pipeline/db.py, pipeline/init_db.py, pipeline/ingest.py, pipeline/rag.py, tests/test_memory_domains.py, AGENTS.md, and CHANGELOG.md.
@@ -292,7 +299,7 @@
 - Verification: python -m unittest discover -s tests -v (26 tests passed). No production sync, SQLite mutation, or Chroma rebuild was run.
 
 
-## 2026-07-27 — Targeted chapter reanalysis command
+## 2026-07-27 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Targeted chapter reanalysis command
 
 - Purpose: provide a safe manual retry path for one authoritative chapter without reprocessing unrelated sources or rebuilding semantic memory.
 - Modified: pipeline/sync.py, starfur.py, tests/test_targeted_reanalysis.py, AGENTS.md, and CHANGELOG.md.
@@ -300,7 +307,7 @@
 - Verification: python -m unittest discover -s tests -v. No production sync or database mutation was run.
 
 
-## 2026-07-27 — Conservative proposal normalization and duplicate review
+## 2026-07-27 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Conservative proposal normalization and duplicate review
 
 - Purpose: reduce trivial duplicate proposals without silently merging semantically ambiguous names.
 - Modified: pipeline/db.py, pipeline/proposal_pipeline.py, tests/test_proposal_normalization.py, AGENTS.md, and CHANGELOG.md.
@@ -308,7 +315,7 @@
 - Verification: python -m unittest discover -s tests -v. No sync, production SQLite mutation, Chroma rebuild, or full analysis was run.
 
 
-## 2026-07-27 — Annotation classification guidance and output ceiling
+## 2026-07-27 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Annotation classification guidance and output ceiling
 
 - Purpose: reduce observed fact-type and subject-attribution errors while allowing longer valid annotation responses.
 - Modified: pipeline/annotator.py, tests/test_fact_classification.py, AGENTS.md, and CHANGELOG.md.
@@ -316,7 +323,7 @@
 - Verification: python -m unittest discover -s tests -v. No sync, production SQLite mutation, Chroma rebuild, or full analysis was run.
 
 
-## 2026-07-27 — Fact durability/type classification
+## 2026-07-27 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Fact durability/type classification
 
 - Purpose: preserve extracted facts while recording whether each is durable, behavioral, physical, procedural/system, or temporary scene-state knowledge.
 - Modified: pipeline/db.py, pipeline/init_db.py, pipeline/annotator.py, pipeline/proposal_pipeline.py, tests/test_fact_classification.py, AGENTS.md, and CHANGELOG.md.
@@ -324,7 +331,7 @@
 - Verification: python -m unittest discover -s tests -v (16 tests passed). No sync, production SQLite mutation, Chroma rebuild, or full analysis was run.
 
 
-## 2026-07-27 — Nested annotation validation and output ceiling
+## 2026-07-27 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Nested annotation validation and output ceiling
 
 - Purpose: prevent valid-but-wrongly-shaped Qwen JSON from reaching extraction code and cap runaway annotation generation.
 - Modified: pipeline/annotator.py and tests/test_annotator_retry.py.
@@ -332,7 +339,7 @@
 - Verification: python -m unittest discover -s tests -v (13 tests passed). No sync, SQLite mutation, Chroma rebuild, or full analysis was run.
 
 
-## 2026-07-26 — Hardened annotation parsing
+## 2026-07-26 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Hardened annotation parsing
 
 - Purpose: tolerate transient malformed or empty model output without changing extraction semantics or unnecessarily aborting later chunks.
 - Modified: pipeline/annotator.py, pipeline/proposal_pipeline.py, tests/test_annotator_retry.py, and tests/test_annotation_failure_isolation.py.
@@ -340,7 +347,7 @@
 - Verification: python -m unittest discover -s tests -v (11 tests passed). No sync, SQLite mutation, Chroma rebuild, or full analysis was run.
 
 
-## 2026-07-26 — Expanded pipeline surgery guidance
+## 2026-07-26 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Expanded pipeline surgery guidance
 
 - Purpose: document durable pipeline contracts, provenance rules, invalidation behavior, migration cautions, and service-free testing practices for future Python surgery sessions.
 - Modified: AGENTS.md and CHANGELOG.md.
@@ -348,7 +355,7 @@
 - Verification: documentation inspection only; no sync, SQLite mutation, Chroma rebuild, or full analysis was run.
 
 
-## 2026-07-26 — Safe corpus-repair preparation
+## 2026-07-26 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Safe corpus-repair preparation
 
 - Purpose: repair the canonical manuscript-analysis path and prepare safe reprocessing without running destructive repair.
 - Modified: pipeline/chunker.py, pipeline/sync.py, pipeline/ingest.py, and regression tests under tests/.

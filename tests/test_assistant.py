@@ -86,9 +86,12 @@ class AssistantTests(unittest.TestCase):
         updated = []
         config = type("Config", (), {"chat_model": "test", "domain": "personal", "max_session_messages": 4, "max_memories": 2, "memory_policy": "off"})()
         session = AssistantSession(config, "Persona", chat=lambda **kwargs: {"message": {"content": "unused"}}, memory_creator=lambda **kwargs: created.append(kwargs) or 7, memory_searcher=lambda *args, **kwargs: [{"id": 7}], memory_updater=lambda *args, **kwargs: updated.append((args, kwargs)))
-        self.assertIn("Remembered", session.respond("remember this: I prefer foxes"))
-        self.assertEqual(created[0]["source"], "explicit:user")
-        self.assertIn("Forgotten", session.respond("forget this: foxes"))
+        # This fake CRUD session has no persisted memory row. Keep the command
+        # test independent of the live database used to resolve public IDs.
+        with patch("pipeline.assistant.assistant_public_id", return_value="M-007"):
+            self.assertIn("Remembered", session.respond("remember this: I prefer foxes"))
+            self.assertEqual(created[0]["source"], "explicit:user")
+            self.assertIn("Forgotten", session.respond("forget this: foxes"))
         self.assertEqual(updated[0][1]["status"], "forgotten")
 
     def test_proposals_are_validated_and_not_persisted(self):
