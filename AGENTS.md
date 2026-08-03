@@ -3,7 +3,7 @@
 ## Working-directory and execution rules
 
 - Run Python commands from the repository root: C:/Users/roger/Documents/Codex/StarFur Forge (or the equivalent project root in WSL).
-- `ROADMAP.md` is the v3 authoritative platform roadmap; `ROADMAP.v2.md` and `ROADMAP.original.md` are preserved historical versions.
+- `ROADMAP.md` is the v4 authoritative platform roadmap; `ROADMAP.v3.md`, `ROADMAP.v2.md`, and `ROADMAP.original.md` are preserved historical versions.
 - Prefer package execution such as python -m pipeline.ingest and python -m unittest discover -s tests -v. Do not execute package modules as loose files when their imports assume the project root.
 - Keep the current local-first integrations intact: Ollama provides annotation/embeddings and Chroma is an external semantic index. Unit tests must not require either service.
 - Treat data/starfur.db, data/sync_manifest.json, data/perf.jsonl, and Chroma as runtime state. Inspect and back up before any repair; do not reset, reinitialize, or delete them as a shortcut.
@@ -123,6 +123,13 @@ Factory reset treats a missing Chroma collection as an already-empty semantic st
 
 Assistant chat uses compact public record references (`M-###` and `P-###`) while SQLite numeric IDs remain internal provenance identifiers. Numeric references remain accepted for backward compatibility.
 
+### Persona Runtime invariants
+
+The long-term persona architecture has three state layers: static identity, slowly changing dynamic personality, and derived momentary state. The runtime produces a bounded `BehaviorContext` for `ContextManager`; it does not replace engine policy, factual grounding, provenance, permissions, or canonical memory.
+
+Dynamic interests, habits, relationships, skills, and confidence are namespaced, bounded, provenance-aware, and inspectable. Momentary emotion/energy/attention/activity is derived and decays; it must not be stored as permanent facts on every memory. State transitions require explicit sources and must not silently rewrite canonical memories.
+
+User-provided persona packages are declarative and validated by default. Do not execute arbitrary persona behavior code without a future sandbox/permission design. Autonomous learning requires bounded tasks, isolated workspaces, tests or other verification, resource limits, and user-visible reports before increasing skill confidence or changing production state.
 ### Persona layer
 
 Assistant persona presentation is loaded through `pipeline.persona.Persona` and `render_prompt()`. Persona configuration controls style only; retrieval, provenance, policy, safety, commands, and proposals remain in assistant/engine code. Missing or invalid persona files use the neutral fallback.
@@ -138,6 +145,7 @@ Assistant Ollama generation options are configuration-owned in `config/assistant
 Interactive `context stats` renders only the latest bounded `AssistantSession` turn snapshot. It must remain read-only: never call a model, rerun retrieval, access SQLite/Chroma, generate proposals, or retain raw prompt/conversation content. Token figures are provider-independent estimates; selected memory IDs, existing retrieval scores/reasons, response latency, first streamed-token timing, and proposal outcomes are captured during the original turn. Phase timings are also captured in the bounded latest-turn snapshot: prompt build, deterministic retrieval, association expansion, proposal processing, provider generation, and total turn time. These are read-only diagnostics and must never trigger another model call or data-store access.
 Interactive Assistant Mode keeps `config/assistant.json` `chat_model` as the startup default and stores later `model use <name>` selections only in `AssistantSession.active_model`. `model list` calls the Ollama Python client model-list API; `model current` and `model use` never invoke chat, create proposals, change history, or touch SQLite/Chroma. All chat, proposal, and proposal-repair calls use the active session model. Per-turn context diagnostics capture the model used at the turn start, so later switching does not rewrite historical stats.
 Chat providers own provider-specific completion and model-list calls. Assistant orchestration owns session state, streaming accumulation, interruption rollback, prompting, proposals, and diagnostics. Do not add provider-specific conditionals back into `AssistantSession`; introduce a provider adapter instead.
+Router/evaluation metrics must be decision-oriented and privacy-aware: record route/provider/model choices, confidence, fallbacks, latency/resource phases, correctness/quality outcomes, and reproducibility metadata in bounded structured events. Raw prompts/responses are opt-in only; never turn instrumentation into unrestricted conversation logging.
 Assistant memory associations are additive, domain-scoped, undirected SQLite edges between two distinct assistant memories. SQLite memory rows remain authoritative; association rows carry type, bounded strength, source provenance, soft status, and timestamps. Deterministic retrieval may add one-hop active association context only from directly matched active memories, using the fixed `ASSOCIATION_RETRIEVAL_WEIGHT` multiplier and an explainable ranking reason. Retrieval never creates, updates, or deactivates associations, and inactive/cross-domain associations must not influence context.
 Deterministic assistant retrieval strips common question scaffolding from both query and memory token matching and ignores one leading/trailing one-word vocative (for example, Murr in What GPU do I have, Murr?). It does not use synonym expansion or semantic fallback in production chat. Diagnostics must label overlap as meaningful keyword overlap; a query with no meaningful terms returns no deterministic matches.
 When a deterministic query has a direct multi-term match, weaker direct one-term matches are excluded before association expansion. This prevents generic partial overlap from filling context, while preserving single-term recall when no stronger lexical match exists.

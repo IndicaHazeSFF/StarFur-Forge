@@ -2,6 +2,7 @@ from pathlib import Path
 import hashlib
 import re
 import sqlite3
+import time
 import unicodedata
 
 from pipeline.domains import DEFAULT_PROJECT_DOMAIN, normalize_domain
@@ -898,7 +899,8 @@ def deactivate_assistant_memory_association(association_id, domain="personal"):
     return update_assistant_memory_association(association_id, domain=domain, status="inactive")
 
 
-def _rank_assistant_memories(query, domain):
+def _rank_assistant_memories(query, domain, timings=None):
+    retrieval_started = time.perf_counter()
     normalized_query = _retrieval_query_text(query)
     tokens = _retrieval_tokens(normalized_query)
     if not tokens:
@@ -940,8 +942,11 @@ def _rank_assistant_memories(query, domain):
             if item["_overlap"] >= 2 or item["_phrase"]
         }
     direct_ids = set(ranked)
+    if timings is not None:
+        timings["retrieval_ms"] = round((time.perf_counter() - retrieval_started) * 1000, 2)
 
     if direct_ids:
+        association_started = time.perf_counter()
         for association in list_assistant_memory_associations(domain=domain, status="active", limit=10000):
             source_id = association["source_memory_id"]
             target_id = association["target_memory_id"]
@@ -961,6 +966,11 @@ def _rank_assistant_memories(query, domain):
                     f"(strength {strength:.2f}; +{boost:.3f})"
                 )
 
+        if timings is not None:
+            timings["association_ms"] = round((time.perf_counter() - association_started) * 1000, 2)
+    elif timings is not None:
+        timings["association_ms"] = 0.0
+
     output = []
     for item in ranked.values():
         output.append({
@@ -971,13 +981,13 @@ def _rank_assistant_memories(query, domain):
     return sorted(output, key=lambda item: (-item["score"], -int(item["memory"]["id"])))
 
 
-def retrieve_assistant_memories(query, domain="personal", limit=8):
+def retrieve_assistant_memories(query, domain="personal", limit=8, *, timings=None):
     """Return deterministic active-memory matches, including bounded association context."""
     if not query or not query.strip():
         raise ValueError("query must not be empty")
     if limit <= 0:
         raise ValueError("limit must be positive")
-    return _rank_assistant_memories(query, normalize_domain(domain))[:limit]
+    return _rank_assistant_memories(query, normalize_domain(domain), timings=timings)[:limit]
 
 
 def explain_assistant_memory_retrieval(query, domain="personal", limit=8):

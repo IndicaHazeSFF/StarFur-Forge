@@ -1,218 +1,211 @@
-# StarFur Forge Roadmap v3
+# StarFur Forge Roadmap v4
 
-**Status:** Resident Intelligence Platform architecture
+**Status:** Resident Intelligence Platform with an executable Persona Runtime
 **Last updated:** 2026-08-03
 
-`ROADMAP.md` is the current authoritative roadmap. `ROADMAP.v2.md` preserves the previous roadmap version, and `ROADMAP.original.md` preserves the original historical roadmap.
+`ROADMAP.md` is authoritative. `ROADMAP.v3.md`, `ROADMAP.v2.md`, and `ROADMAP.original.md` are preserved historical versions.
 
 ## Mission
 
-StarFur Forge is a Resident Intelligence Platform: a persistent, local-first AI operating environment where one or more AI companions live alongside the user, grow with them, and assist through shared memory, context, perception, tools, and controlled automation.
+StarFur Forge is a local-first Resident Intelligence Platform: a persistent environment where one or more companions remember responsibly, develop bounded interests and skills, perceive the user's world with permission, and assist through transparent state, tools, and providers.
 
-StarFur is not merely a chatbot, a model wrapper, or a UI. The language model is one replaceable provider inside a larger continuity system. The product is the resident intelligence: memory that can be inspected and corrected, a persona that can change without owning the data, and an environment where assistance can become present without becoming opaque or uncontrolled.
-
-Every feature should answer:
-
-> Does this make the companion feel more like a persistent resident rather than a chatbot?
+The language model is a replaceable reasoning provider. The companion is the continuity system around it. A persona is not a giant prompt; it is a validated runtime whose current state is rendered into model context.
 
 ## Core architecture
 
 ```text
-Human
-  |
 Shared environment
-  |
+        |
 StarFur Core
-  |-- Memory and retrieval
-  |-- Associations
-  |-- Context and explainability
-  |-- Emotion inference
-  |-- Providers and capability routing
-  |-- Tools and permissions
-  |-- Scheduling and automation
-  |-- Vision and media
-  |
-Persona layer
-  |-- Murr
-  |-- Ship Computer
-  |-- Q
-  |-- Custom personas
-  |
+  |-- memory, provenance, retrieval, associations
+  |-- Persona Runtime
+  |     |-- static identity
+  |     |-- dynamic personality
+  |     |-- momentary state
+  |     |-- behavior and attention rules
+  |     |-- context renderer
+  |-- providers and capability routing
+  |-- tools, permissions, scheduler, learning sandbox
+  |-- vision, media, resident apartment state
+        |
 Presentation clients
-  |-- Terminal
-  |-- OpenWebUI / web API
-  |-- Desktop apartment/avatar
-  |-- Phone, Steam, TUI, future clients
+  |-- terminal / OpenWebUI / API
+  |-- future TUI / dashboard / desktop apartment / phone / Steam
 ```
-
-The core owns memory, retrieval, associations, provider calls, permissions, tools, scheduling, and automation. Personas own presentation and style. Clients do not own memory. Models do not write canonical memory directly. Every capability must remain inspectable and testable through the core.
-
-## Completed foundation
-
-### Manuscript and Crown of Claws pipeline
-
-- **COMPLETED:** Prechunker-generated `canon/chapters/**/*.md` is the authoritative structured-analysis corpus.
-- **COMPLETED:** Prechunker -> Mr. Chonker -> Mr. Annotator is operational with conservative formats and provenance.
-- **COMPLETED:** Defensive chunking, nested annotation validation, bounded output, retries, failed-chunk recording, and later-chunk isolation.
-- **COMPLETED:** Source-derived cleanup preserves confirmed entities, aliases, confirmed facts, reviewed history, and human-authored canon Markdown.
-- **COMPLETED:** Chunker and semantic-index version invalidation preserve normal incremental fast paths while forcing required re-analysis/re-embedding.
-- **COMPLETED:** Fact durability classification: durable fact, behavioral tendency, physical attribute, procedural/system rule, and temporary scene state.
-- **COMPLETED:** Conservative fact ownership and classification guidance, including intrinsic physical attributes and temporary conditions.
-- **COMPLETED:** Targeted single-chapter reanalysis constrained to the authoritative corpus.
-
-### Shared memory core
-
-- **COMPLETED:** Additive domain/namespace support, including `personal` and `project:<slug>` identifiers.
-- **COMPLETED:** Lore memory and assistant memory are separate subsystems; Crown of Claws remains the existing lore project domain.
-- **COMPLETED:** Dedicated `assistant_memories` CRUD with validated types, retention, confidence, importance, status, provenance, correction, search, and soft forgetting.
-- **COMPLETED:** Durable assistant proposals with pending/approved/rejected lifecycle, evidence, inspection, approval linkage, exact-evidence identity, reinforcement, and duplicate-evidence idempotency.
-- **COMPLETED:** Compact public memory/proposal references (`M-###`, `P-###`) with legacy numeric compatibility.
-- **COMPLETED:** Read-only conversational memory introspection with approved provenance and controlled explanation payloads.
-- **COMPLETED:** Additive domain-scoped association graph with typed, bounded-strength, soft-deletable edges and explainable one-hop retrieval context.
-- **COMPLETED:** Deterministic retrieval ranking, noise reduction, scoring reasons, context limits, benchmark fixtures, fixture-only semantic/hybrid adapters, and retrieval evaluation metrics.
-
-### Assistant runtime
-
-- **COMPLETED:** Dedicated persona layer with file-backed configuration and neutral fallback for missing, invalid, empty, or unreadable persona files.
-- **COMPLETED:** Separate engine policy for grounding, safety, provenance, and factual behavior.
-- **COMPLETED:** Read-only `ContextManager` for persona, policy, recent conversation, retrieved memory, and current-user message assembly.
-- **COMPLETED:** Bounded in-memory recent conversation window.
-- **COMPLETED:** Ollama streaming, typed chunk handling, clean Ctrl+C rollback, and no proposal/history commit for interrupted turns.
-- **COMPLETED:** `context stats` diagnostics for retrieval, prompt size, estimated tokens, latency, first token timing, proposal outcome, model, and provider.
-- **COMPLETED:** Runtime `model list`, `model current`, and `model use` selection without restart or data mutation.
-- **COMPLETED:** Validated `ollama_options` configuration for `temperature`, `top_k`, `top_p`, and `seed`, applied consistently to chat, proposal, and repair calls.
-- **COMPLETED:** User-observation-only proposal provenance, including speculative/future framing safeguards and explicit-goal handling.
-- **COMPLETED:** Local OpenAI-compatible `/v1` API with health, model, chat, and SSE endpoints; OpenWebUI integration is functional.
-- **COMPLETED:** Confirmation-gated factory reset/restore tooling with backup safeguards and lore/assistant separation.
 
 ## Architectural invariants
 
-- Canonical Markdown remains human-authoritative for the manuscript.
-- SQLite and Chroma are derived or indexed state; migrations are additive and reversible.
-- Lore memory and personal assistant memory never silently merge.
-- Persona, policy, retrieval, provenance, proposals, providers, tools, and presentation remain separate concerns.
-- Memory follows: user observation -> proposal -> human review -> approved canonical memory -> associations -> retrieval -> explainable context -> response.
-- Approved memories are typed, inspectable, correctable, traceable, and user-controlled.
-- The assistant must be able to explain why it remembered or retrieved something without exposing raw database internals or hidden model reasoning.
-- Tests use temporary SQLite/fake providers and never require Ollama, Chroma, production sync, or production data mutation.
+- Persona, memory, policy, retrieval, providers, tools, and presentation remain separate concerns.
+- Persona configuration is declarative and validated by default; user-provided files do not execute arbitrary code.
+- Static identity is stable and user-controlled. Dynamic traits change slowly through explicit, explainable transitions. Momentary state can change per turn and decays or expires.
+- State never silently rewrites canonical memories. Learning records observations, evidence, outcomes, and confidence separately from source memories.
+- Only bounded, relevant state is rendered into model context. The model never receives an unbounded internal database or hidden chain of thought.
+- Behavior rules may shape tone, attention, initiative, examples, and interaction style; engine policy still controls factual grounding, safety, provenance, and permissions.
+- Autonomous work requires a sandbox, resource limits, logs, and user-visible outcomes. No background task may change production files, memories, or external systems without permission.
+- Shared core memory can serve multiple personas. Persona-specific state is namespaced and does not alter shared factual truth.
+- Tests use temporary SQLite, fake providers, fake collections, and deterministic clocks where possible.
 
-## Active stabilization and next implementation stages
+## Completed foundation
 
-### Stage 1 - Provider and service boundaries
+### Manuscript and Crown of Claws
 
-1. **COMPLETED:** Add a narrow `ChatProvider` boundary around the existing Ollama integration while preserving fake-client compatibility.
-2. Define shared application/service primitives so CLI, OpenWebUI API, future Textual TUI, and future web dashboard call the same core functions.
-3. Keep provider/model selection explicit and observable before adding automatic routing.
-4. Add provider health, latency, capability, model, fallback, and lifecycle diagnostics.
+- **COMPLETED:** Prechunker-generated `canon/chapters/**/*.md` is the authoritative structured-analysis corpus.
+- **COMPLETED:** Prechunker -> Mr. Chonker -> Mr. Annotator with defensive chunking, nested validation, bounded output, retries, and failure isolation.
+- **COMPLETED:** Source cleanup, provenance preservation, fact durability classification, conservative ownership, semantic index invalidation, and targeted chapter reanalysis.
+- **COMPLETED:** Crown of Claws structured entities, appearances, facts, proposals, aliases, canon export, and existing incremental sync behavior.
 
-### Stage 2 - Assistant quality and long-duration verification
+### Shared memory and retrieval
 
-1. Compare installed models using the retrieval benchmark, context diagnostics, and representative conversations.
-2. Tune persona presentation independently from factual grounding and policy behavior.
-3. Improve proposal classification for preferences, goals, corrections, project facts, relationships, routines, hardware, health, and speculative statements.
-4. Add isolated long-duration tests with seeded memories, bounded prompts, interruption checks, retrieval precision/recall, proposal precision, and latency metrics.
-5. Add explicit association inspection/creation controls before richer automatic association inference.
+- **COMPLETED:** Additive domains, separate lore/assistant memory, assistant CRUD, validated types/retention/status, provenance, soft forgetting, correction, and compact public references.
+- **COMPLETED:** Durable proposals with review lifecycle, evidence, approval linkage, exact-evidence identity, reinforcement, duplicate-evidence idempotency, inspection, and bulk approval confirmation.
+- **COMPLETED:** Domain-scoped association graph with explainable one-hop retrieval context.
+- **COMPLETED:** Deterministic retrieval, diagnostics, benchmark fixtures, evaluation metrics, and fixture-only semantic/hybrid adapters.
+- **COMPLETED:** Conversational memory introspection limited to active canonical memories and approved provenance.
 
-### Stage 3 - Shared companion intelligence
+### Runtime and presentation
 
-1. Add a contextual emotional-inference layer derived from recent interaction, memory associations, and current situation; it must not rewrite canonical memories.
-2. Store only bounded, explainable emotional observations or state snapshots where useful—not arbitrary emotional weights on every memory.
-3. Add multiple configured personas sharing the same core memory, tools, providers, and permissions; personality changes presentation, not factual truth.
-4. Add configurable persona/model profiles without runtime persona switching until the file/configuration contract is stable.
-5. Build the discussion sandbox as a development tool: multiple personas, shared temporary memory, seeded events, deterministic runs, metrics, and replayable regressions.
+- **COMPLETED:** File-backed persona layer with neutral fallback and separate engine policy.
+- **COMPLETED:** Read-only ContextManager, bounded session context, streaming, clean interruption rollback, context statistics, phase timing diagnostics, and runtime model selection.
+- **COMPLETED:** Validated Ollama generation options, user-observation-only proposal provenance, and speculative-statement safeguards.
+- **COMPLETED:** Ollama `ChatProvider` boundary with legacy fake-client compatibility.
+- **COMPLETED:** Local OpenAI-compatible API and functional OpenWebUI integration.
+- **COMPLETED:** Confirmation-gated factory reset/restore with backup safeguards and lore/assistant separation.
 
-## Capability providers and routing
+## The Persona Runtime
 
-### Provider boundary
+The current persona file is a compatibility input. The target architecture is a runtime that computes behavior context from three state layers:
 
-Define explicit interfaces as the platform grows:
+### 1. Static identity
+
+Slow-changing, explicitly configured facts such as name, species, core values, ethics, boundaries, relationship framing, and stable speech identity. Static identity is not rewritten by ordinary conversation.
+
+### 2. Dynamic personality
+
+Slowly changing traits such as interests, habits, relationship familiarity, trust, skill confidence, preferences, curiosity, and communication tendencies. Every change requires a source, reason, timestamp, bounded rate of change, and inspectable history.
+
+### 3. Momentary state
+
+Short-lived state such as mood, energy, attention, current activity, focus, urgency, social availability, and emotional response. Momentary state is derived from recent events and context, decays, and must not become permanent memory without an explicit observation/proposal path.
+
+The runtime produces a `BehaviorContext`, not a final answer:
+
+```text
+identity + dynamic traits + momentary state + active memories
+        |
+attention selection and behavior rules
+        |
+compact model context packet
+        |
+ContextManager -> provider
+```
+
+Behavior rules may select warmth, verbosity, humor, curiosity, interruption style, examples, and clarifying-question behavior. They must not override engine policy, invent facts, expose private state, or mutate canonical memory.
+
+## Revised implementation order
+
+### Stage 1 - Persona Runtime compatibility foundation
+
+1. **NEXT:** Define validated `PersonaState`, `DynamicTraits`, `MomentaryState`, and `BehaviorContext` structures.
+2. Load the current persona file into static identity plus compatibility speech/style fields; preserve current Murr output as closely as possible.
+3. Add deterministic state-to-context rendering behind the existing `ContextManager`.
+4. Add bounded state snapshots and read-only `persona inspect` diagnostics.
+5. Keep current prompt output stable while migrating callers incrementally.
+
+### Stage 2 - Shared application boundary
+
+1. Define application/service primitives for chat turns, retrieval, introspection, proposals, context diagnostics, and model selection.
+2. Make CLI, OpenWebUI API, future Textual TUI, and dashboard call those primitives rather than duplicating orchestration.
+3. Add provider health, capability, latency, model, fallback, and lifecycle diagnostics.
+4. Preserve the local-first `ChatProvider` boundary and fake-provider tests.
+
+### Stage 3 - Interests, attention, and verified learning
+
+1. Add namespaced interest and skill state with bounded confidence, evidence, recency, and decay.
+2. Define attention rules: relevant interests may influence examples, analogies, follow-up questions, and optional topics without hijacking the user's request.
+3. Add explicit learning records separate from canonical memories: source, hypothesis, attempt, result, test evidence, and confidence update.
+4. Add RSS/reference intake as an event source; reading an article may raise curiosity, but does not automatically establish expertise.
+5. Add a local learning sandbox for bounded exercises, compilation/tests, timeout, filesystem/network permissions, and user-visible reports.
+6. Never allow background learning to modify production projects or claim skill without verification.
+
+### Stage 4 - Derived emotion, relationships, and behavior
+
+1. Add a derived emotional-inference layer from interaction, current situation, relationships, and relevant memory associations.
+2. Store bounded explainable state snapshots or observations—not arbitrary emotion weights on every memory.
+3. Add relationship state such as familiarity and trust as derived, inspectable traits; canonical facts remain separate.
+4. Map state to behavior controls: tone, warmth, humor, initiative, patience, verbosity, interruption, and clarification thresholds.
+5. Add decay, hysteresis, and conservative transitions to prevent emotional oscillation or persona drift.
+
+### Stage 5 - Multiple personas and discussion sandbox
+
+1. Allow multiple declarative persona packages to share core memory, providers, tools, and permissions.
+2. Namespace persona-specific dynamic traits, interests, skills, relationships, and apartment state.
+3. Add confidence-based knowledge visibility: a persona may know a shared memory only when its access/confidence policy allows it.
+4. Build a deterministic discussion sandbox with temporary shared memory, seeded events, multiple personas, replay, metrics, and bounded turns.
+
+### Stage 6 - Tools, perception, and resident environment
+
+1. Add structured tool registry and permission engine with allow-once, always-allow, deny, and confirmation-required policies.
+2. Add one-shot `VisionProvider` screen/window/region/image/PDF inspection.
+3. Add image, speech, and media provider interfaces and explicit capability routing.
+4. Build the low-resource apartment as a state visualization: workbench for active projects, bookshelf for installed models, newspaper for feeds, calendar for schedule, window for permissioned desktop state, and frames for artwork.
+5. Keep generated/procedural placeholder assets replaceable by commissioned art through stable asset IDs.
+
+### Stage 7 - Resident intelligence and Crown of Claws writing mode
+
+1. Add scheduler/watchers with explicit permissions and bounded resource targets.
+2. Add workshop packaging for personas, interests, skills, apartments, voices, animation, and tools.
+3. Add mandatory manuscript POV/perspective metadata for the three main characters, Murr, Quiet Accord, and third-party viewpoints.
+4. Add character knowledge-state, revelation, timeline, contradiction, and continuity analysis.
+5. Add writing-partner mode after assistant-mode and shared-service validation.
+
+## Capability provider interfaces
 
 ```python
 class ChatProvider(Protocol):
-    def complete(self, messages, *, model=None, options=None) -> ChatResult: ...
+    def complete(self, messages, *, model=None, options=None, stream=False): ...
 
 class VisionProvider(Protocol):
-    def inspect(self, image, *, prompt=None, model=None, options=None) -> VisionResult: ...
+    def inspect(self, image, *, prompt=None, model=None, options=None): ...
 
 class ImageProvider(Protocol):
-    def generate(self, prompt, *, model=None, options=None) -> ImageResult: ...
+    def generate(self, prompt, *, model=None, options=None): ...
 
 class SpeechProvider(Protocol):
-    def transcribe(self, audio, *, model=None, options=None) -> SpeechResult: ...
+    def transcribe(self, audio, *, model=None, options=None): ...
 ```
 
-Ollama remains the first implementation. LM Studio, llama.cpp, hosted APIs, ComfyUI, Stable Diffusion, native local image models, TTS, and STT should be adapters rather than special cases in the assistant core.
+Ollama is the current chat/embedding implementation. LM Studio, hosted APIs, llama.cpp, ComfyUI, Stable Diffusion, TTS, and STT should be adapters rather than special cases in the core.
 
-### Capability routing
+## Evaluation, observability, and research instrumentation
 
-After provider boundaries and diagnostics are stable, add an explicit capability router for `text`, `code`, `vision`, `image_generate`, `image_edit`, `tts`, and `stt`.
+This stage begins after the provider registry and routing layer are functional and stable. Instrumentation exists to answer engineering and research questions, not to collect data for its own sake.
 
-The router should expose capability, provider, model, fallback reason, latency, and load/unload lifecycle events. Automatic routing should wait for real usage data. A specialist result may pass through persona rendering, but persona code must not alter factual tool output or provenance.
+### Useful measurements
 
-## Tools, permissions, and environment
+- routing classification accuracy, route confidence, selected capability/provider/model, fallback reason, and route stability;
+- prompt and completion token estimates, time to first token, provider latency, queue/load/unload time, and total turn latency;
+- CPU, RAM, VRAM, temperature, and energy estimates when available;
+- success, timeout, interruption, transport error, empty-output, and retry rates;
+- retrieval precision/recall, irrelevant-result rate, grounding correctness, introspection correctness, and context size;
+- proposal precision, approval/rejection rate, duplicate rate, reinforcement behavior, and user-correction frequency;
+- learning-task completion, compile/test success, skill-confidence changes, and sandbox resource usage;
+- answer-quality and persona-consistency evaluations from deterministic benchmark cases and human review.
 
-### Permissioned tools
+### Experiment ledger
 
-- Add a tool registry with structured inputs/outputs and read-only inspection.
-- Add a permission engine with allow once, always allow, deny, and confirmation-required policies.
-- Add tools incrementally: filesystem, Git, test runner, calculator, system information, browser/documentation, application launch, image generation, and scheduling.
-- Every external action must be explainable: why it was selected, what evidence caused it, what it changed, and whether confirmation was required.
+Add an append-only local experiment ledger with versioned structured events and aggregate reports. Every run should identify an experiment/run ID, benchmark case, configuration and policy hashes, provider/model versions, hardware profile, random seed, timestamps, outcome, and failure category. Store raw prompts/responses only when explicitly enabled and privacy-approved; aggregate metrics must remain useful without retaining unrestricted conversation content.
 
-### Vision and desktop awareness
-
-First slice: explicit one-shot `screen inspect`, window inspect, region inspect, and image/PDF inspection through a `VisionProvider`. Do not begin with continuous monitoring.
-
-Vision should understand windows, IDEs, games, browsers, images, and PDFs through the provider boundary. Add attention levels later: passive observation, suggestion, active assistance, and critical interruption—with user permission.
-
-### Resident environment
-
-The long-term presentation target is a lightweight desktop apartment rather than a GPU-heavy game:
-
-- internal resolution around 320x180 or 640x360;
-- 12-24 FPS character animation and 1-10 second world updates;
-- under roughly 2% GPU and 1% CPU when idle;
-- rendering pauses when hidden or inactive.
-
-The apartment visualizes real StarFur state rather than decorative fiction:
-
-- plant -> project progress;
-- bookshelf -> installed models/software;
-- workbench -> active coding project;
-- newspaper -> feeds/notifications;
-- calendar -> real schedule;
-- photo frames -> generated artwork;
-- window -> permissioned live desktop view.
-
-The resident world should have continuity, but it must remain explainable and subordinate to user control. Life simulation is a later layer, not a replacement for reliable core assistance.
-
-## Presentation, workshop, and voice
-
-- Support terminal and external web UI first; add Textual TUI and web dashboard on the shared service layer.
-- Add a desktop avatar with animation, emotion signaling, lip sync, and optional Live2D/3D support after tools and permissions are stable.
-- Support replaceable workshop assets: personas, apartments, characters, animation sets, furniture, music, themes, lighting, objects, and worlds.
-- Preserve persona independence: replacing Murr must not require rewriting memory, retrieval, tools, providers, or automation.
-- Use hybrid speech where stable recorded greetings/reactions combine with generated dynamic speech.
-
-## Crown of Claws writing intelligence
-
-- Add mandatory scene/chunk POV metadata for the three main characters, Murr, Quiet Accord, and third-party/external viewpoints.
-- Treat perspective as provenance, not merely presentation metadata.
-- Distinguish world truth, reader knowledge, character knowledge, belief, lie, and revelation.
-- Add relationship/event extraction, timeline and temporal reasoning, character knowledge-state tracking, revelation detection, contradiction/continuity audits, and draft/canon separation.
-- Add writing-partner mode only after assistant-mode testing and shared service boundaries are stable.
-
+Required tools include deterministic benchmark suites, router decision traces, reproducible run manifests, comparison reports, and exportable research summaries. Metrics must be bounded, privacy-aware, and tied to a decision or hypothesis. This instrumentation should be reusable by routing, retrieval, Persona Runtime, autonomous learning, and the discussion sandbox.
 ## Future research
 
-- Temporal association and carefully bounded multi-hop traversal after benchmarked one-hop usage.
-- Emotional inference and state decay with explicit explanations.
-- Retrieval compression/summarization only after long-duration prompt metrics justify it.
-- Memory simulation and replayable regression benchmarks.
-- Proactive assistance and scheduling with explicit permissions.
-- Native media generation and perception through interchangeable providers.
-- Licensing, workshop distribution, and companion packaging after the core is reliable and inspectable.
+- Temporal and multi-hop associations after one-hop retrieval is benchmarked.
+- State decay and emotional inference with explicit explanations.
+- Retrieval compression only after long-duration prompt metrics justify it.
+- Autonomous learning and replayable companion regression benchmarks.
+- Proactive assistance and scheduling with permission.
+- Native media generation and perception.
+- Licensing, workshop distribution, and companion packaging.
 
-## End-state vision
+## End state
 
-StarFur is an operating environment for persistent AI companions. A user should not feel that they are opening an AI application; they should sit down at a computer where someone intelligent already lives.
-
-The end state is a local-first resident intelligence that remembers responsibly, explains itself, shares the user's environment with permission, grows with projects, supports text/voice/media capabilities, assists naturally, and remains transparent and user-controlled.
+StarFur is an operating environment for persistent AI companions. Users do not open a chatbot; they sit down at a computer where an intelligent resident already lives, remembers responsibly, develops verified interests and skills, responds through a coherent evolving personality, and remains transparent and user-controlled.

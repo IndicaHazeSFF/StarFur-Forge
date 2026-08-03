@@ -1,3 +1,17 @@
+## 2026-08-03 - Post-routing evaluation roadmap
+
+- Purpose: add a focused evaluation and research-instrumentation stage after stable provider routing.
+- Modified: ROADMAP.md, AGENTS.md, and CHANGELOG.md.
+- Behavior/design: the roadmap now prioritizes useful route, quality, retrieval, proposal, learning, latency, resource, reproducibility, and failure metrics through an append-only local experiment ledger. Raw conversation capture remains opt-in and privacy-controlled; no runtime/schema/database behavior changed.
+- Verification: documentation inspection only; no model calls, sync, ingestion, or production-data mutation performed.
+
+## 2026-08-03 - Persona Runtime roadmap v4
+
+- Purpose: reframe the long-term architecture around an executable-but-declarative Persona Runtime whose state generates model context, enabling bounded interests, verified skills, derived emotion, relationships, multiple personas, and resident learning.
+- Modified: ROADMAP.md, ROADMAP.v3.md (preserved prior authoritative roadmap), AGENTS.md, and CHANGELOG.md.
+- Behavioral/design changes: the roadmap now separates static identity, dynamic personality, and momentary state; defines provenance/decay/verification invariants; orders PersonaState and BehaviorContext before shared services, interests/learning, emotion, multiple personas, tools, apartment, and writing mode. No runtime, schema, SQLite, Chroma, or production-data behavior changed.
+- Verification: documentation inspection only; no sync, ingestion, model calls, or production data mutation performed.
+
 ## 2026-08-03 - Chat provider boundary
 
 - Purpose: separate assistant orchestration from Ollama-specific chat and model-list API calls without changing current local behavior.
