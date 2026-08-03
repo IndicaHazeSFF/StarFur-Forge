@@ -1,4 +1,4 @@
-# StarFur Forge ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Command Reference
+# StarFur Forge ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â Command Reference
 
 Temporary operator reference while StarFur Forge is under development.
 
@@ -71,6 +71,21 @@ The assistant persona is loaded from the path configured in `config/assistant.js
 Persona files control presentation and style only. Memory retrieval, policy, safety,
 commands, proposals, and provenance remain engine responsibilities. If the file is
 missing, unreadable, empty, or invalid, StarFur uses a neutral built-in persona.
+## Ollama Generation Options
+
+Optional, validated provider settings live in `config/assistant.json` and apply to
+normal assistant responses plus proposal extraction and repair calls:
+
+    "ollama_options": {
+      "temperature": 0.4,
+      "top_k": 40,
+      "top_p": 0.9,
+      "seed": 420
+    }
+
+All settings are optional; `{}` preserves Ollama provider defaults. `seed: 420` is
+useful for repeatable debugging, while omitting `seed` uses normal provider behavior.
+Only `temperature`, `top_k`, `top_p`, and `seed` are accepted to prevent silent typos.
 
 ## Assistant Memory Associations
 
@@ -106,6 +121,8 @@ Questions, information requests, and assistant-generated answers are not canonic
 memory evidence. Explicit `remember this:` commands and user corrections remain
 valid memory sources. Future assistant-self memory, if added, must use a separate
 explicit provenance type and opt-in behavior.
+Speculative or playful future statements are not proposed unless the user clearly
+expresses their own intent, plan, or goal (for example, “I want to…” or “I plan to…”).
 
 ## Assistant Memory Classification
 

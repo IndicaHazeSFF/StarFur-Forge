@@ -41,6 +41,17 @@ ASSISTANT_ASSOCIATION_TYPES = (
 ASSISTANT_ASSOCIATION_STATUSES = ("active", "inactive")
 ASSOCIATION_RETRIEVAL_WEIGHT = 0.15
 
+# Common question scaffolding should not make unrelated memories look relevant.
+# This is deliberately a small deterministic list, not synonym expansion.
+RETRIEVAL_STOP_WORDS = frozenset({
+    "a", "about", "an", "and", "are", "as", "at", "be", "can", "could",
+    "did", "do", "does", "for", "from", "give", "had", "has", "have", "how",
+    "i", "if", "in", "is", "it", "me", "my", "of", "on", "or", "please",
+    "say", "said", "show", "tell", "that", "the", "their", "them", "there",
+    "these", "they", "this", "those", "to", "us", "user", "was", "we", "what",
+    "when", "where", "which", "who", "why", "will", "with", "would", "you", "your",
+})
+
 def _validated(value, allowed, label):
     if value not in allowed:
         raise ValueError(f"Invalid {label}: {value!r}")
@@ -63,9 +74,27 @@ def assistant_memory_type_prompt():
 
 def normalize_proposal_text(value):
     text = unicodedata.normalize("NFKC", str(value)).casefold().strip()
-    text = text.replace("Ã¢â‚¬â„¢", "'").replace("Ã¢â‚¬Å“", "").replace("Ã¢â‚¬Â", "")
+    text = text.replace("â€™", "'").replace("â€œ", "").replace("â€", "")
     text = re.sub(r"\s+", " ", text)
     return re.sub(r"[.!?;:,]+$", "", text).strip()
+
+def _retrieval_query_text(value):
+    """Normalize a query and remove a single leading/trailing vocative address."""
+    text = normalize_proposal_text(value)
+    parts = [part.strip() for part in text.split(",")]
+    if len(parts) > 1:
+        if len(re.findall(r"[\w']+", parts[0])) == 1 and any(parts[1:]):
+            text = ",".join(parts[1:]).strip()
+        elif len(re.findall(r"[\w']+", parts[-1])) == 1 and any(parts[:-1]):
+            text = ",".join(parts[:-1]).strip()
+    return text
+
+
+def _retrieval_tokens(value):
+    return {
+        token for token in re.findall(r"[\w']+", normalize_proposal_text(value))
+        if len(token) > 1 and token not in RETRIEVAL_STOP_WORDS
+    }
 
 def assistant_proposal_key(domain, subject, memory_type, summary):
     identity = "|".join((normalize_domain(domain), normalize_proposal_text(subject), memory_type, normalize_proposal_text(summary)))
@@ -870,25 +899,47 @@ def deactivate_assistant_memory_association(association_id, domain="personal"):
 
 
 def _rank_assistant_memories(query, domain):
-    normalized_query = normalize_proposal_text(query)
-    tokens = set(re.findall(r"[\w']+", normalized_query))
+    normalized_query = _retrieval_query_text(query)
+    tokens = _retrieval_tokens(normalized_query)
+    if not tokens:
+        return []
     rows = list_assistant_memories(domain=domain, status="active", limit=1000)
     rows_by_id = {row["id"]: row for row in rows}
     ranked = {}
-    direct_ids = set()
     for row in rows:
         text = normalize_proposal_text(" ".join(str(row.get(key) or "") for key in ("subject", "summary", "details")))
-        row_tokens = set(re.findall(r"[\w']+", text))
+        row_tokens = _retrieval_tokens(text)
         overlap = len(tokens & row_tokens)
         phrase = normalized_query in text
         if not overlap and not phrase:
             continue
         score = overlap / max(len(tokens), 1) + (0.5 if phrase else 0) + float(row.get("confidence") or 0) * 0.2 + float(row.get("importance") or 0) * 0.1
-        reasons = [f"{overlap} keyword overlap"]
+        reasons = [f"{overlap} meaningful keyword overlap"]
         if phrase:
             reasons.append("exact phrase")
-        ranked[row["id"]] = {"memory": row, "score": score, "reasons": reasons}
-        direct_ids.add(row["id"])
+        # Keep this internal overlap count until we know whether the query has
+        # a stronger multi-term match. It is removed before results are
+        # returned, so the public retrieval result shape remains unchanged.
+        ranked[row["id"]] = {
+            "memory": row,
+            "score": score,
+            "reasons": reasons,
+            "_overlap": overlap,
+            "_phrase": phrase,
+        }
+
+    # A query with several meaningful terms should not be padded with weak
+    # one-term matches when at least one memory matches two or more terms.
+    # Single-term recall (for example, "glasses") remains available when no
+    # stronger lexical match exists.
+    strongest_overlap = max((item["_overlap"] for item in ranked.values()), default=0)
+    if strongest_overlap >= 2:
+        ranked = {
+            memory_id: item
+            for memory_id, item in ranked.items()
+            if item["_overlap"] >= 2 or item["_phrase"]
+        }
+    direct_ids = set(ranked)
 
     if direct_ids:
         for association in list_assistant_memory_associations(domain=domain, status="active", limit=10000):
@@ -912,7 +963,11 @@ def _rank_assistant_memories(query, domain):
 
     output = []
     for item in ranked.values():
-        output.append({**item, "score": round(item["score"], 6)})
+        output.append({
+            key: value
+            for key, value in {**item, "score": round(item["score"], 6)}.items()
+            if not key.startswith("_")
+        })
     return sorted(output, key=lambda item: (-item["score"], -int(item["memory"]["id"])))
 
 
@@ -1116,3 +1171,4 @@ def upsert_assistant_memory_proposal(proposal, domain="personal", source_referen
         connection.execute("INSERT INTO assistant_memory_proposal_evidence (proposal_id, source, source_reference, evidence_hash, raw_excerpt) VALUES (?, ?, ?, ?, ?)", (proposal_id, source, source_reference, evidence_hash, observation_text or proposal.get("summary")) )
         connection.commit()
     return {"proposal_id": proposal_id, "action": "created", "previous_evidence_count": 0, "evidence_count": 1}
+

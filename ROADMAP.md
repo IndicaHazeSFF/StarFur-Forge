@@ -1,150 +1,218 @@
-# StarFur Forge Roadmap v2
+# StarFur Forge Roadmap v3
 
-**Last updated:** 2026-08-01
+**Status:** Resident Intelligence Platform architecture
+**Last updated:** 2026-08-03
 
-This is the authoritative roadmap. `ROADMAP.original.md` preserves the previous roadmap text for historical reference.
+`ROADMAP.md` is the current authoritative roadmap. `ROADMAP.v2.md` preserves the previous roadmap version, and `ROADMAP.original.md` preserves the original historical roadmap.
 
-## Project direction
+## Mission
 
-StarFur Forge is a local-first memory and assistant engine with two closely related uses:
+StarFur Forge is a Resident Intelligence Platform: a persistent, local-first AI operating environment where one or more AI companions live alongside the user, grow with them, and assist through shared memory, context, perception, tools, and controlled automation.
 
-1. **Assistant Mode** â€” a configurable persona using personal/project memory safely and transparently.
-2. **Crown of Claws Mode** â€” manuscript analysis and narrative memory for the multi-POV novel.
+StarFur is not merely a chatbot, a model wrapper, or a UI. The language model is one replaceable provider inside a larger continuity system. The product is the resident intelligence: memory that can be inspected and corrected, a persona that can change without owning the data, and an environment where assistance can become present without becoming opaque or uncontrolled.
 
-The engine should remain shared. Persona, domain, retrieval, provider, and policy boundaries should make the modes configurable without duplicating the core.
+Every feature should answer:
+
+> Does this make the companion feel more like a persistent resident rather than a chatbot?
+
+## Core architecture
+
+```text
+Human
+  |
+Shared environment
+  |
+StarFur Core
+  |-- Memory and retrieval
+  |-- Associations
+  |-- Context and explainability
+  |-- Emotion inference
+  |-- Providers and capability routing
+  |-- Tools and permissions
+  |-- Scheduling and automation
+  |-- Vision and media
+  |
+Persona layer
+  |-- Murr
+  |-- Ship Computer
+  |-- Q
+  |-- Custom personas
+  |
+Presentation clients
+  |-- Terminal
+  |-- OpenWebUI / web API
+  |-- Desktop apartment/avatar
+  |-- Phone, Steam, TUI, future clients
+```
+
+The core owns memory, retrieval, associations, provider calls, permissions, tools, scheduling, and automation. Personas own presentation and style. Clients do not own memory. Models do not write canonical memory directly. Every capability must remain inspectable and testable through the core.
 
 ## Completed foundation
 
-### Manuscript and lore pipeline
+### Manuscript and Crown of Claws pipeline
 
-- Prechunker-generated `canon/chapters/*.md` is the authoritative manuscript analysis corpus.
-- Prechunker â†’ Mr. Chonker â†’ Mr. Annotator pipeline is operational.
-- Chunking and annotation have defensive validation, retries, failure recording, and regression tests.
-- Structured lore memory preserves source provenance and performs normal source cleanup.
-- Semantic indexing supports invalidation/version changes without destroying the normal incremental fast path.
-- Targeted chapter reanalysis is available and constrained to the authoritative corpus.
-- Fact durability/type classification is stored without discarding temporary scene-state facts.
-- Classification guidance covers physical attributes, behavioral tendencies, temporary scene state, and subject attribution.
-- Assistant/lore corpus contracts are documented separately; production data formats remain conservative.
+- **COMPLETED:** Prechunker-generated `canon/chapters/**/*.md` is the authoritative structured-analysis corpus.
+- **COMPLETED:** Prechunker -> Mr. Chonker -> Mr. Annotator is operational with conservative formats and provenance.
+- **COMPLETED:** Defensive chunking, nested annotation validation, bounded output, retries, failed-chunk recording, and later-chunk isolation.
+- **COMPLETED:** Source-derived cleanup preserves confirmed entities, aliases, confirmed facts, reviewed history, and human-authored canon Markdown.
+- **COMPLETED:** Chunker and semantic-index version invalidation preserve normal incremental fast paths while forcing required re-analysis/re-embedding.
+- **COMPLETED:** Fact durability classification: durable fact, behavioral tendency, physical attribute, procedural/system rule, and temporary scene state.
+- **COMPLETED:** Conservative fact ownership and classification guidance, including intrinsic physical attributes and temporary conditions.
+- **COMPLETED:** Targeted single-chapter reanalysis constrained to the authoritative corpus.
 
-### Shared memory and assistant memory
+### Shared memory core
 
-- Additive domain/namespace support exists, including personal and project-style domains.
-- Lore memory and assistant memory are separate subsystems.
-- Dedicated `assistant_memories` storage supports validated memory types, retention, confidence, importance, status, provenance, CRUD, search, correction, and soft forgetting.
-- Durable assistant proposals support pending/approved/rejected lifecycle, review commands, evidence records, deterministic identity, exact-evidence idempotency, reinforcement, duplicate-evidence no-op behavior, and approval linkage.
-- Proposal inspection exposes identity, provenance, evidence, and review state without mutation.
-- Assistant responses are not proposal evidence by default; proposals derive from user observations and explicit remember requests.
+- **COMPLETED:** Additive domain/namespace support, including `personal` and `project:<slug>` identifiers.
+- **COMPLETED:** Lore memory and assistant memory are separate subsystems; Crown of Claws remains the existing lore project domain.
+- **COMPLETED:** Dedicated `assistant_memories` CRUD with validated types, retention, confidence, importance, status, provenance, correction, search, and soft forgetting.
+- **COMPLETED:** Durable assistant proposals with pending/approved/rejected lifecycle, evidence, inspection, approval linkage, exact-evidence identity, reinforcement, and duplicate-evidence idempotency.
+- **COMPLETED:** Compact public memory/proposal references (`M-###`, `P-###`) with legacy numeric compatibility.
+- **COMPLETED:** Read-only conversational memory introspection with approved provenance and controlled explanation payloads.
+- **COMPLETED:** Additive domain-scoped association graph with typed, bounded-strength, soft-deletable edges and explainable one-hop retrieval context.
+- **COMPLETED:** Deterministic retrieval ranking, noise reduction, scoring reasons, context limits, benchmark fixtures, fixture-only semantic/hybrid adapters, and retrieval evaluation metrics.
 
 ### Assistant runtime
 
-- ~~Local OpenAI-compatible `/v1` API adapter for external chat UIs, with health/model/chat endpoints and SSE streaming.~~ **COMPLETED 2026-08-02**
-- Interactive local Assistant Mode uses Ollama with configurable model and persona.
-- Persona instructions are loaded through a dedicated persona layer with neutral fallback behavior.
-- Policy, persona, retrieval, provenance/introspection, and command parsing remain separate concerns.
-- Recent conversation context is bounded in memory.
-- Streaming output works, including clean Ctrl+C interruption and rollback of incomplete turns.
-- Deterministic retrieval supports ranking, explanations, context assembly, benchmark fixtures, and read-only diagnostics.
-- Conversational memory introspection can explain selected active memories and approved provenance without exposing rejected proposals or hidden reasoning.
-- A read-only `context stats` command reports bounded diagnostics for the most recent turn.
-- A read-only `ContextManager` assembles persona, policy, recent conversation, retrieved memory, and user-message sections while preserving the established payload format.
-- Runtime Ollama model selection (`model list`, `model current`, `model use`) is the next active implementation target.
-- Factory reset/restore tooling exists with confirmation and backup safeguards.
+- **COMPLETED:** Dedicated persona layer with file-backed configuration and neutral fallback for missing, invalid, empty, or unreadable persona files.
+- **COMPLETED:** Separate engine policy for grounding, safety, provenance, and factual behavior.
+- **COMPLETED:** Read-only `ContextManager` for persona, policy, recent conversation, retrieved memory, and current-user message assembly.
+- **COMPLETED:** Bounded in-memory recent conversation window.
+- **COMPLETED:** Ollama streaming, typed chunk handling, clean Ctrl+C rollback, and no proposal/history commit for interrupted turns.
+- **COMPLETED:** `context stats` diagnostics for retrieval, prompt size, estimated tokens, latency, first token timing, proposal outcome, model, and provider.
+- **COMPLETED:** Runtime `model list`, `model current`, and `model use` selection without restart or data mutation.
+- **COMPLETED:** Validated `ollama_options` configuration for `temperature`, `top_k`, `top_p`, and `seed`, applied consistently to chat, proposal, and repair calls.
+- **COMPLETED:** User-observation-only proposal provenance, including speculative/future framing safeguards and explicit-goal handling.
+- **COMPLETED:** Local OpenAI-compatible `/v1` API with health, model, chat, and SSE endpoints; OpenWebUI integration is functional.
+- **COMPLETED:** Confirmation-gated factory reset/restore tooling with backup safeguards and lore/assistant separation.
 
-## Current stabilization priorities
+## Architectural invariants
 
-1. ~~Finish and verify runtime model selection across Ollama environments.~~ **COMPLETED 2026-08-01**
-2. Compare installed models using the retrieval benchmark, context diagnostics, and representative assistant conversations.
-3. Improve proposal classification and quality using observed failures, without changing lifecycle or provenance semantics.
-4. Run longer isolated assistant tests and record retrieval quality, proposal precision, latency, prompt size, and interruption behavior.
-5. Keep the full test suite green in WSL; treat host-only filesystem failures as environment-specific until reproduced in WSL.
+- Canonical Markdown remains human-authoritative for the manuscript.
+- SQLite and Chroma are derived or indexed state; migrations are additive and reversible.
+- Lore memory and personal assistant memory never silently merge.
+- Persona, policy, retrieval, provenance, proposals, providers, tools, and presentation remain separate concerns.
+- Memory follows: user observation -> proposal -> human review -> approved canonical memory -> associations -> retrieval -> explainable context -> response.
+- Approved memories are typed, inspectable, correctable, traceable, and user-controlled.
+- The assistant must be able to explain why it remembered or retrieved something without exposing raw database internals or hidden model reasoning.
+- Tests use temporary SQLite/fake providers and never require Ollama, Chroma, production sync, or production data mutation.
 
-## Near-term assistant roadmap
+## Active stabilization and next implementation stages
 
-### Stage A â€” Provider and context boundaries
+### Stage 1 - Provider and service boundaries
 
-- ~~Complete runtime model selection.~~ **COMPLETED 2026-08-01**
-- Add a narrow text-provider interface after model selection is stable; preserve Ollama compatibility and fake-client tests.
-- Keep ContextManager deterministic and read-only.
-- Add provider/model information to diagnostics and clear unavailable-provider errors.
-- Do not add automatic routing or dynamic context budgets yet.
+1. Add a narrow `ChatProvider` boundary around the existing Ollama integration while preserving fake-client compatibility.
+2. Define shared application/service primitives so CLI, OpenWebUI API, future Textual TUI, and future web dashboard call the same core functions.
+3. Keep provider/model selection explicit and observable before adding automatic routing.
+4. Add provider health, latency, capability, model, fallback, and lifecycle diagnostics.
 
-### Stage B â€” Assistant quality
+### Stage 2 - Assistant quality and long-duration verification
 
-- ~~Ensure direct-answer grounding includes selected memory details and keeps persona flavor after, not instead of, the factual answer.~~ **COMPLETED 2026-08-01**
-- Improve retrieval scoring and evaluation fixtures.
-- ~~Add a first additive association layer for domain-scoped assistant-memory edges and explainable one-hop deterministic retrieval context.~~ **COMPLETED 2026-08-02**
-- Add conservative proposal classification improvements and correction handling.
-- Add optional proposal-review usability improvements.
-- Test persona quality separately from factual grounding.
-- Add bounded long-duration regression/simulation tests before changing retrieval algorithms.
+1. Compare installed models using the retrieval benchmark, context diagnostics, and representative conversations.
+2. Tune persona presentation independently from factual grounding and policy behavior.
+3. Improve proposal classification for preferences, goals, corrections, project facts, relationships, routines, hardware, health, and speculative statements.
+4. Add isolated long-duration tests with seeded memories, bounded prompts, interruption checks, retrieval precision/recall, proposal precision, and latency metrics.
+5. Add explicit association inspection/creation controls before richer automatic association inference.
 
-### Stage C â€” Multiple personas and integrations
+### Stage 3 - Shared companion intelligence
 
-- Support multiple configured personas without runtime switching until the configuration contract is proven.
-- Add LM Studio as a provider adapter if it improves accessibility for testers.
-- Preserve shared memory domains and explicit provenance across personas.
-- Keep persona presentation separate from factual/system policy.
+1. Add a contextual emotional-inference layer derived from recent interaction, memory associations, and current situation; it must not rewrite canonical memories.
+2. Store only bounded, explainable emotional observations or state snapshots where useful—not arbitrary emotional weights on every memory.
+3. Add multiple configured personas sharing the same core memory, tools, providers, and permissions; personality changes presentation, not factual truth.
+4. Add configurable persona/model profiles without runtime persona switching until the file/configuration contract is stable.
+5. Build the discussion sandbox as a development tool: multiple personas, shared temporary memory, seeded events, deterministic runs, metrics, and replayable regressions.
 
-## Crown of Claws roadmap
+## Capability providers and routing
 
-### Narrative provenance and perspective
+### Provider boundary
 
-- Add scene/chunk perspective metadata for the three main characters, Murr, Quiet Accord, and other third-party/external viewpoints.
-- Treat perspective as provenance, not merely presentation metadata.
-- Distinguish world truth, reader knowledge, character knowledge, belief, lie, and revelation.
-- Prefer explicit manuscript metadata over inference; store uncertainty when POV is ambiguous.
-
-### Narrative intelligence
-
-- Relationship and event extraction with evidence.
-- Timeline and temporal reasoning, including narrative versus chronological order.
-- Character knowledge-state tracking and revelation detection.
-- Contradiction and continuity audits.
-- Writing assistance with draft/canon separation and human review.
-
-## Platform and control center
-
-- Shared application/service layer for CLI, future Textual TUI, and future web API/dashboard.
-- Web configuration, proposal review, memory inspection, corpus status, and performance dashboards.
-- Project abstraction so Crown of Claws is one project domain rather than a hard-coded engine assumption.
-- Permissioned tools for files, applications, system information, and automation.
-- Voice input/output and interruption-aware conversation.
-- Desktop fursona with animation, emotion signaling, lip sync, and Live2D/3D support.
-
-## Future architecture: capability routing and native media
-
-After manual model selection, provider boundaries, and diagnostics are stable, add an explicit capability router. It should classify a request into capabilities such as `text`, `code`, `image_generate`, `image_edit`, `vision`, `tts`, or `stt`, then select a configured provider.
-
-Use adapters, not backend-specific logic in the assistant core:
+Define explicit interfaces as the platform grows:
 
 ```python
+class ChatProvider(Protocol):
+    def complete(self, messages, *, model=None, options=None) -> ChatResult: ...
+
+class VisionProvider(Protocol):
+    def inspect(self, image, *, prompt=None, model=None, options=None) -> VisionResult: ...
+
 class ImageProvider(Protocol):
-    def generate(self, prompt, *, model=None, options=None) -> ImageResult:
-        ...
+    def generate(self, prompt, *, model=None, options=None) -> ImageResult: ...
+
+class SpeechProvider(Protocol):
+    def transcribe(self, audio, *, model=None, options=None) -> SpeechResult: ...
 ```
 
-Stable Diffusion, ComfyUI, a native local image model, and hosted APIs should be interchangeable providers. A provider may be loaded, warmed, used, and unloaded according to a configurable VRAM/lifecycle policy. Return structured artifact metadata (path/handle, provider, model, timing, and errors); do not put binary media in memory tables or prompts.
+Ollama remains the first implementation. LM Studio, llama.cpp, hosted APIs, ComfyUI, Stable Diffusion, native local image models, TTS, and STT should be adapters rather than special cases in the assistant core.
 
-The first slice should use explicit configuration and fake-provider tests. Automatic routing should wait for real usage data and must expose capability, provider, model, fallback reason, latency, and lifecycle events. A specialist result may pass through a persona-rendering step, but persona code must not alter factual tool output or provenance.
+### Capability routing
+
+After provider boundaries and diagnostics are stable, add an explicit capability router for `text`, `code`, `vision`, `image_generate`, `image_edit`, `tts`, and `stt`.
+
+The router should expose capability, provider, model, fallback reason, latency, and load/unload lifecycle events. Automatic routing should wait for real usage data. A specialist result may pass through persona rendering, but persona code must not alter factual tool output or provenance.
+
+## Tools, permissions, and environment
+
+### Permissioned tools
+
+- Add a tool registry with structured inputs/outputs and read-only inspection.
+- Add a permission engine with allow once, always allow, deny, and confirmation-required policies.
+- Add tools incrementally: filesystem, Git, test runner, calculator, system information, browser/documentation, application launch, image generation, and scheduling.
+- Every external action must be explainable: why it was selected, what evidence caused it, what it changed, and whether confirmation was required.
+
+### Vision and desktop awareness
+
+First slice: explicit one-shot `screen inspect`, window inspect, region inspect, and image/PDF inspection through a `VisionProvider`. Do not begin with continuous monitoring.
+
+Vision should understand windows, IDEs, games, browsers, images, and PDFs through the provider boundary. Add attention levels later: passive observation, suggestion, active assistance, and critical interruption—with user permission.
+
+### Resident environment
+
+The long-term presentation target is a lightweight desktop apartment rather than a GPU-heavy game:
+
+- internal resolution around 320x180 or 640x360;
+- 12-24 FPS character animation and 1-10 second world updates;
+- under roughly 2% GPU and 1% CPU when idle;
+- rendering pauses when hidden or inactive.
+
+The apartment visualizes real StarFur state rather than decorative fiction:
+
+- plant -> project progress;
+- bookshelf -> installed models/software;
+- workbench -> active coding project;
+- newspaper -> feeds/notifications;
+- calendar -> real schedule;
+- photo frames -> generated artwork;
+- window -> permissioned live desktop view.
+
+The resident world should have continuity, but it must remain explainable and subordinate to user control. Life simulation is a later layer, not a replacement for reliable core assistance.
+
+## Presentation, workshop, and voice
+
+- Support terminal and external web UI first; add Textual TUI and web dashboard on the shared service layer.
+- Add a desktop avatar with animation, emotion signaling, lip sync, and optional Live2D/3D support after tools and permissions are stable.
+- Support replaceable workshop assets: personas, apartments, characters, animation sets, furniture, music, themes, lighting, objects, and worlds.
+- Preserve persona independence: replacing Murr must not require rewriting memory, retrieval, tools, providers, or automation.
+- Use hybrid speech where stable recorded greetings/reactions combine with generated dynamic speech.
+
+## Crown of Claws writing intelligence
+
+- Add mandatory scene/chunk POV metadata for the three main characters, Murr, Quiet Accord, and third-party/external viewpoints.
+- Treat perspective as provenance, not merely presentation metadata.
+- Distinguish world truth, reader knowledge, character knowledge, belief, lie, and revelation.
+- Add relationship/event extraction, timeline and temporal reasoning, character knowledge-state tracking, revelation detection, contradiction/continuity audits, and draft/canon separation.
+- Add writing-partner mode only after assistant-mode testing and shared service boundaries are stable.
 
 ## Future research
 
-- Extend the completed association foundation only after benchmarked usage: temporal relationships, carefully bounded multi-hop traversal, and richer relationship provenance.
-- Emotional state as a separate contextual layer, not arbitrary permanent fields on every memory.
-- Discussion sandbox with seeded memories, multiple personas, scheduled events, deterministic seeds, and retrieval/proposal metrics.
-- Hybrid deterministic/semantic retrieval experiments against the checked-in benchmark corpus.
-- POV-aware retrieval and writing-partner mode.
-
-## Development invariants
-
-- Preserve authoritative manuscript Markdown and existing data formats unless a migration is explicitly planned.
-- Prefer additive, reversible migrations and soft status transitions.
-- Do not mutate production SQLite or Chroma during tests.
-- Keep lore memory separate from assistant memory.
-- Keep persona, policy, retrieval, provenance, proposal, and provider concerns separate.
-- Every behavior change gets focused regression tests and a changelog entry.
+- Temporal association and carefully bounded multi-hop traversal after benchmarked one-hop usage.
+- Emotional inference and state decay with explicit explanations.
+- Retrieval compression/summarization only after long-duration prompt metrics justify it.
+- Memory simulation and replayable regression benchmarks.
+- Proactive assistance and scheduling with explicit permissions.
+- Native media generation and perception through interchangeable providers.
+- Licensing, workshop distribution, and companion packaging after the core is reliable and inspectable.
 
 ## End-state vision
 
-A persistent, local-first StarFur companion that understands fictional worlds and personal context, remembers selectively and transparently, knows why it retrieved information, supports text/voice/media capabilities through interchangeable providers, helps write and maintain narratives, and can inhabit the desktop without sacrificing inspectability or user control.
+StarFur is an operating environment for persistent AI companions. A user should not feel that they are opening an AI application; they should sit down at a computer where someone intelligent already lives.
+
+The end state is a local-first resident intelligence that remembers responsibly, explains itself, shares the user's environment with permission, grows with projects, supports text/voice/media capabilities, assists naturally, and remains transparent and user-controlled.

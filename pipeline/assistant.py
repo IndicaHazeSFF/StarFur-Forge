@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 import re
 import time
@@ -32,6 +32,12 @@ PROPOSAL_FIELDS = {
     "store", "subject", "memory_type", "summary", "details",
     "importance", "confidence", "retention", "domain", "source",
 }
+OLLAMA_GENERATION_OPTION_VALIDATORS = {
+    "temperature": lambda value: isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0,
+    "top_k": lambda value: isinstance(value, int) and not isinstance(value, bool) and value >= 0,
+    "top_p": lambda value: isinstance(value, (int, float)) and not isinstance(value, bool) and 0 <= value <= 1,
+    "seed": lambda value: isinstance(value, int) and not isinstance(value, bool) and value >= -1,
+}
 
 
 @dataclass(frozen=True)
@@ -44,6 +50,22 @@ class AssistantConfig:
     max_memories: int
     memory_policy: str
     debug_level: str
+    ollama_options: dict[str, int | float] = field(default_factory=dict)
+
+
+def validate_ollama_options(value):
+    """Validate the narrow, portable Ollama generation-options surface."""
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError("ollama_options must be a JSON object.")
+    unknown = set(value) - set(OLLAMA_GENERATION_OPTION_VALIDATORS)
+    if unknown:
+        raise ValueError(f"Unknown Ollama generation option(s): {sorted(unknown)}")
+    for name, option_value in value.items():
+        if not OLLAMA_GENERATION_OPTION_VALIDATORS[name](option_value):
+            raise ValueError(f"Invalid Ollama generation option {name!r}: {option_value!r}")
+    return dict(value)
 
 
 def load_config(path=DEFAULT_CONFIG_PATH):
@@ -66,6 +88,7 @@ def load_config(path=DEFAULT_CONFIG_PATH):
         max_memories=int(data.get("max_memories", 5)),
         memory_policy=policy,
         debug_level=normalize_debug_level(data.get("debug_level", "off")),
+        ollama_options=validate_ollama_options(data.get("ollama_options")),
     )
 
 
@@ -108,6 +131,26 @@ def validate_memory_proposal(value, default_domain):
 
 class GenerationInterrupted(Exception):
     """Internal control flow for a user-interrupted model generation."""
+
+
+def _has_explicit_user_intent(normalized_text):
+    return any(phrase in normalized_text for phrase in (
+        "i want", "i'd like", "i would like", "i plan", "i intend",
+        "my goal", "i'm going to", "i am going to", "i will ",
+        "we plan", "we want", "our goal",
+    ))
+
+
+def _is_speculative_non_memory_observation(normalized_text):
+    """Reject future/roleplay framing unless the user explicitly expresses intent."""
+    future_markers = (
+        "one day", "in the future", "you will be able", "you'll be able",
+        "when you can", "imagine", "would be", "could be",
+    )
+    return (
+        not _has_explicit_user_intent(normalized_text)
+        and any(marker in normalized_text for marker in future_markers)
+    )
 
 
 class AssistantSession:
@@ -174,6 +217,7 @@ class AssistantSession:
             "retrieved": selected,
             "prompt_characters": plan.prompt_characters,
             "prompt_estimated_tokens": plan.prompt_estimated_tokens,
+            "ollama_options": self._ollama_options(),
         }
 
     def _finish_turn_diagnostics(self, *, completed, response, latency_seconds, proposal=None, status=None):
@@ -207,6 +251,7 @@ class AssistantSession:
             f"Turn: {snapshot.get('turn_status', 'completed' if snapshot.get('completed') else 'interrupted')}",
             f"Provider: {snapshot.get('provider', 'unknown')}",
             f"Model: {snapshot.get('model', 'unknown')}",
+            "Generation options: " + self._format_ollama_options(snapshot.get("ollama_options", {})),
             f"Persona: {persona_chars} characters (estimated {(persona_chars + 3) // 4} tokens)",
             f"Policy: {policy_chars} characters (estimated {(policy_chars + 3) // 4} tokens)",
             f"Recent conversation: {snapshot.get('recent_message_count', 0)} messages, {snapshot.get('recent_characters', 0)} characters (estimated {snapshot.get('recent_estimated_tokens', 0)} tokens)",
@@ -231,10 +276,27 @@ class AssistantSession:
         ])
         return "\n".join(lines)
 
+    def _ollama_options(self):
+        """Return a fresh provider options dict without mutating configuration."""
+        return dict(getattr(self.config, "ollama_options", {}) or {})
+
+    @staticmethod
+    def _format_ollama_options(options):
+        if not options:
+            return "provider defaults"
+        return ", ".join(f"{name}={options[name]}" for name in sorted(options))
+
+    def _model_request_kwargs(self, messages, *, model=None):
+        kwargs = {"model": model or self.active_model, "messages": messages}
+        options = self._ollama_options()
+        if options:
+            kwargs["options"] = options
+        return kwargs
+
     def _chat_complete(self, messages, *, model=None, stream=None):
         """Return complete content while optionally rendering streamed chunks."""
         use_stream = self.stream if stream is None else stream
-        kwargs = {"model": model or self.active_model, "messages": messages}
+        kwargs = self._model_request_kwargs(messages, model=model)
         if not use_stream:
             response = self.chat(**kwargs)
             return response.get("message", {}).get("content", "")
@@ -316,6 +378,9 @@ class AssistantSession:
         if normalized.endswith("?") or normalized.startswith(question_starters):
             self.trace.record("proposal_skipped", reason="user_question", source="user_observation")
             return None
+        if _is_speculative_non_memory_observation(normalized):
+            self.trace.record("proposal_skipped", reason="speculative_without_explicit_intent", source="user_observation")
+            return None
         self._current_proposal_diagnostics["ran"] = True
         taxonomy = assistant_memory_type_prompt()
         system_prompt = (
@@ -323,8 +388,11 @@ class AssistantSession:
             "The user observation is the sole authoritative source. Never use assistant-generated content, "
             "general knowledge, answers, questions, requests, roleplay, jokes, metaphors, hypotheticals, "
             "invented history, filler, or suggestions as memory evidence. If the user observation does not "
-            "clearly state a durable fact about the user or their project, return store=false. Choose the most "
-            "specific type below; never default broadly to personal_fact. For an explicit correction, classify "
+            "clearly state a durable fact about the user or their project, return store=false. Future wishes or "
+            "plans are eligible only when the user explicitly expresses their own intent (for example, 'I plan "
+            "to...' or 'I want to...'). Playful statements about what the assistant may do one day are not user "
+            "memories and must return store=false. Choose the most specific type below; never default broadly to "
+            "personal_fact. For an explicit correction, classify "
             "the corrected fact by its underlying type and state the correction in details. If the observation "
             "is ambiguous, return store=false rather than guessing. MEMORY TYPE TAXONOMY:\n"
             + taxonomy
@@ -337,7 +405,7 @@ class AssistantSession:
             {"role": "user", "content": f"USER OBSERVATION (sole evidence source):\n{user_text}"},
         ]
         self.trace.record("proposal_request", model=self.active_model, messages=prompt, domain=self.config.domain, source="assistant_turn_proposal")
-        response = self.chat(model=self.active_model, messages=prompt)
+        response = self.chat(**self._model_request_kwargs(prompt))
         content = response.get("message", {}).get("content", "").strip()
         self.trace.record("proposal_response", status="received" if content else "empty", response=content)
         try:
@@ -354,7 +422,7 @@ class AssistantSession:
                 {"role": "user", "content": f"Invalid proposal: {content}\nValidation error: {error}\nMEMORY TYPE TAXONOMY:\n{taxonomy}\nAllowed retention: session, short_term, long_term"},
             ]
             self.trace.record("proposal_repair_request", attempt=1, messages=repair_prompt)
-            repaired = self.chat(model=self.active_model, messages=repair_prompt)
+            repaired = self.chat(**self._model_request_kwargs(repair_prompt))
             repaired_content = repaired.get("message", {}).get("content", "").strip()
             self.trace.record("proposal_repair_response", status="received" if repaired_content else "empty", response=repaired_content)
             raw = json.loads(repaired_content)

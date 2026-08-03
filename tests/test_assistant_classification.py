@@ -1,6 +1,11 @@
 import json
+import sys
+import types
 import unittest
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.modules.setdefault("ollama", types.ModuleType("ollama"))
 
 from pipeline.assistant import AssistantConfig, AssistantSession, validate_memory_proposal
 from pipeline.db import ASSISTANT_MEMORY_TYPES, assistant_memory_type_prompt
@@ -90,5 +95,24 @@ class AssistantClassificationTests(unittest.TestCase):
         self.assertIn("proposal_skipped", [event["event"] for event in session.trace.events])
 
 
+    def test_speculative_future_statement_skips_proposal_generation(self):
+        calls = []
+        def chat(**kwargs):
+            calls.append(kwargs)
+            return {"message": {"content": "Warm response."}}
+        session = AssistantSession(self.config, "Persona", chat=chat, memory_loader=lambda **kwargs: [])
+        observation = "One day you will be able to paint pictures on my graphics card while I am away."
+        self.assertEqual(session.respond(observation), "Warm response.")
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(session.proposals, [])
+        skipped = [event for event in session.trace.events if event["event"] == "proposal_skipped"]
+        self.assertEqual(skipped[-1]["reason"], "speculative_without_explicit_intent")
+
+    def test_explicit_future_goal_remains_eligible_for_proposal(self):
+        session, calls = self._proposal_for(
+            "I want StarFur to generate images while I am away.", "goal",
+        )
+        self.assertEqual(session.proposals[-1]["memory_type"], "goal")
+        self.assertEqual(len(calls), 2)
 if __name__ == "__main__":
     unittest.main()
