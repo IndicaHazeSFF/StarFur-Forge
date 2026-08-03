@@ -434,7 +434,9 @@ Interactive `assistant` responses stream incrementally in the terminal while the
 
 ### Assistant Context Assembly
 
-Assistant prompt construction is deterministic and read-only. The context layer combines the configured persona and engine policy with already-retrieved active memories (including each selected memory's non-empty details), the bounded recent conversation window, and the current user message. It does not retrieve memories, write data, call a model, summarize history, or apply token budgeting. When a selected memory directly answers a question, engine policy requires the factual answer first; persona warmth may follow. `context stats` reports the same plan's bounded size/accounting metadata.
+Assistant prompt construction is deterministic and read-only. The context layer combines the configured persona and engine policy with already-retrieved active memories (including each selected memory's non-empty details), the bounded recent conversation window, and the current user message. It does not retrieve memories, write data, call a model, summarize history, or apply token budgeting. When a selected memory directly answers a question, engine policy requires the factual answer first; persona warmth may follow. `context stats` reports the same plan's bounded size/accounting metadata. It also reports measured phase timings (prompt build, retrieval, association, provider, proposal, and total turn) and an estimated completion-token count. Timing values are diagnostics only and are not used for routing or budgeting.
+
+Assistant chat now reaches Ollama through a narrow `ChatProvider` adapter. This does not change the installed-model commands or Ollama configuration; it establishes the provider boundary used by future LM Studio, hosted, and specialist-capability adapters. The assistant remains responsible for prompt/context assembly, streaming state, memory proposals, and diagnostics.
 
 
     context stats

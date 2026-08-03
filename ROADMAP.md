@@ -100,7 +100,7 @@ The core owns memory, retrieval, associations, provider calls, permissions, tool
 
 ### Stage 1 - Provider and service boundaries
 
-1. Add a narrow `ChatProvider` boundary around the existing Ollama integration while preserving fake-client compatibility.
+1. **COMPLETED:** Add a narrow `ChatProvider` boundary around the existing Ollama integration while preserving fake-client compatibility.
 2. Define shared application/service primitives so CLI, OpenWebUI API, future Textual TUI, and future web dashboard call the same core functions.
 3. Keep provider/model selection explicit and observable before adding automatic routing.
 4. Add provider health, latency, capability, model, fallback, and lifecycle diagnostics.

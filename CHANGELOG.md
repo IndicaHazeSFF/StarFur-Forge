@@ -1,3 +1,17 @@
+## 2026-08-03 - Chat provider boundary
+
+- Purpose: separate assistant orchestration from Ollama-specific chat and model-list API calls without changing current local behavior.
+- Modified: pipeline/providers.py, pipeline/assistant.py, tests/test_chat_provider.py, AGENTS.md, ROADMAP.md, docs/COMMANDS.md, and CHANGELOG.md.
+- Behavior: AssistantSession now calls an explicit ChatProvider; OllamaChatProvider preserves the supported Python client path, while CallableChatProvider preserves existing chat= fakes/integrations. Streaming, generation options, proposal/repair calls, runtime model selection, context stats, OpenWebUI API behavior, and interruption semantics remain assistant-owned and compatible. No schema or runtime-data migration.
+- Verification: provider tests (4), assistant model/streaming/context suites (23), assistant core/classification (20), and API tests (4) passed. Host full suite ran 120 tests with the pre-existing Windows-only factory-restore file-replacement PermissionError; WSL remains authoritative. No production sync, SQLite/Chroma mutation, or rebuild performed.
+
+## 2026-08-03 - Context phase timing diagnostics
+
+- Purpose: expose where assistant turn latency is spent without changing prompt assembly, retrieval, generation, proposal behavior, or persistence.
+- Modified: pipeline/assistant.py, pipeline/db.py, tests/test_assistant_context_stats.py, AGENTS.md, docs/COMMANDS.md, and CHANGELOG.md.
+- Behavior: context stats now reports estimated completion tokens and bounded measured timings for prompt construction, deterministic retrieval, association expansion, provider generation, proposal processing, and total turn duration. Retrieval accepts an optional timing sink; the public result shape and default behavior are unchanged.
+- Verification: context diagnostics tests (9) passed; Python compilation passed. No production sync, SQLite/Chroma rebuild, or data mutation performed.
+
 ## 2026-08-03 - Resident Intelligence Platform roadmap v3
 
 - Purpose: replace the roadmap’s former assistant/lore-centric framing with the new StarFur Resident Intelligence Platform end-state while preserving project history.

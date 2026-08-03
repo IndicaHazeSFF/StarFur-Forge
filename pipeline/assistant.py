@@ -23,6 +23,7 @@ from pipeline.domains import normalize_domain
 from pipeline.retrieval_debug import RetrievalTrace, normalize_debug_level
 from pipeline.persona import Persona, load_persona
 from pipeline.context import ContextManager, ContextPlan, estimate_tokens
+from pipeline.providers import CallableChatProvider, ChatProvider, OllamaChatProvider
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config" / "assistant.json"
@@ -157,15 +158,24 @@ class AssistantSession:
     def __init__(self, config, persona, chat=None, memory_loader=list_assistant_memories,
                  memory_creator=create_assistant_memory, memory_searcher=search_assistant_memories,
                  memory_updater=update_assistant_memory, debug_level=None, policy=None, proposal_creator=None,
-                 stream=False, stream_writer=None, model_lister=None):
+                 stream=False, stream_writer=None, model_lister=None, provider: ChatProvider | None = None):
         if config.max_session_messages <= 0:
             raise ValueError("max_session_messages must be positive")
+        if provider is not None and chat is not None:
+            raise ValueError("Provide either provider or legacy chat, not both.")
         self.config = config
         self.persona = persona if hasattr(persona, "render_prompt") else Persona(str(persona))
         self.policy = policy or load_policy()
         self.context_manager = ContextManager()
-        self.chat = chat or ollama.chat
-        self._provider_name = "Ollama" if chat is None else "custom chat client"
+        # chat= remains accepted for fakes and existing integrations while
+        # all assistant calls now travel through the explicit provider API.
+        self.provider = provider or (
+            CallableChatProvider(chat, model_lister=model_lister)
+            if chat is not None
+            else OllamaChatProvider(ollama)
+        )
+        self.chat = self.provider.complete  # Compatibility for callers inspecting this attribute.
+        self._provider_name = getattr(self.provider, "name", type(self.provider).__name__)
         # Configuration remains the startup default. Switching is deliberately
         # session-only so it cannot rewrite a user's configuration or data.
         self.active_model = config.chat_model
@@ -186,6 +196,7 @@ class AssistantSession:
         self._current_proposal_diagnostics = {"ran": False, "outcome": "skipped"}
         self._generation_started_at = None
         self._first_token_seconds = None
+        self._turn_started_at = None
         self.debug_level = normalize_debug_level(debug_level or getattr(config, "debug_level", "off"))
         self.trace = RetrievalTrace(self.debug_level)
 
@@ -197,7 +208,7 @@ class AssistantSession:
             return assistant_public_id("memory", memory_id, self.config.domain)
         return f"M-{int(memory_id):03d}"
 
-    def _begin_turn_diagnostics(self, plan: ContextPlan, retrieved):
+    def _begin_turn_diagnostics(self, plan: ContextPlan, retrieved, phase_timings=None):
         selected = []
         for item in retrieved:
             memory = item.get("memory", {})
@@ -218,6 +229,7 @@ class AssistantSession:
             "prompt_characters": plan.prompt_characters,
             "prompt_estimated_tokens": plan.prompt_estimated_tokens,
             "ollama_options": self._ollama_options(),
+            "phase_timings": dict(phase_timings or {}),
         }
 
     def _finish_turn_diagnostics(self, *, completed, response, latency_seconds, proposal=None, status=None):
@@ -234,10 +246,13 @@ class AssistantSession:
             ),
             "proposal_ran": bool((proposal or {}).get("ran")),
             "proposal_outcome": (proposal or {}).get("outcome", "skipped"),
+            "completion_estimated_tokens": estimate_tokens(response or ""),
+            "total_turn_ms": round((time.perf_counter() - self._turn_started_at) * 1000, 2) if self._turn_started_at is not None else None,
         }
         self._current_context_diagnostics = None
         self._generation_started_at = None
         self._first_token_seconds = None
+        self._turn_started_at = None
 
     def context_stats(self):
         """Render the bounded diagnostics snapshot without touching any service."""
@@ -267,14 +282,28 @@ class AssistantSession:
                 lines.append("    reasons: " + ("; ".join(item["reasons"]) if item["reasons"] else "(none)"))
         lines.extend([
             f"Prompt: {snapshot.get('prompt_characters', 0)} characters (estimated {snapshot.get('prompt_estimated_tokens', 0)} tokens)",
+            f"Completion: {snapshot.get('response_characters', 0)} characters (estimated {snapshot.get('completion_estimated_tokens', 0)} tokens)",
             f"Response: {snapshot.get('response_characters', 0)} characters",
             f"Response latency: {snapshot.get('response_latency_ms', 0):.2f} ms",
             "Time to first streamed token: " + (f"{snapshot['time_to_first_token_ms']:.2f} ms" if snapshot.get("time_to_first_token_ms") is not None else "unavailable"),
+            f"Prompt build time: {self._format_phase_ms(snapshot, 'prompt_build_ms')}",
+            f"Retrieval time: {self._format_phase_ms(snapshot, 'retrieval_ms')}",
+            f"Association time: {self._format_phase_ms(snapshot, 'association_ms')}",
+            f"Provider time: {snapshot.get('response_latency_ms', 0):.2f} ms",
+            f"Proposal time: {self._format_phase_ms(snapshot, 'proposal_ms')}",
+            f"Total turn time: {self._format_phase_ms(snapshot, 'total_turn_ms')}",
             f"Proposal extraction ran: {'yes' if snapshot.get('proposal_ran') else 'no'}",
             f"Proposal outcome: {snapshot.get('proposal_outcome', 'skipped')}",
             "=== END CONTEXT STATS ===",
         ])
         return "\n".join(lines)
+
+    @staticmethod
+    def _format_phase_ms(snapshot, name):
+        value = snapshot.get(name)
+        if value is None:
+            value = (snapshot.get("phase_timings") or {}).get(name)
+        return "unavailable" if value is None else f"{value:.2f} ms"
 
     def _ollama_options(self):
         """Return a fresh provider options dict without mutating configuration."""
@@ -293,15 +322,24 @@ class AssistantSession:
             kwargs["options"] = options
         return kwargs
 
+    def _provider_complete(self, messages, *, model=None, stream=False):
+        """Call the selected provider through the stable chat boundary."""
+        kwargs = self._model_request_kwargs(messages, model=model)
+        return self.provider.complete(
+            kwargs["messages"],
+            model=kwargs["model"],
+            options=kwargs.get("options"),
+            stream=stream,
+        )
+
     def _chat_complete(self, messages, *, model=None, stream=None):
         """Return complete content while optionally rendering streamed chunks."""
         use_stream = self.stream if stream is None else stream
-        kwargs = self._model_request_kwargs(messages, model=model)
         if not use_stream:
-            response = self.chat(**kwargs)
+            response = self._provider_complete(messages, model=model)
             return response.get("message", {}).get("content", "")
         try:
-            response = self.chat(stream=True, **kwargs)
+            response = self._provider_complete(messages, model=model, stream=True)
             if isinstance(response, dict):
                 return response.get("message", {}).get("content", "")
             parts = []
@@ -324,11 +362,14 @@ class AssistantSession:
 
     def _context_plan(self, user_text):
         self.trace = RetrievalTrace(self.debug_level)
+        phase_timings = {}
+        retrieval_started = time.perf_counter()
         if self.memory_loader is list_assistant_memories:
             retrieved = retrieve_assistant_memories(
                 user_text,
                 domain=self.config.domain,
                 limit=max(1, self.config.max_memories),
+                timings=phase_timings,
             )
             memories = [item["memory"] for item in retrieved]
         else:
@@ -337,10 +378,13 @@ class AssistantSession:
                 status="active",
                 limit=self.config.max_memories,
             )
+            phase_timings["retrieval_ms"] = round((time.perf_counter() - retrieval_started) * 1000, 2)
+            phase_timings["association_ms"] = 0.0
             retrieved = [
                 {"memory": memory, "score": None, "reasons": ["custom memory loader"]}
                 for memory in memories
             ]
+        prompt_started = time.perf_counter()
         recent = self.messages[-self.config.max_session_messages:]
         plan = self.context_manager.build_chat(
             persona_text=self.persona.render_prompt(),
@@ -349,6 +393,7 @@ class AssistantSession:
             retrieved_memories=memories,
             user_text=user_text,
         )
+        phase_timings["prompt_build_ms"] = round((time.perf_counter() - prompt_started) * 1000, 2)
         self.last_memory_ids = list(plan.selected_memory_ids)
         self.trace.record(
             "memory_lookup",
@@ -364,7 +409,7 @@ class AssistantSession:
             message_count=len(self.messages) + 1,
             context=plan.retrieved_memory.text,
         )
-        self._begin_turn_diagnostics(plan, retrieved)
+        self._begin_turn_diagnostics(plan, retrieved, phase_timings)
         return plan
 
     def _proposal(self, user_text, assistant_text=None):
@@ -405,7 +450,7 @@ class AssistantSession:
             {"role": "user", "content": f"USER OBSERVATION (sole evidence source):\n{user_text}"},
         ]
         self.trace.record("proposal_request", model=self.active_model, messages=prompt, domain=self.config.domain, source="assistant_turn_proposal")
-        response = self.chat(**self._model_request_kwargs(prompt))
+        response = self._provider_complete(prompt)
         content = response.get("message", {}).get("content", "").strip()
         self.trace.record("proposal_response", status="received" if content else "empty", response=content)
         try:
@@ -422,7 +467,7 @@ class AssistantSession:
                 {"role": "user", "content": f"Invalid proposal: {content}\nValidation error: {error}\nMEMORY TYPE TAXONOMY:\n{taxonomy}\nAllowed retention: session, short_term, long_term"},
             ]
             self.trace.record("proposal_repair_request", attempt=1, messages=repair_prompt)
-            repaired = self.chat(**self._model_request_kwargs(repair_prompt))
+            repaired = self._provider_complete(repair_prompt)
             repaired_content = repaired.get("message", {}).get("content", "").strip()
             self.trace.record("proposal_repair_response", status="received" if repaired_content else "empty", response=repaired_content)
             raw = json.loads(repaired_content)
@@ -505,7 +550,7 @@ class AssistantSession:
 
     def _installed_model_names(self):
         """Return normalized installed Ollama model names in stable order."""
-        lister = self.model_lister or getattr(ollama, "list", None)
+        lister = self.model_lister or getattr(self.provider, "list_models", None)
         if not callable(lister):
             raise RuntimeError("Unable to list Ollama models: Ollama model listing is unavailable.")
         try:
@@ -644,7 +689,10 @@ class AssistantSession:
         direct=lowered.startswith("what do you remember about")
         if not (why or direct): return None
         query=None if why else user_text.split("about",1)[1].strip().rstrip("?")
+        self._turn_started_at = time.perf_counter()
+        retrieval_started = time.perf_counter()
         explanation=self.explain_memory(query)
+        phase_timings = {"retrieval_ms": round((time.perf_counter() - retrieval_started) * 1000, 2), "association_ms": 0.0}
         if explanation["status"] == "ambiguous": return "I am not sure which memory you mean. Which one should I explain?"
         if explanation["status"] == "no_match": return "I do not have an active canonical memory that matches that."
         explanation_json = json.dumps(explanation, ensure_ascii=False)
@@ -664,7 +712,8 @@ class AssistantSession:
             selected_memory_ids=[item["memory_id"] for item in explanation["memories"]],
         )
         prompt = plan.model_messages()
-        self._begin_turn_diagnostics(plan, retrieved)
+        phase_timings["prompt_build_ms"] = round((time.perf_counter() - retrieval_started) * 1000, 2) - phase_timings["retrieval_ms"]
+        self._begin_turn_diagnostics(plan, retrieved, phase_timings)
         self.trace.record("memory_explanation", query=query, memory_ids=[item["memory_id"] for item in explanation["memories"]], payload=explanation)
         self._generation_started_at = time.perf_counter()
         self._first_token_seconds = None
@@ -700,6 +749,7 @@ class AssistantSession:
             self.trace.record("command", command=user_text)
             return command_result
         previous_memory_ids = list(self.last_memory_ids)
+        self._turn_started_at = time.perf_counter()
         plan = self._context_plan(user_text)
         messages = plan.model_messages()
         self.trace.record("model_request", model=self.active_model, message_count=len(messages), messages=messages)
@@ -730,11 +780,14 @@ class AssistantSession:
         self.trace.record("model_response", model=self.active_model, status="ok", response=content)
         self.messages.extend([{"role": "user", "content": user_text}, {"role": "assistant", "content": content}])
         self.messages = self.messages[-self.config.max_session_messages:]
+        proposal_started = time.perf_counter()
         try:
             self._proposal(user_text, content)
         except Exception as error:
             self._current_proposal_diagnostics = {"ran": True, "outcome": "skipped"}
             self.trace.record("proposal_error", status="rejected", error=str(error))
+        if self._current_context_diagnostics is not None:
+            self._current_context_diagnostics.setdefault("phase_timings", {})["proposal_ms"] = round((time.perf_counter() - proposal_started) * 1000, 2)
         self._finish_turn_diagnostics(
             completed=True,
             response=content,
