@@ -431,3 +431,21 @@
 - Modified: pipeline/application.py, pipeline/assistant.py, pipeline/api.py, tests/test_application.py, tests/test_assistant.py, AGENTS.md, ROADMAP.md, and CHANGELOG.md.
 - Behavior: `AssistantApplication` owns one `AssistantSession`, serializes requests, and safely restores temporary stream writers. The terminal loop and API now use the same standard application factory; `create_api_session()` remains compatible for existing callers.
 - Verification: focused application, assistant, and API regression tests run locally. No production SQLite/Chroma mutation, sync, or rebuild was run.
+## 2026-08-04 - Core capability registry and manifest
+
+- Purpose: establish one structured source of truth for public StarFur capabilities before personas, CLI, APIs, and future interfaces consume it.
+- Modified: pipeline/capabilities.py, tests/test_capabilities.py, AGENTS.md, ROADMAP.md, and CHANGELOG.md.
+- Behavior: stable capability IDs now describe conceptual behavior, user controls, surfaces, confirmation requirements, and runtime-state projections. Manifest snapshots are immutable, stable-order, versioned, and fingerprinted; they do not yet change prompts, commands, permissions, SQLite, or Chroma.
+- Verification: deterministic registry and manifest regression tests added. No production SQLite/Chroma mutation, sync, or rebuild was run.
+## 2026-08-04 - Capability-aware assistant context
+
+- Purpose: allow any active persona to explain current StarFur features accurately without embedding drifting implementation knowledge in persona files.
+- Modified: pipeline/capabilities.py, pipeline/application.py, pipeline/assistant.py, pipeline/context.py, tests/test_capabilities.py, tests/test_application.py, AGENTS.md, ROADMAP.md, docs/COMMANDS.md, and CHANGELOG.md.
+- Behavior: `AssistantApplication` attaches one immutable core manifest to supported sessions. `ContextManager` renders only selected structured entries for explicit broad-help or named capability questions; normal chat and memory-introspection prompts remain capability-free. Context stats show selected capability IDs when present.
+- Verification: focused capability, application, context, and context-stats tests run locally. No production SQLite/Chroma mutation, sync, or rebuild was run.
+## 2026-08-04 - Clarify capability memory grounding
+
+- Purpose: prevent generic privacy refusals from contradicting Core-supplied assistant-memory capabilities.
+- Modified: pipeline/context.py, tests/test_capabilities.py, AGENTS.md, and CHANGELOG.md.
+- Behavior: capability context now explicitly permits discussion of active memories supplied for the turn while prohibiting claims of unrestricted private-system or raw-database access.
+- Verification: capability regression tests pass; no production data or semantic indexes were touched.
