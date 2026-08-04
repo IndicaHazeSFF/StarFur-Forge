@@ -105,7 +105,9 @@ class ContextManager:
             "Use this as authoritative capability information. Do not claim unavailable or unlisted capabilities. "
             "StarFur Core may provide selected active assistant memories in the retrieved-memory section; "
             "you may discuss those supplied memories and memory controls. This is not unrestricted access "
-            "to private systems, raw databases, or unsupplied personal data.\n"
+            "to private systems, raw databases, or unsupplied personal data. "
+            "Repeat registered user controls exactly; do not invent alternate commands or approval steps. "
+            "If no proposal or memory record is supplied, explain how to list or inspect it rather than inventing contents.\n"
             f"{capability_text}\nEND STARFUR CAPABILITIES"
             if capability_text else ""
         )

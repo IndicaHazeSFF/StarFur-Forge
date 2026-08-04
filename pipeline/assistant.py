@@ -23,6 +23,7 @@ from pipeline.domains import normalize_domain
 from pipeline.retrieval_debug import RetrievalTrace, normalize_debug_level
 from pipeline.persona import Persona, load_persona
 from pipeline.context import ContextManager, ContextPlan, estimate_tokens
+from pipeline.capabilities import CapabilityManifest
 from pipeline.providers import CallableChatProvider, ChatProvider, OllamaChatProvider
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -158,7 +159,7 @@ class AssistantSession:
     def __init__(self, config, persona, chat=None, memory_loader=list_assistant_memories,
                  memory_creator=create_assistant_memory, memory_searcher=search_assistant_memories,
                  memory_updater=update_assistant_memory, debug_level=None, policy=None, proposal_creator=None,
-                 stream=False, stream_writer=None, model_lister=None, provider: ChatProvider | None = None):
+                 stream=False, stream_writer=None, model_lister=None, provider: ChatProvider | None = None, capability_manifest: CapabilityManifest | None = None):
         if config.max_session_messages <= 0:
             raise ValueError("max_session_messages must be positive")
         if provider is not None and chat is not None:
@@ -167,6 +168,7 @@ class AssistantSession:
         self.persona = persona if hasattr(persona, "render_prompt") else Persona(str(persona))
         self.policy = policy or load_policy()
         self.context_manager = ContextManager()
+        self.capability_manifest = capability_manifest
         # chat= remains accepted for fakes and existing integrations while
         # all assistant calls now travel through the explicit provider API.
         self.provider = provider or (
@@ -200,6 +202,12 @@ class AssistantSession:
         self.debug_level = normalize_debug_level(debug_level or getattr(config, "debug_level", "off"))
         self.trace = RetrievalTrace(self.debug_level)
 
+    def set_capability_manifest(self, capability_manifest: CapabilityManifest | None) -> None:
+        """Attach presentation-neutral core capabilities without changing session state."""
+        if capability_manifest is not None and not isinstance(capability_manifest, CapabilityManifest):
+            raise TypeError("capability_manifest must be a CapabilityManifest or None.")
+        self.capability_manifest = capability_manifest
+
     def _display_memory_id(self, memory):
         memory_id = memory.get("id")
         if memory_id is None:
@@ -226,6 +234,8 @@ class AssistantSession:
             "recent_characters": plan.recent_conversation.characters,
             "recent_estimated_tokens": plan.recent_conversation.estimated_tokens,
             "retrieved": selected,
+            "selected_capability_ids": list(plan.selected_capability_ids),
+            "capability_characters": plan.capabilities.characters,
             "prompt_characters": plan.prompt_characters,
             "prompt_estimated_tokens": plan.prompt_estimated_tokens,
             "ollama_options": self._ollama_options(),
@@ -274,6 +284,9 @@ class AssistantSession:
         ]
         selected = snapshot.get("retrieved", [])
         lines.append("Selected memory IDs: " + (", ".join(item["public_id"] for item in selected) if selected else "(none)"))
+        capability_ids = snapshot.get("selected_capability_ids", [])
+        if capability_ids:
+            lines.append("Capability context: " + ", ".join(capability_ids))
         if selected:
             lines.append("Retrieval details:")
             for item in selected:
@@ -386,11 +399,16 @@ class AssistantSession:
             ]
         prompt_started = time.perf_counter()
         recent = self.messages[-self.config.max_session_messages:]
+        selected_capabilities = (
+            self.capability_manifest.select_for_query(user_text)
+            if self.capability_manifest is not None else ()
+        )
         plan = self.context_manager.build_chat(
             persona_text=self.persona.render_prompt(),
             policy_text=self.policy,
             recent_messages=recent,
             retrieved_memories=memories,
+            capabilities=selected_capabilities,
             user_text=user_text,
         )
         phase_timings["prompt_build_ms"] = round((time.perf_counter() - prompt_started) * 1000, 2)
@@ -408,6 +426,7 @@ class AssistantSession:
             selected_count=len(memories),
             message_count=len(self.messages) + 1,
             context=plan.retrieved_memory.text,
+            capability_ids=list(plan.selected_capability_ids),
         )
         self._begin_turn_diagnostics(plan, retrieved, phase_timings)
         return plan

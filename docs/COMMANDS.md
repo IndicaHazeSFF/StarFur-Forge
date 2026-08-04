@@ -456,3 +456,8 @@ Hidden development restore:
     python starfur.py factory-restore
 
 Lists timestamped backups, asks for a backup selection, and requires typing `StarFur Factory Restore`. Current data is safety-backed up before replacement.
+
+## Capability-aware assistant explanations
+
+StarFur Core owns a structured capability manifest rather than placing feature knowledge in persona files. During ordinary conversation no capability block is added. Explicit questions such as `What can you do?` receive the current public capability manifest; narrowly named features such as memory proposals or model switching receive only matching capability entries. Persona controls presentation, while Core remains authoritative for what is currently supported. This does not expose private databases, hidden reasoning, or unregistered future features.
+Proposal review commands require an identifier: proposal inspect <id>, proposal approve <id>, or proposal reject <id>. proposal approve all remains the explicit batch flow.

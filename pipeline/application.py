@@ -13,14 +13,19 @@ import threading
 from typing import Callable, Iterator
 
 from pipeline.assistant import AssistantSession, load_config, load_persona, load_policy
+from pipeline.capabilities import CapabilityManifest, CapabilityRegistry, build_core_capability_registry
 from pipeline.db import upsert_assistant_memory_proposal
 
 
 class AssistantApplication:
     """Shared application facade around a single Assistant Mode session."""
 
-    def __init__(self, session: AssistantSession):
+    def __init__(self, session: AssistantSession, *, capability_manifest: CapabilityManifest | None = None):
         self.session = session
+        self.capability_manifest = capability_manifest or build_core_capability_registry().build_manifest()
+        setter = getattr(session, "set_capability_manifest", None)
+        if callable(setter):
+            setter(self.capability_manifest)
         self._lock = threading.RLock()
 
     @property
@@ -61,10 +66,13 @@ def create_assistant_application(
     stream=False,
     stream_writer=None,
     debug_level=None,
+    capability_registry: CapabilityRegistry | None = None,
     session_factory=AssistantSession,
 ):
     """Create the standard Assistant Mode application for any presentation client."""
     config = load_config(config_path) if config_path else load_config()
+    registry = capability_registry or build_core_capability_registry()
+    manifest = registry.build_manifest()
     session = session_factory(
         config,
         load_persona(config.persona_path),
@@ -74,7 +82,7 @@ def create_assistant_application(
         stream_writer=stream_writer,
         debug_level=debug_level,
     )
-    return AssistantApplication(session)
+    return AssistantApplication(session, capability_manifest=manifest)
 
 
 __all__ = ["AssistantApplication", "create_assistant_application"]

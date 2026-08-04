@@ -77,6 +77,16 @@ class AssistantApplicationTests(unittest.TestCase):
     def test_context_stats_delegates_without_a_turn(self):
         self.assertEqual(AssistantApplication(FakeSession()).context_stats(), "stats")
 
+    def test_application_attaches_one_core_manifest_when_session_supports_it(self):
+        class ManifestAwareSession(FakeSession):
+            def set_capability_manifest(self, manifest):
+                self.received_manifest = manifest
+
+        session = ManifestAwareSession()
+        app = AssistantApplication(session)
+
+        self.assertIs(session.received_manifest, app.capability_manifest)
+        self.assertIsNotNone(app.capability_manifest.get("assistant.memory.proposals"))
     def test_factory_centralizes_standard_session_dependencies(self):
         config = FakeConfig()
         captured = {}

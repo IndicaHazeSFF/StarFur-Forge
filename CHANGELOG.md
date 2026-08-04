@@ -449,3 +449,20 @@
 - Modified: pipeline/context.py, tests/test_capabilities.py, AGENTS.md, and CHANGELOG.md.
 - Behavior: capability context now explicitly permits discussion of active memories supplied for the turn while prohibiting claims of unrestricted private-system or raw-database access.
 - Verification: capability regression tests pass; no production data or semantic indexes were touched.
+## 2026-08-04 - Constrain capability command explanations
+
+- Purpose: prevent capability-aware responses from inventing approval commands or fake proposal contents.
+- Modified: pipeline/context.py, tests/test_capabilities.py, AGENTS.md, and CHANGELOG.md.
+- Behavior: capability grounding requires registered controls to be repeated exactly and directs the assistant to list or inspect real records instead of fabricating them.
+- Verification: capability and context regression tests pass; no production data or semantic indexes were touched.
+## 2026-08-04 - Recognize natural-language proposal review questions
+
+- Purpose: ensure questions such as “How do I review your new memories?” receive the proposal workflow capability context.
+- Modified: pipeline/capabilities.py, tests/test_capabilities.py, AGENTS.md, and CHANGELOG.md.
+- Behavior: proposal capability selection now recognizes conservative review/pending-memory phrases without broadening ordinary chat context.
+- Verification: capability regression tests pass; no production data or semantic indexes were touched.
+## 2026-08-04
+- Clarified capability-provided proposal controls with required <id> syntax; added regression coverage.
+
+## 2026-08-04
+- Added safe.bugs.md to track non-blocking assistant edge cases, beginning with Ctrl+C during pasted or mid-turn terminal input.

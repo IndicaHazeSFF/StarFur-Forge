@@ -114,9 +114,10 @@ Behavior rules may select warmth, verbosity, humor, curiosity, interruption styl
 ### Stage 2 - Shared application boundary
 
 1. **COMPLETED:** Define the thin `AssistantApplication` service primitive for stateful chat/commands, retrieval, introspection, proposals, context diagnostics, and model selection through the existing `AssistantSession` orchestration.
-2. Make CLI, OpenWebUI API, future Textual TUI, and dashboard call those primitives rather than duplicating orchestration.
-3. Add provider health, capability, latency, model, fallback, and lifecycle diagnostics.
-4. Preserve the local-first `ChatProvider` boundary and fake-provider tests.
+2. **COMPLETED:** Define a core-owned structured capability registry and immutable manifest, attach it through `AssistantApplication`, and inject selected entries through `ContextManager` only for explicit capability/help questions.
+3. Make CLI, OpenWebUI API, future Textual TUI, and dashboard call those primitives rather than duplicating orchestration.
+4. Add provider health, capability, latency, model, fallback, and lifecycle diagnostics.
+5. Preserve the local-first `ChatProvider` boundary and fake-provider tests.
 
 ### Persona-local memory architecture
 

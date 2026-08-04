@@ -26,6 +26,14 @@ class CapabilityRegistryTests(unittest.TestCase):
         self.assertEqual(manifest.get("assistant.memory.proposals").state, "requires_confirmation")
         self.assertEqual(manifest.fingerprint, build_core_capability_registry().build_manifest().fingerprint)
 
+
+
+    def test_proposal_controls_include_required_ids(self):
+        controls = build_core_capability_registry().build_manifest().get("assistant.memory.proposals").user_controls
+        self.assertIn("proposal inspect <id>", controls)
+        self.assertIn("proposal approve <id>", controls)
+        self.assertIn("proposal reject <id>", controls)
+
     def test_registry_rejects_duplicate_or_invalid_definitions(self):
         capability = Capability(
             id="test.example",
@@ -78,6 +86,8 @@ class CapabilityRegistryTests(unittest.TestCase):
         self.assertIn("CURRENT STARFUR CAPABILITIES", capability_prompt)
         self.assertIn("selected active assistant memories", capability_prompt)
         self.assertIn("not unrestricted access", capability_prompt)
+        self.assertIn("Repeat registered user controls exactly", capability_prompt)
+        self.assertIn("rather than inventing contents", capability_prompt)
         self.assertIn("Memory proposals and review", capability_prompt)
         self.assertIn("Runtime model selection", capability_prompt)
         self.assertIn("assistant.memory.proposals", session.last_turn_diagnostics["selected_capability_ids"])
@@ -89,8 +99,10 @@ class CapabilityRegistryTests(unittest.TestCase):
     def test_named_capability_question_selects_only_matching_core_entry(self):
         manifest = build_core_capability_registry().build_manifest()
         selected = manifest.select_for_query("How do memory proposals work?")
+        review_selected = manifest.select_for_query("How do I review your new memories?")
 
         self.assertEqual([capability.id for capability in selected], ["assistant.memory.proposals"])
+        self.assertEqual([capability.id for capability in review_selected], ["assistant.memory.proposals"])
     def test_manifest_rejects_unstable_order_and_duplicate_ids(self):
         first = Capability("test.a", "A", "test", "Summary", "Details")
         second = Capability("test.b", "B", "test", "Summary", "Details")
