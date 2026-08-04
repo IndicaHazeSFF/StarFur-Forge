@@ -826,7 +826,16 @@ def run_interactive(config_path=DEFAULT_CONFIG_PATH, input_fn=input, output_fn=p
         if not stream_started["value"]:
             print("StarFur: ", end="", flush=True); stream_started["value"] = True
         print(text, end="", flush=True)
-    session = AssistantSession(config, load_persona(config.persona_path), policy=load_policy(config.policy_path), debug_level=debug_level, proposal_creator=upsert_assistant_memory_proposal, stream=True, stream_writer=stream_writer)
+    # Import locally to avoid a module cycle: the application factory constructs
+    # AssistantSession while this module owns the interactive presentation loop.
+    from pipeline.application import create_assistant_application
+    application = create_assistant_application(
+        config_path,
+        debug_level=debug_level,
+        stream=True,
+        stream_writer=stream_writer,
+    )
+    session = application.session
     output_fn("StarFur Assistant (model list/current/use, remember/forget, memory list/search/inspect, proposal list/inspect/approve/reject/approve all, context stats; quit to exit)")
     while True:
         try:
@@ -839,7 +848,7 @@ def run_interactive(config_path=DEFAULT_CONFIG_PATH, input_fn=input, output_fn=p
             return
         proposal_count_before = len(session.proposals)
         try:
-            answer = session.respond(user_text)
+            answer = application.respond(user_text)
         except GenerationInterrupted:
             if stream_started["value"]:
                 output_fn("")

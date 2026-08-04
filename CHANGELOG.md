@@ -1,3 +1,10 @@
+## 2026-08-03 - Persona-local memory roadmap detail
+
+- Purpose: make each persona's future self-learning memory explicit in the roadmap.
+- Modified: ROADMAP.md and CHANGELOG.md.
+- Design: persona-local specific, semantic, and associative memory will use strict `persona:<id>` namespaces initially, remain separate from user/lore memory, and accept self-written lessons only under bounded, provenance-aware learning policy.
+- Verification: documentation-only change; no runtime, schema, SQLite, Chroma, or production-data behavior changed.
+
 ## 2026-08-03 - Post-routing evaluation roadmap
 
 - Purpose: add a focused evaluation and research-instrumentation stage after stable provider routing.
@@ -417,3 +424,10 @@
 - Verification: python -m unittest discover -s tests -v (8 tests passed). No sync, SQLite mutation, Chroma rebuild, or full analysis was run.
 
 
+
+## 2026-08-04 - Shared Assistant application boundary
+
+- Purpose: give terminal Assistant Mode and the OpenWebUI-compatible API one presentation-neutral entry point without changing session orchestration or memory behavior.
+- Modified: pipeline/application.py, pipeline/assistant.py, pipeline/api.py, tests/test_application.py, tests/test_assistant.py, AGENTS.md, ROADMAP.md, and CHANGELOG.md.
+- Behavior: `AssistantApplication` owns one `AssistantSession`, serializes requests, and safely restores temporary stream writers. The terminal loop and API now use the same standard application factory; `create_api_session()` remains compatible for existing callers.
+- Verification: focused application, assistant, and API regression tests run locally. No production SQLite/Chroma mutation, sync, or rebuild was run.

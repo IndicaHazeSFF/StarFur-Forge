@@ -195,10 +195,11 @@ class AssistantTests(unittest.TestCase):
                 self.trace = type("Trace", (), {"emit": lambda self, output: None})()
             def respond(self, text):
                 return "ok"
-        config = type("Config", (), {"persona_path": Path("persona/default.md"), "policy_path": Path("config/assistant_policy.md")})()
+        from pipeline.application import AssistantApplication
         inputs = iter(["proposal list", "quit"])
         output = []
-        with patch.object(assistant_module, "load_config", return_value=config), patch.object(assistant_module, "load_persona", return_value="persona"), patch.object(assistant_module, "load_policy", return_value="policy"), patch.object(assistant_module, "AssistantSession", FakeSession):
+        application = AssistantApplication(FakeSession())
+        with patch("pipeline.application.create_assistant_application", return_value=application):
             assistant_module.run_interactive(input_fn=lambda prompt: next(inputs), output_fn=output.append)
         self.assertFalse(any("Memory proposal available" in line for line in output))
 

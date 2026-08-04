@@ -7,14 +7,13 @@ owner of persona, retrieval, policy, proposals, and session state.
 from __future__ import annotations
 
 import json
-import threading
 import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Callable
 
-from pipeline.assistant import AssistantSession, GenerationInterrupted, load_config, load_persona, load_policy
-from pipeline.db import upsert_assistant_memory_proposal
+from pipeline.assistant import GenerationInterrupted
+from pipeline.application import AssistantApplication, create_assistant_application
 
 
 API_MODEL_ID = "starfur-assistant"
@@ -37,13 +36,18 @@ def _content_from_message(message):
 
 
 class StarFurAPI:
-    """Request adapter with an injected AssistantSession factory."""
+    """OpenAI-compatible request adapter over a shared application facade."""
 
-    def __init__(self, session, *, api_key=None, model_id=API_MODEL_ID):
-        self.session = session
+    def __init__(self, application_or_session, *, api_key=None, model_id=API_MODEL_ID):
+        self.application = (
+            application_or_session
+            if isinstance(application_or_session, AssistantApplication)
+            else AssistantApplication(application_or_session)
+        )
+        # Retained for injected-session compatibility with existing callers/tests.
+        self.session = self.application.session
         self.api_key = api_key
         self.model_id = model_id
-        self.lock = threading.RLock()
 
     def authenticate(self, headers):
         if not self.api_key:
@@ -51,7 +55,7 @@ class StarFurAPI:
         return headers.get("Authorization", "") == f"Bearer {self.api_key}"
 
     def models(self):
-        active = getattr(self.session, "active_model", None) or getattr(self.session.config, "chat_model", "unknown")
+        active = self.application.active_model
         return {
             "object": "list",
             "data": [{"id": self.model_id, "object": "model", "owned_by": "starfur", "active_backend": active}],
@@ -72,18 +76,8 @@ class StarFurAPI:
         requested_model = payload.get("model")
         if requested_model not in (None, self.model_id):
             raise ValueError(f"Unknown StarFur model: {requested_model}")
-        with self.lock:
-            old_writer = getattr(self.session, "stream_writer", None)
-            old_stream = getattr(self.session, "stream", False)
-            self.session.stream = stream_writer is not None
-            if stream_writer is not None:
-                self.session.stream_writer = stream_writer
-            try:
-                content = self.session.respond(user_text)
-            finally:
-                self.session.stream = old_stream
-                self.session.stream_writer = old_writer
-            active = getattr(self.session, "active_model", None) or getattr(self.session.config, "chat_model", "unknown")
+        content = self.application.respond(user_text, stream_writer=stream_writer)
+        active = self.application.active_model
         return {"content": content or "", "model": active}
 
 
@@ -192,19 +186,18 @@ class StarFurHTTPServer(ThreadingHTTPServer):
 
 
 def create_api_session(config_path=None, *, stream=False):
-    config = load_config(config_path) if config_path else load_config()
-    return AssistantSession(
-        config,
-        load_persona(config.persona_path),
-        policy=load_policy(config.policy_path),
-        proposal_creator=upsert_assistant_memory_proposal,
-        stream=stream,
-    )
+    """Compatibility factory for callers that still need the underlying session."""
+    return create_api_application(config_path, stream=stream).session
+
+
+def create_api_application(config_path=None, *, stream=False):
+    """Create the shared assistant application used by the local API server."""
+    return create_assistant_application(config_path, stream=stream)
 
 
 def serve(*, host="127.0.0.1", port=8000, config_path=None, api_key=None, quiet=False):
-    session = create_api_session(config_path)
-    server = StarFurHTTPServer((host, port), StarFurAPI(session, api_key=api_key), quiet=quiet)
+    application = create_api_application(config_path)
+    server = StarFurHTTPServer((host, port), StarFurAPI(application, api_key=api_key), quiet=quiet)
     print(f"StarFur API listening at http://{host}:{port}")
     print(f"OpenAI-compatible endpoint: http://{host}:{port}/v1")
     try:
@@ -215,4 +208,4 @@ def serve(*, host="127.0.0.1", port=8000, config_path=None, api_key=None, quiet=
         server.server_close()
 
 
-__all__ = ["API_MODEL_ID", "StarFurAPI", "StarFurHTTPServer", "create_api_session", "serve"]
+__all__ = ["API_MODEL_ID", "StarFurAPI", "StarFurHTTPServer", "create_api_application", "create_api_session", "serve"]

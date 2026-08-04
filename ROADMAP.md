@@ -113,10 +113,25 @@ Behavior rules may select warmth, verbosity, humor, curiosity, interruption styl
 
 ### Stage 2 - Shared application boundary
 
-1. Define application/service primitives for chat turns, retrieval, introspection, proposals, context diagnostics, and model selection.
+1. **COMPLETED:** Define the thin `AssistantApplication` service primitive for stateful chat/commands, retrieval, introspection, proposals, context diagnostics, and model selection through the existing `AssistantSession` orchestration.
 2. Make CLI, OpenWebUI API, future Textual TUI, and dashboard call those primitives rather than duplicating orchestration.
 3. Add provider health, capability, latency, model, fallback, and lifecycle diagnostics.
 4. Preserve the local-first `ChatProvider` boundary and fake-provider tests.
+
+### Persona-local memory architecture
+
+Each persona eventually receives a lazily initialized, strictly namespaced memory view alongside StarFur Core memory. The first implementation should reuse shared storage infrastructure with a `persona:<id>` namespace; separate physical databases or Chroma collections remain an optional packaging/scale optimization.
+
+```text
+persona:<id>
+├── specific memory       structured lessons, experiences, concepts, and self-observations
+├── semantic memory       embeddings of persona-learned material and approved references
+└── associative memory    links among interests, skills, lessons, outcomes, and context
+```
+
+Persona-local memory is not user memory. User facts remain in the human-controlled assistant memory domain and are never silently created by a persona. Persona self-memory may be written only when its configured learning policy permits it, with bounded confidence thresholds, provenance, timestamps, source experiments, outcomes, and soft-forget/supersession behavior. High-impact or uncertain self-memories should remain reviewable.
+
+A persona may learn incrementally through verified tasks: interest signal -> bounded experiment -> sandboxed result -> lesson/evidence -> conservative skill update -> associative links. Failed experiments remain useful evidence and must not be converted into claimed expertise. Persona-local semantic indexing must remain filterable by persona namespace and must never contaminate Crown of Claws or shared user-memory retrieval.
 
 ### Stage 3 - Interests, attention, and verified learning
 
