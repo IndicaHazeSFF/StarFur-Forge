@@ -52,3 +52,5 @@ Thumbs.db
 *.bin
 *.pth
 *.pt
+# Local manuscript/canon data
+canon/
