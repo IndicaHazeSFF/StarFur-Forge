@@ -29,6 +29,7 @@ class AssistantModelSelectionTests(unittest.TestCase):
             "Installed Ollama models:\n  Alpha:1b\n* qwen3:8b (active)\n  zeta:latest",
         )
         self.assertEqual(session.respond("model current"), "Active model: qwen3:8b")
+        self.assertEqual(session.respond("list models"), listed)
         self.assertEqual(chat_calls, [])
         self.assertEqual(session.messages, [])
         self.assertEqual(session.proposals, [])

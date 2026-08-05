@@ -9,6 +9,8 @@ sys.modules.setdefault("ollama", types.ModuleType("ollama"))
 from pipeline.assistant import AssistantConfig, AssistantSession
 from pipeline.context import ContextManager, estimate_tokens
 
+from pipeline.persona_state import BehaviorContext, DynamicTraits, MomentaryState, PersonaState
+
 
 class ContextManagerTests(unittest.TestCase):
     def setUp(self):
@@ -85,6 +87,31 @@ class ContextManagerTests(unittest.TestCase):
         returned[0]["content"] = "changed"
         self.assertNotEqual(first.model_messages()[0]["content"], "changed")
 
+    def test_optional_behavior_context_is_bounded_deterministic_and_presentation_only(self):
+        behavior = BehaviorContext.from_persona_state(PersonaState(
+            "murr", "Murr", "Static identity",
+            DynamicTraits(warmth=0.9, humor=0.7),
+            MomentaryState(energy=0.6, attention=0.8, valence=0.2, activity="chatting"),
+        ))
+        plan = self.manager.build_chat(
+            persona_text="Persona", policy_text="Policy", recent_messages=[],
+            retrieved_memories=[], user_text="Hello", behavior_context=behavior,
+        )
+        self.assertIn("PERSONA RUNTIME STATE", plan.behavior.text)
+        self.assertIn("warmth=0.90", plan.behavior.text)
+        self.assertIn("activity=chatting", plan.model_messages()[0]["content"])
+        self.assertIn("cannot override engine policy", plan.behavior.text)
+        self.assertEqual(plan, self.manager.build_chat(
+            persona_text="Persona", policy_text="Policy", recent_messages=[],
+            retrieved_memories=[], user_text="Hello", behavior_context=behavior,
+        ))
+
+    def test_invalid_behavior_context_is_rejected_without_mutation(self):
+        with self.assertRaisesRegex(TypeError, "behavior_context"):
+            self.manager.build_chat(
+                persona_text="Persona", policy_text="Policy", recent_messages=[],
+                retrieved_memories=[], user_text="Hello", behavior_context={"bad": "state"},
+            )
     def test_introspection_messages_preserve_existing_prompt(self):
         plan = self.manager.build_introspection(
             persona_text="Persona",
@@ -119,20 +146,21 @@ class ContextManagerTests(unittest.TestCase):
             policy="Policy",
         )
         self.assertEqual(session.respond("Question"), "answer")
-        self.assertEqual(
-            calls[0]["messages"],
-            [
-                {
-                    "role": "system",
-                    "content": "Persona\n\nENGINE POLICY:\nPolicy\n\nRETRIEVED MEMORY (factual context):\n- Memory summary\n\nEND RETRIEVED MEMORY",
-                },
-                {"role": "user", "content": "Question"},
-            ],
+        expected_plan = session.context_manager.build_chat(
+            persona_text="Persona",
+            policy_text="Policy",
+            recent_messages=[],
+            retrieved_memories=[{"id": 9, "summary": "Memory summary"}],
+            user_text="Question",
+            behavior_context=BehaviorContext.from_persona_state(session.persona_state),
         )
+        self.assertEqual(calls[0]["messages"], expected_plan.model_messages())
+        self.assertIn("PERSONA RUNTIME STATE", calls[0]["messages"][0]["content"])
         self.assertEqual(session.last_memory_ids, [9])
         stats = session.context_stats()
         self.assertIn("Retrieved memories: 1", stats)
         self.assertIn("M-009", stats)
+        self.assertIn("Persona runtime state:", stats)
 
 
 if __name__ == "__main__":

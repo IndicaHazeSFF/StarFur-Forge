@@ -21,10 +21,14 @@ from pipeline.db import (
 )
 from pipeline.domains import normalize_domain
 from pipeline.retrieval_debug import RetrievalTrace, normalize_debug_level
-from pipeline.persona import Persona, load_persona
+from pipeline.persona import Persona, load_persona, load_persona_state
 from pipeline.context import ContextManager, ContextPlan, estimate_tokens
+from pipeline.persona_state import BehaviorContext
+
 from pipeline.capabilities import CapabilityManifest
+from pipeline.command_help import detect_command_help
 from pipeline.providers import CallableChatProvider, ChatProvider, OllamaChatProvider
+from pipeline.provider_state import ProviderLifecycle
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config" / "assistant.json"
@@ -166,6 +170,7 @@ class AssistantSession:
             raise ValueError("Provide either provider or legacy chat, not both.")
         self.config = config
         self.persona = persona if hasattr(persona, "render_prompt") else Persona(str(persona))
+        self.persona_state = load_persona_state(getattr(config, "persona_path", None))
         self.policy = policy or load_policy()
         self.context_manager = ContextManager()
         self.capability_manifest = capability_manifest
@@ -178,6 +183,7 @@ class AssistantSession:
         )
         self.chat = self.provider.complete  # Compatibility for callers inspecting this attribute.
         self._provider_name = getattr(self.provider, "name", type(self.provider).__name__)
+        self.provider_lifecycle = ProviderLifecycle(self._provider_name, config.chat_model)
         # Configuration remains the startup default. Switching is deliberately
         # session-only so it cannot rewrite a user's configuration or data.
         self.active_model = config.chat_model
@@ -229,6 +235,8 @@ class AssistantSession:
             "model": self.active_model,
             "provider": self._provider_name,
             "persona_characters": plan.persona.characters,
+            "behavior_characters": plan.behavior.characters,
+            "behavior_estimated_tokens": plan.behavior.estimated_tokens,
             "policy_characters": plan.policy.characters,
             "recent_message_count": len(plan.messages) - 2,
             "recent_characters": plan.recent_conversation.characters,
@@ -270,6 +278,7 @@ class AssistantSession:
         if snapshot is None:
             return "No turn diagnostics are available yet."
         persona_chars = snapshot.get("persona_characters", 0)
+        behavior_chars = snapshot.get("behavior_characters", 0)
         policy_chars = snapshot.get("policy_characters", 0)
         lines = [
             "=== CONTEXT STATS ===",
@@ -278,6 +287,7 @@ class AssistantSession:
             f"Model: {snapshot.get('model', 'unknown')}",
             "Generation options: " + self._format_ollama_options(snapshot.get("ollama_options", {})),
             f"Persona: {persona_chars} characters (estimated {(persona_chars + 3) // 4} tokens)",
+            f"Persona runtime state: {behavior_chars} characters (estimated {snapshot.get('behavior_estimated_tokens', 0)} tokens)",
             f"Policy: {policy_chars} characters (estimated {(policy_chars + 3) // 4} tokens)",
             f"Recent conversation: {snapshot.get('recent_message_count', 0)} messages, {snapshot.get('recent_characters', 0)} characters (estimated {snapshot.get('recent_estimated_tokens', 0)} tokens)",
             f"Retrieved memories: {len(snapshot.get('retrieved', []))}",
@@ -338,22 +348,31 @@ class AssistantSession:
     def _provider_complete(self, messages, *, model=None, stream=False):
         """Call the selected provider through the stable chat boundary."""
         kwargs = self._model_request_kwargs(messages, model=model)
-        return self.provider.complete(
-            kwargs["messages"],
-            model=kwargs["model"],
-            options=kwargs.get("options"),
-            stream=stream,
-        )
-
+        self.provider_lifecycle.begin_generation(stream=stream, model=kwargs["model"])
+        try:
+            response = self.provider.complete(
+                kwargs["messages"],
+                model=kwargs["model"],
+                options=kwargs.get("options"),
+                stream=stream,
+            )
+            if not stream:
+                self.provider_lifecycle.finish()
+            return response
+        except Exception as error:
+            self.provider_lifecycle.fail(error)
+            raise
     def _chat_complete(self, messages, *, model=None, stream=None):
         """Return complete content while optionally rendering streamed chunks."""
         use_stream = self.stream if stream is None else stream
         if not use_stream:
             response = self._provider_complete(messages, model=model)
+            self.provider_lifecycle.finish()
             return response.get("message", {}).get("content", "")
         try:
             response = self._provider_complete(messages, model=model, stream=True)
             if isinstance(response, dict):
+                self.provider_lifecycle.finish()
                 return response.get("message", {}).get("content", "")
             parts = []
             for chunk in response:
@@ -369,9 +388,14 @@ class AssistantSession:
                     parts.append(piece)
                     if self.stream_writer:
                         self.stream_writer(piece)
+            self.provider_lifecycle.finish()
             return "".join(parts)
         except KeyboardInterrupt as error:
+            self.provider_lifecycle.fail("Generation interrupted")
             raise GenerationInterrupted() from error
+        except Exception as error:
+            self.provider_lifecycle.fail(error)
+            raise
 
     def _context_plan(self, user_text):
         self.trace = RetrievalTrace(self.debug_level)
@@ -409,6 +433,7 @@ class AssistantSession:
             recent_messages=recent,
             retrieved_memories=memories,
             capabilities=selected_capabilities,
+            behavior_context=BehaviorContext.from_persona_state(self.persona_state),
             user_text=user_text,
         )
         phase_timings["prompt_build_ms"] = round((time.perf_counter() - prompt_started) * 1000, 2)
@@ -615,11 +640,35 @@ class AssistantSession:
         self.trace.record("model_selected", model=selected)
         return f"Active model set to: {selected}"
 
+    def persona_inspect(self):
+        """Return a read-only bounded PersonaState diagnostic."""
+        state = self.persona_state
+        traits = state.dynamic_traits.public_dict()
+        momentary = state.momentary_state.public_dict()
+        lines = [
+            "Persona Runtime",
+            f"ID: {state.persona_id}",
+            f"Display name: {state.display_name}",
+            f"Static identity: {len(state.static_identity)} characters (not displayed)",
+            "Dynamic traits:",
+        ]
+        lines.extend(f"  {name}: {traits[name]:.2f}" for name in sorted(traits))
+        lines.extend([
+            "Momentary state:",
+            f"  energy: {momentary['energy']:.2f}",
+            f"  attention: {momentary['attention']:.2f}",
+            f"  valence: {momentary['valence']:.2f}",
+            f"  activity: {momentary['activity']}",
+            "Read-only runtime snapshot; its bounded presentation state is injected into normal chat prompts.",
+        ])
+        return "\n".join(lines)
     def command(self, text):
         lowered = text.strip().casefold()
         if lowered == "context stats":
             return self.context_stats()
-        if lowered == "model list":
+        if lowered == "persona inspect":
+            return self.persona_inspect()
+        if lowered in {"model list", "list models"}:
             try:
                 return self.model_list()
             except RuntimeError as error:
@@ -759,6 +808,10 @@ class AssistantSession:
             return "Bulk approval cancelled."
         if user_text.casefold() == "context stats":
             return self.context_stats()
+        direct_help = detect_command_help(user_text)
+        if direct_help is not None:
+            self.trace.record("command_help", intent=direct_help.intent, command=user_text)
+            return direct_help.render()
         command_result = self.command(user_text)
         if command_result is None:
             introspection = self._memory_introspection(user_text)
@@ -855,7 +908,7 @@ def run_interactive(config_path=DEFAULT_CONFIG_PATH, input_fn=input, output_fn=p
         stream_writer=stream_writer,
     )
     session = application.session
-    output_fn("StarFur Assistant (model list/current/use, remember/forget, memory list/search/inspect, proposal list/inspect/approve/reject/approve all, context stats; quit to exit)")
+    output_fn("StarFur Assistant (model list/current/use, remember/forget, memory list/search/inspect, persona inspect, proposal list/inspect/approve/reject/approve all, context stats; quit to exit)")
     while True:
         try:
             user_text = input_fn("You: ")

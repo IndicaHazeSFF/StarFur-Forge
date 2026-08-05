@@ -61,6 +61,7 @@ class ChatProviderTests(unittest.TestCase):
         self.assertEqual(provider.calls[0]["model"], "test-model")
         self.assertEqual(provider.calls[0]["options"], {"temperature": 0.4})
         self.assertIn("Provider: Fake provider", session.context_stats())
+        self.assertEqual(session.provider_lifecycle.public_dict()["state"], "idle")
         self.assertEqual(session.respond("model list"), "Installed Ollama models:\n* test-model (active)")
 
     def test_legacy_callable_remains_compatible(self):

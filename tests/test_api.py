@@ -64,6 +64,12 @@ class APITests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(payload["data"][0]["id"], API_MODEL_ID)
         self.assertEqual(payload["data"][0]["active_backend"], "qwen3:8b")
+        status, raw = self.request("GET", "/v1/starfur/diagnostics")
+        diagnostics = json.loads(raw)
+        self.assertEqual(status, 200)
+        self.assertEqual(diagnostics["model"]["active"], "qwen3:8b")
+        self.assertFalse(diagnostics["provider"]["probe_performed"])
+        self.assertIn("capabilities", diagnostics)
 
     def test_chat_uses_latest_user_message_and_does_not_accept_unknown_model(self):
         status, raw = self.request("POST", "/v1/chat/completions", {

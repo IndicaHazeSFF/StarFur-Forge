@@ -114,6 +114,8 @@ class _Handler(BaseHTTPRequestHandler):
             self._send_json(200, {"status": "ok", "service": "starfur"})
         elif self.path == "/v1/models":
             self._send_json(200, self.api.models())
+        elif self.path == "/v1/starfur/diagnostics":
+            self._send_json(200, self.api.application.runtime_diagnostics())
         else:
             self._send_json(404, {"error": {"message": "Not found", "type": "invalid_request_error"}})
 

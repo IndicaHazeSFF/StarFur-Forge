@@ -434,14 +434,14 @@ Interactive `assistant` responses stream incrementally in the terminal while the
 
 ### Assistant Context Assembly
 
-Assistant prompt construction is deterministic and read-only. The context layer combines the configured persona and engine policy with already-retrieved active memories (including each selected memory's non-empty details), the bounded recent conversation window, and the current user message. It does not retrieve memories, write data, call a model, summarize history, or apply token budgeting. When a selected memory directly answers a question, engine policy requires the factual answer first; persona warmth may follow. `context stats` reports the same plan's bounded size/accounting metadata. It also reports measured phase timings (prompt build, retrieval, association, provider, proposal, and total turn) and an estimated completion-token count. Timing values are diagnostics only and are not used for routing or budgeting.
+Assistant prompt construction is deterministic and read-only. The context layer combines the configured persona, its bounded presentation-only runtime state, and engine policy with already-retrieved active memories (including each selected memory's non-empty details), the bounded recent conversation window, and the current user message. It does not retrieve memories, write data, call a model, summarize history, or apply token budgeting. When a selected memory directly answers a question, engine policy requires the factual answer first; persona warmth may follow. `context stats` reports the same plan's bounded size/accounting metadata. It also reports measured phase timings (prompt build, retrieval, association, provider, proposal, and total turn) and an estimated completion-token count. Timing values are diagnostics only and are not used for routing or budgeting.
 
 Assistant chat now reaches Ollama through a narrow `ChatProvider` adapter. This does not change the installed-model commands or Ollama configuration; it establishes the provider boundary used by future LM Studio, hosted, and specialist-capability adapters. The assistant remains responsible for prompt/context assembly, streaming state, memory proposals, and diagnostics.
 
 
     context stats
 
-Interactive assistant command that displays the bounded diagnostics snapshot for the latest completed or interrupted conversational turn: model/provider, prompt and response character counts, estimated token counts, recent-context size, selected memory IDs with deterministic scores/reasons, latency, stream first-token timing, and proposal outcome. It is read-only: it does not invoke a model, query/write memory stores, or retain raw prompts/conversation text.
+Interactive assistant command that displays the bounded diagnostics snapshot for the latest completed or interrupted conversational turn: model/provider, persona/runtime-state/policy sizes, prompt and response character counts, estimated token counts, recent-context size, selected memory IDs with deterministic scores/reasons, latency, stream first-token timing, and proposal outcome. It is read-only: it does not invoke a model, query/write memory stores, or retain raw prompts/conversation text.
 
 
 Hidden development reset (not shown in normal help):
@@ -457,7 +457,23 @@ Hidden development restore:
 
 Lists timestamped backups, asks for a backup selection, and requires typing `StarFur Factory Restore`. Current data is safety-backed up before replacement.
 
+
+### Shared runtime diagnostics
+
+The local API exposes the bounded, read-only diagnostics snapshot at `GET /v1/starfur/diagnostics` (with the same bearer token as the other endpoints). It reports provider configuration and whether health was probed, active/startup model, capability manifest fingerprint and IDs, fallback state, lifecycle readiness, and the latest recorded turn timings. It never probes Ollama or reads/writes memory stores. Terminal `context stats` remains the detailed per-turn diagnostic view.
 ## Capability-aware assistant explanations
 
 StarFur Core owns a structured capability manifest rather than placing feature knowledge in persona files. During ordinary conversation no capability block is added. Explicit questions such as `What can you do?` receive the current public capability manifest; narrowly named features such as memory proposals or model switching receive only matching capability entries. Persona controls presentation, while Core remains authoritative for what is currently supported. This does not expose private databases, hidden reasoning, or unregistered future features.
 Proposal review commands require an identifier: proposal inspect <id>, proposal approve <id>, or proposal reject <id>. proposal approve all remains the explicit batch flow.
+
+Direct proposal-help questions such as How do I approve new memories? receive Core-owned syntax so persona responses cannot invent or omit proposal IDs.
+
+## Direct Command Help
+
+Questions such as How do I search memories?, How do I show context diagnostics?, or How do I select a model? return Core-owned, exact command syntax rather than model-generated instructions. list models is an accepted alias for model list.
+
+Persona Runtime diagnostics:
+
+    persona inspect
+
+This is read-only and shows bounded state metadata without displaying the full persona prompt or changing runtime state. Normal chat receives the same bounded presentation-only trait and momentary-state snapshot; it cannot override engine policy, factual grounding, provenance, commands, or permissions.

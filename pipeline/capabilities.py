@@ -173,7 +173,7 @@ def build_core_capability_registry() -> CapabilityRegistry:
             details="Diagnostics report bounded context accounting, selected memory IDs, retrieval reasons, generation timing, and proposal outcome without calling a model or changing stored data.",
             user_controls=("context stats",),
             surfaces=("cli", "openai_api"),
-            activation_terms=("context stats", "context diagnostic", "debug context"),
+            activation_terms=("context stats", "context diagnostic", "context diagnostics", "debug context", "show context diagnostics"),
         ),
         Capability(
             id="assistant.memory.explicit",
@@ -202,7 +202,7 @@ def build_core_capability_registry() -> CapabilityRegistry:
             user_controls=("proposal list", "proposal inspect <id>", "proposal approve <id>", "proposal reject <id>", "proposal approve all"),
             surfaces=("cli", "openai_api"),
             requires_confirmation=True,
-            activation_terms=("memory proposal", "memory proposals", "proposal list", "proposal approve", "proposal reject", "review new memories", "review your new memories", "review my new memories", "review memories", "pending memories"),
+            activation_terms=("memory proposal", "memory proposals", "proposal list", "proposal approve", "proposal reject", "review new memories", "review your new memories", "review my new memories", "review memories", "pending memories", "how do i approve", "how can i approve", "approve new memories", "approve memories", "look at proposals", "show proposals", "where are proposals", "see proposals", "view proposals", "how do i review", "how can i review"),
         ),
         Capability(
             id="assistant.model_selection",
@@ -212,7 +212,7 @@ def build_core_capability_registry() -> CapabilityRegistry:
             details="Model selection uses the configured local Ollama installation and affects later chat and proposal-extraction calls without rewriting persistent configuration or memory.",
             user_controls=("model list", "model current", "model use <model-name>"),
             surfaces=("cli", "openai_api"),
-            activation_terms=("model list", "model current", "model use", "switch model", "change model"),
+            activation_terms=("model list", "list models", "model current", "model use", "switch model", "change model", "select a model"),
         ),
         Capability(
             id="provider.ollama",

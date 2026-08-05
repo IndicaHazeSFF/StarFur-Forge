@@ -48,6 +48,7 @@ class ContextStatsTests(unittest.TestCase):
         self.assertIn("Selected memory IDs: (none)", stats)
         self.assertIn("Proposal extraction ran: no", stats)
         self.assertIn("Proposal outcome: skipped", stats)
+        self.assertIn("Persona runtime state:", stats)
         self.assertIn("estimated", stats)
         self.assertNotIn("hello", stats)
         self.assertNotIn("Warm persona", stats)
@@ -97,6 +98,7 @@ class ContextStatsTests(unittest.TestCase):
         stats = session.context_stats()
         self.assertIn("Proposal extraction ran: no", stats)
         self.assertIn("Proposal outcome: skipped", stats)
+        self.assertIn("Persona runtime state:", stats)
 
     def test_created_proposal_is_reported(self):
         responses = iter([
@@ -112,7 +114,23 @@ class ContextStatsTests(unittest.TestCase):
         stats = session.context_stats()
         self.assertIn("Proposal extraction ran: yes", stats)
         self.assertIn("Proposal outcome: created", stats)
+        self.assertEqual(session.provider_lifecycle.public_dict()["state"], "idle")
 
+    def test_phase_timings_are_reported_as_bounded_diagnostics(self):
+        session = AssistantSession(
+            self.config(policy="off"), "Persona",
+            chat=lambda **kwargs: {"message": {"content": "answer"}},
+            memory_loader=lambda **kwargs: [], policy="Policy",
+        )
+        session.respond("hello")
+        stats = session.context_stats()
+        for label in ("Prompt build time:", "Retrieval time:", "Association time:",
+                      "Provider time:", "Proposal time:", "Total turn time:"):
+            self.assertIn(label, stats)
+        self.assertIn("Completion: 6 characters (estimated 2 tokens)", stats)
+        self.assertIsNotNone(session.last_turn_diagnostics["total_turn_ms"])
+        self.assertIsNotNone(session.last_turn_diagnostics["phase_timings"]["prompt_build_ms"])
+        self.assertIsNotNone(session.last_turn_diagnostics["phase_timings"]["retrieval_ms"])
     def test_interrupted_turn_has_snapshot_without_partial_history(self):
         def chat(**kwargs):
             def stream():

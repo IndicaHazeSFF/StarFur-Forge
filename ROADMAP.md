@@ -105,18 +105,19 @@ Behavior rules may select warmth, verbosity, humor, curiosity, interruption styl
 
 ### Stage 1 - Persona Runtime compatibility foundation
 
-1. **NEXT:** Define validated `PersonaState`, `DynamicTraits`, `MomentaryState`, and `BehaviorContext` structures.
-2. Load the current persona file into static identity plus compatibility speech/style fields; preserve current Murr output as closely as possible.
-3. Add deterministic state-to-context rendering behind the existing `ContextManager`.
-4. Add bounded state snapshots and read-only `persona inspect` diagnostics.
-5. Keep current prompt output stable while migrating callers incrementally.
+1. **COMPLETED:** Defined validated, immutable `PersonaState`, `DynamicTraits`, `MomentaryState`, and `BehaviorContext` structures without changing prompt or runtime behavior.
+2. **COMPLETED:** Load the current persona file into static identity with neutral compatibility trait/state defaults while preserving its rendered prompt exactly.
+3. **COMPLETED:** Added deterministic optional state-to-context rendering behind `ContextManager`.
+4. **COMPLETED:** Added bounded state snapshots and read-only `persona inspect` diagnostics.
+5. **COMPLETED:** Migrated normal AssistantSession chat to include the current bounded BehaviorContext while preserving static persona identity, engine-policy precedence, deterministic retrieval, and provenance-scoped introspection behavior.
 
 ### Stage 2 - Shared application boundary
 
 1. **COMPLETED:** Define the thin `AssistantApplication` service primitive for stateful chat/commands, retrieval, introspection, proposals, context diagnostics, and model selection through the existing `AssistantSession` orchestration.
 2. **COMPLETED:** Define a core-owned structured capability registry and immutable manifest, attach it through `AssistantApplication`, and inject selected entries through `ContextManager` only for explicit capability/help questions.
-3. Make CLI, OpenWebUI API, future Textual TUI, and dashboard call those primitives rather than duplicating orchestration.
-4. Add provider health, capability, latency, model, fallback, and lifecycle diagnostics.
+3. **COMPLETED:** CLI Assistant Mode and the OpenWebUI-compatible API now construct/use the shared `AssistantApplication` facade; future Textual TUI and dashboard surfaces should use the same factory rather than duplicate orchestration.
+4. **IN PROGRESS:** Added a read-only shared diagnostics snapshot/API endpoint and explicit generation/streaming lifecycle transitions. Provider health probing, load/unload observation, and richer resource metrics remain future work.
+5. Add a shared provider/model lifecycle state machine with observable, bounded transitions such as disconnected, connecting, loading, ready/idle, generating, streaming, cooling, unloading, and error. Provider adapters own transition events; the application facade exposes the current snapshot to CLI, OpenWebUI, TUI, dashboard, and the future apartment. Infer states conservatively when a backend does not expose exact load/unload events, and never make persona behavior depend on parsed response text.
 5. Preserve the local-first `ChatProvider` boundary and fake-provider tests.
 
 ### Persona-local memory architecture

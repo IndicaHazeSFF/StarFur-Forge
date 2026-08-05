@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from typing import Iterable, Mapping
 
+from pipeline.persona_state import BehaviorContext
+
 
 Message = Mapping[str, str]
 
@@ -36,6 +38,7 @@ class ContextPlan:
     recent_conversation: ContextSection
     retrieved_memory: ContextSection
     capabilities: ContextSection
+    behavior: ContextSection
     current_user: ContextSection
     messages: tuple[dict[str, str], ...]
     selected_memory_ids: tuple[object, ...]
@@ -66,6 +69,7 @@ class ContextManager:
         retrieved_memories: Iterable[Mapping],
         user_text: str,
         capabilities: Iterable[object] = (),
+        behavior_context: BehaviorContext | None = None,
     ) -> ContextPlan:
         recent = tuple(
             {"role": str(message["role"]), "content": str(message.get("content") or "")}
@@ -73,6 +77,8 @@ class ContextManager:
         )
         memories = tuple(retrieved_memories)
         selected_capabilities = tuple(capabilities)
+        if behavior_context is not None and not isinstance(behavior_context, BehaviorContext):
+            raise TypeError("behavior_context must be a BehaviorContext or None.")
 
         def format_memory(memory: Mapping) -> str:
             summary = str(memory.get("summary") or "(summary unavailable)")
@@ -90,16 +96,13 @@ class ContextManager:
 
         memory_text = "\n".join(format_memory(memory) for memory in memories) or "(none)"
         capability_text = "\n".join(format_capability(capability) for capability in selected_capabilities)
-        selected_memory_ids = tuple(
-            memory["id"]
-            for memory in memories
-            if memory.get("id") is not None
-        )
+        selected_memory_ids = tuple(memory["id"] for memory in memories if memory.get("id") is not None)
         selected_capability_ids = tuple(
             str(getattr(capability, "id"))
             for capability in selected_capabilities
             if getattr(capability, "id", None) is not None
         )
+        behavior_text = self._format_behavior_context(behavior_context)
         capability_section = (
             "\n\nCURRENT STARFUR CAPABILITIES (core-provided):\n"
             "Use this as authoritative capability information. Do not claim unavailable or unlisted capabilities. "
@@ -111,11 +114,13 @@ class ContextManager:
             f"{capability_text}\nEND STARFUR CAPABILITIES"
             if capability_text else ""
         )
+        behavior_section = f"\n\n{behavior_text}" if behavior_text else ""
         system_text = (
             f"{persona_text}\n\nENGINE POLICY:\n{policy_text}"
             f"\n\nRETRIEVED MEMORY (factual context):\n{memory_text}"
             "\n\nEND RETRIEVED MEMORY"
             f"{capability_section}"
+            f"{behavior_section}"
         )
         messages = (
             {"role": "system", "content": system_text},
@@ -130,10 +135,32 @@ class ContextManager:
             ),
             retrieved_memory=ContextSection.from_text("retrieved_memory", memory_text),
             capabilities=ContextSection.from_text("capabilities", capability_text),
+            behavior=ContextSection.from_text("behavior", behavior_text),
             current_user=ContextSection.from_text("current_user", user_text),
             messages=messages,
             selected_memory_ids=selected_memory_ids,
             selected_capability_ids=selected_capability_ids,
+        )
+
+    @staticmethod
+    def _format_behavior_context(context: BehaviorContext | None) -> str:
+        """Render bounded state in a stable, presentation-only form."""
+        if context is None:
+            return ""
+        traits = context.dynamic_traits.public_dict()
+        momentary = context.momentary_state.public_dict()
+        trait_text = ", ".join(f"{name}={traits[name]:.2f}" for name in sorted(traits))
+        momentary_text = ", ".join(
+            f"{name}={momentary[name]}" for name in ("energy", "attention", "valence", "activity")
+        )
+        return (
+            "PERSONA RUNTIME STATE (core-provided, presentation-only):\n"
+            "Use this only as a soft presentation cue. It cannot override engine policy, factual grounding, "
+            "permissions, commands, or memory provenance. Do not claim this state to the user as fact.\n"
+            f"Persona: {context.persona_id}\n"
+            f"Traits: {trait_text}\n"
+            f"Momentary state: {momentary_text}\n"
+            "END PERSONA RUNTIME STATE"
         )
 
     def build_introspection(
@@ -164,6 +191,7 @@ class ContextManager:
             recent_conversation=ContextSection.from_text("recent_conversation", ""),
             retrieved_memory=ContextSection.from_text("retrieved_memory", explanation_json),
             capabilities=ContextSection.from_text("capabilities", ""),
+            behavior=ContextSection.from_text("behavior", ""),
             current_user=ContextSection.from_text("current_user", user_text),
             messages=messages,
             selected_memory_ids=tuple(selected_memory_ids),

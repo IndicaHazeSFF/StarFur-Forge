@@ -77,6 +77,17 @@ class AssistantApplicationTests(unittest.TestCase):
     def test_context_stats_delegates_without_a_turn(self):
         self.assertEqual(AssistantApplication(FakeSession()).context_stats(), "stats")
 
+    def test_runtime_diagnostics_are_bounded_and_do_not_probe_provider(self):
+        session = FakeSession()
+        app = AssistantApplication(session)
+        snapshot = app.runtime_diagnostics()
+        self.assertEqual(snapshot["status"], "provider_unavailable")
+        self.assertEqual(snapshot["provider"]["health"], "not_probed")
+        self.assertFalse(snapshot["provider"]["probe_performed"])
+        self.assertEqual(snapshot["model"]["active"], "fake:latest")
+        self.assertIsNone(snapshot["latest_turn"])
+        self.assertTrue(snapshot["capabilities"]["ids"])
+        self.assertIsNone(snapshot["lifecycle"])
     def test_application_attaches_one_core_manifest_when_session_supports_it(self):
         class ManifestAwareSession(FakeSession):
             def set_capability_manifest(self, manifest):

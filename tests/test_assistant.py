@@ -186,6 +186,8 @@ class AssistantTests(unittest.TestCase):
         self.assertIn("summary and details faithfully", policy)
         self.assertIn("Do not reinterpret a directly relevant memory", policy)
         self.assertIn("preserve the persona's natural warmth", policy)
+        self.assertIn("shared relationship history as factual only", policy)
+        self.assertIn("label it clearly as hypothetical", policy)
         self.assertIn("must not replace, contradict, bury, or overwhelm", policy)
 
     def test_proposal_notice_only_appears_for_new_proposal(self):

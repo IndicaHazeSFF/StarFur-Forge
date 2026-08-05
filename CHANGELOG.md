@@ -466,3 +466,75 @@
 
 ## 2026-08-04
 - Added safe.bugs.md to track non-blocking assistant edge cases, beginning with Ctrl+C during pasted or mid-turn terminal input.
+
+## 2026-08-04
+- Added deterministic direct command-help responses for proposal review questions, preserving exact ID-bearing syntax and batch confirmation guidance.
+
+## 2026-08-05
+- Expanded deterministic proposal-help routing for natural questions about viewing or locating proposals.
+
+## 2026-08-05
+- Expanded deterministic command help across memory controls, proposal review, context diagnostics, and runtime model selection; added the list models command alias and focused regression coverage.
+
+## 2026-08-05
+- Added validated immutable Persona Runtime state structures (PersonaState, DynamicTraits, MomentaryState, and BehaviorContext) with deterministic tests. This is data-only groundwork; current persona loading, prompts, and assistant behavior are unchanged.
+
+- Made existing persona tests independently runnable instead of relying on test-discovery import order.
+
+## 2026-08-05
+- Added load_persona_state() compatibility loading from the existing Markdown persona files into neutral runtime state, preserving the current rendered prompt exactly. No assistant output or persistence behavior changed.
+
+## 2026-08-05
+- Added optional deterministic BehaviorContext rendering to ContextManager with presentation-only grounding and no live assistant integration yet. Existing no-state prompts remain unchanged; added focused validation/determinism tests.
+
+## 2026-08-05
+- Added read-only persona inspect diagnostics for PersonaState identity, bounded traits, and momentary defaults; no model calls, prompt injection, or data mutation occur.
+
+## 2026-08-05 - Persona Runtime live context migration
+
+- Purpose: completed the compatibility-stage migration from static persona prompts to normal chat prompts that also receive bounded, validated Persona Runtime state.
+- Files modified: `pipeline/assistant.py`, `tests/test_context.py`, `tests/test_assistant_context_stats.py`, `tests/test_persona_inspect.py`, `AGENTS.md`, `ROADMAP.md`, and `docs/COMMANDS.md`.
+- Behavior: each normal `AssistantSession` chat plan now passes `BehaviorContext.from_persona_state(...)` to `ContextManager`. The added section is presentation-only and cannot override engine policy, facts, provenance, permissions, or commands. Introspection remains provenance-scoped. `context stats` accounts for runtime-state size; `persona inspect` now accurately reports that its bounded state is injected into normal chat.
+- Verification: `python -m py_compile pipeline/assistant.py tests/test_context.py tests/test_persona_inspect.py tests/test_assistant_context_stats.py`; targeted ContextManager, persona inspection, assistant context-stats, assistant, and application tests passed (47 tests total). No database migration, SQLite, Chroma, or production data mutation.
+## 2026-08-05 - Shared application boundary status
+
+- Purpose: recorded completion of the shared application-boundary milestone. The terminal Assistant Mode and OpenWebUI-compatible API already use `AssistantApplication` and its standard session factory.
+- Files modified: `ROADMAP.md` and `CHANGELOG.md`.
+- Behavior: no runtime refactor or data-store change was needed in this pass; future TUI/dashboard surfaces are directed to the same facade.
+- Verification: existing application, assistant, and API regression coverage remains the verification boundary. No production SQLite/Chroma mutation, sync, or rebuild was run.
+## 2026-08-05 - Shared runtime diagnostics foundation
+
+- Purpose: add the first provider/capability/lifecycle diagnostic snapshot at the application boundary.
+- Files modified: `pipeline/application.py`, `pipeline/api.py`, `tests/test_application.py`, `tests/test_api.py`, `ROADMAP.md`, `AGENTS.md`, `docs/COMMANDS.md`, and `CHANGELOG.md`.
+- Behavior: `AssistantApplication.runtime_diagnostics()` and `GET /v1/starfur/diagnostics` expose configured provider/model, capability manifest identity, fallback state, lifecycle readiness, and bounded latest-turn timing. Provider health is explicitly `not_probed`; diagnostics never call Ollama, rerun retrieval, or access SQLite/Chroma.
+- Verification: application and API regression tests passed (11 tests combined). No production sync, database mutation, or Chroma rebuild.
+## 2026-08-05 - Expand natural command-help coverage
+
+- Purpose: prevent natural questions about pending proposals and forgetting/removing memories from falling through to model-generated instructions.
+- Files modified: `pipeline/command_help.py`, `tests/test_command_help.py`, `AGENTS.md`, and `CHANGELOG.md`.
+- Behavior: pending-memory and natural forget/remove questions now return authoritative `proposal ...` or `memory ...` commands while preserving soft-forget semantics.
+- Verification: command-help regression tests passed; no model, SQLite, Chroma, or production data was touched.
+## 2026-08-05 - Roadmap: provider lifecycle state machine
+
+- Purpose: reserve the correct architectural location for shared provider/model lifecycle state.
+- Files modified: `ROADMAP.md` and `CHANGELOG.md`.
+- Design: future provider adapters will emit bounded lifecycle transitions consumed by the application facade and presentation surfaces, including the apartment; backend-inferred states must remain conservative.
+- Verification: documentation-only change; no runtime, SQLite, Chroma, or production data changes.
+## 2026-08-05 - Provider generation lifecycle diagnostics
+
+- Purpose: make provider generation state explicit for future UI/apartment surfaces.
+- Files modified: `pipeline/provider_state.py`, `pipeline/assistant.py`, `pipeline/application.py`, `tests/test_provider_state.py`, `tests/test_chat_provider.py`, `tests/test_application.py`, `AGENTS.md`, `ROADMAP.md`, and `CHANGELOG.md`.
+- Behavior: provider calls now expose bounded disconnected/connecting/ready/generating/streaming/idle/error transitions through runtime diagnostics. Backend health and model load/unload remain explicitly unprobed.
+- Verification: lifecycle, provider, and application tests passed (14 tests). No production data or semantic stores were touched.
+## 2026-08-05 - Settle direct provider calls to idle
+
+- Purpose: close a lifecycle edge case where non-streaming proposal extraction left diagnostics in `generating` after a completed turn.
+- Files modified: `pipeline/assistant.py`, `tests/test_assistant_context_stats.py`, and `CHANGELOG.md`.
+- Behavior: direct non-streaming provider calls now transition to `idle` immediately after completion; streaming behavior is unchanged.
+- Verification: provider, lifecycle, and context-diagnostics tests passed. No production data or semantic stores were touched.
+## 2026-08-05 - Ground shared-history persona claims
+
+- Purpose: prevent warm persona responses from presenting invented relationship events as real memories.
+- Files modified: `config/assistant_policy.md`, `tests/test_assistant.py`, `tests/test_context.py`, `AGENTS.md`, and `CHANGELOG.md`.
+- Behavior: retrieved/user/approved/system context is the only basis for factual shared history; hypothetical examples remain allowed when explicitly labeled.
+- Verification: focused assistant and context tests passed; no memory or semantic-store changes.

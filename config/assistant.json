@@ -1,15 +1,24 @@
 {
-  "chat_model": "qwen3:8b",
-  "persona_path": "persona/default.md",
-  "domain": "personal",
-  "max_session_messages": 20,
-  "max_memories": 5,
-  "memory_policy": "conservative",
-  "debug_level": "off",
-  "ollama_options": {"temperature": 0.4,
-  "top_k": 40,
-  "top_p": 0.9,
-  "seed": 420
-},
-  "policy_path": "config/assistant_policy.md"
+  "models": {
+    "qwen_fast": {
+      "model": "qwen3:8b",
+      "options": {
+        "seed": 420,
+        "temperature": 0.4,
+        "top_k": 40,
+        "top_p": 0.9,
+        "num_ctx": 8192
+      }
+    },
+    "gemma_quality": {
+      "model": "hf.co/google/gemma-4-12B-it-qat-q4_0-gguf:latest",
+      "options": {
+        "seed": 420,
+        "temperature": 0.4,
+        "top_k": 40,
+        "top_p": 0.9,
+        "num_ctx": 4096
+      }
+    }
+  }
 }

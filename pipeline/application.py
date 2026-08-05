@@ -59,6 +59,55 @@ class AssistantApplication:
         with self._lock:
             return self.session.context_stats()
 
+    def runtime_diagnostics(self):
+        """Return bounded provider/application diagnostics without probing services.
+
+        This snapshot is intentionally observational: it reports configured
+        provider/model and the already-recorded latest turn, but never calls a
+        provider, reruns retrieval, or reads a database.
+        """
+        with self._lock:
+            provider = getattr(self.session, "provider", None)
+            provider_name = getattr(self.session, "_provider_name", None) or getattr(provider, "name", None)
+            snapshot = getattr(self.session, "last_turn_diagnostics", None) or {}
+            phase_timings = dict(snapshot.get("phase_timings") or {})
+            latest_turn = None
+            if snapshot:
+                latest_turn = {
+                    "status": snapshot.get("turn_status", "unknown"),
+                    "completed": bool(snapshot.get("completed")),
+                    "model": snapshot.get("model", self.active_model),
+                    "provider": snapshot.get("provider", provider_name or "unknown"),
+                    "response_characters": snapshot.get("response_characters", 0),
+                    "response_latency_ms": snapshot.get("response_latency_ms"),
+                    "time_to_first_token_ms": snapshot.get("time_to_first_token_ms"),
+                    "proposal_outcome": snapshot.get("proposal_outcome", "skipped"),
+                    "phase_timings": phase_timings,
+                }
+            manifest = self.capability_manifest
+            return {
+                "status": "ready" if provider is not None else "provider_unavailable",
+                "provider": {
+                    "name": provider_name or "unknown",
+                    "configured": provider is not None,
+                    "health": "not_probed",
+                    "probe_performed": False,
+                },
+                "model": {
+                    "active": self.active_model,
+                    "startup": getattr(self.session.config, "chat_model", None),
+                },
+                "capabilities": {
+                    "schema_version": manifest.schema_version,
+                    "fingerprint": manifest.fingerprint,
+                    "ids": [item.id for item in manifest.capabilities],
+                },
+                "session": {"latest_turn_available": latest_turn is not None},
+                "lifecycle": getattr(self.session, "provider_lifecycle", None).public_dict() if getattr(self.session, "provider_lifecycle", None) is not None else None,
+                "fallback": {"used": False, "reason": None},
+                "latest_turn": latest_turn,
+            }
+
 
 def create_assistant_application(
     config_path=None,
