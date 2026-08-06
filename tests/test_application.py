@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.modules.setdefault("ollama", types.ModuleType("ollama"))
 
 from pipeline.application import AssistantApplication, create_assistant_application
+from pipeline.document_intake import prepare_document_text
 
 
 class FakeConfig:
@@ -77,6 +78,49 @@ class AssistantApplicationTests(unittest.TestCase):
     def test_context_stats_delegates_without_a_turn(self):
         self.assertEqual(AssistantApplication(FakeSession()).context_stats(), "stats")
 
+    def test_document_annotation_is_serialized_review_only_and_injectable(self):
+        session = FakeSession()
+
+        class RecordingLifecycle:
+            def __init__(self):
+                self.events = []
+
+            def begin_generation(self, *, stream, model):
+                self.events.append(("begin", stream, model))
+
+            def finish(self):
+                self.events.append(("finish",))
+
+            def fail(self, error):
+                self.events.append(("fail", str(error)))
+
+        lifecycle = RecordingLifecycle()
+        session.provider_lifecycle = lifecycle
+        app = AssistantApplication(session)
+        document = prepare_document_text(
+            "Roger prefers tea.", "notes.md", domain="personal",
+        )
+        seen = []
+
+        def annotator(chunk):
+            seen.append(chunk.chunk_id)
+            return {"proposals": [{
+                "store": True,
+                "subject": "Roger",
+                "memory_type": "preference",
+                "summary": "Roger prefers tea.",
+                "details": None,
+                "importance": 0.6,
+                "confidence": 0.9,
+                "retention": "long_term",
+            }]}
+
+        candidates = app.annotate_document(document, annotator=annotator)
+
+        self.assertEqual(seen, [document.chunks[0].chunk_id])
+        self.assertEqual(candidates[0].proposal["source"], "external_document_annotation")
+        self.assertEqual(session.calls, [])
+        self.assertEqual(lifecycle.events, [("begin", False, "fake:latest"), ("finish",)])
     def test_runtime_diagnostics_are_bounded_and_do_not_probe_provider(self):
         session = FakeSession()
         app = AssistantApplication(session)

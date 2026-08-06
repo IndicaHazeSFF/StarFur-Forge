@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.modules.setdefault("ollama", types.ModuleType("ollama"))
 
-from pipeline.api import API_MODEL_ID, StarFurAPI, StarFurHTTPServer
+from pipeline.api import API_MODEL_ID, DOCUMENT_ANNOTATE_PATH, DOCUMENT_PREPARE_PATH, StarFurAPI, StarFurHTTPServer
 
 
 class FakeConfig:
@@ -34,7 +34,27 @@ class FakeSession:
 class APITests(unittest.TestCase):
     def setUp(self):
         self.session = FakeSession()
-        self.server = StarFurHTTPServer(("127.0.0.1", 0), StarFurAPI(self.session, api_key="local-test"), quiet=True)
+        self.annotation_chunks = []
+
+        def document_annotator(chunk):
+            self.annotation_chunks.append(chunk)
+            return {"proposals": [{
+                "store": True,
+                "subject": "Roger",
+                "memory_type": "project_context",
+                "summary": "Roger is testing document intake.",
+                "details": None,
+                "importance": 0.7,
+                "confidence": 0.9,
+                "retention": "short_term",
+            }]}
+
+        self.api = StarFurAPI(
+            self.session,
+            api_key="local-test",
+            document_annotator=document_annotator,
+        )
+        self.server = StarFurHTTPServer(("127.0.0.1", 0), self.api, quiet=True)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         self.port = self.server.server_address[1]
@@ -109,6 +129,70 @@ class APITests(unittest.TestCase):
         self.assertIn("non-empty list", json.loads(raw)["error"]["message"])
         self.assertEqual(self.session.calls, [])
 
+
+    def test_document_preparation_is_authenticated_metadata_only_and_never_calls_chat(self):
+        status, raw = self.request("POST", DOCUMENT_PREPARE_PATH, {
+            "filename": "notes.md",
+            "content": "# Notes\n\nStarFur keeps provenance.",
+            "domain": "project:starfur",
+        })
+        payload = json.loads(raw)
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["object"], "starfur.document.preparation")
+        self.assertEqual(payload["source"]["name"], "notes.md")
+        self.assertEqual(payload["source"]["domain"], "project:starfur")
+        self.assertEqual(payload["source"]["chunk_count"], 1)
+        self.assertTrue(payload["source"]["id"].startswith("external:"))
+        self.assertNotIn("text", payload["chunks"][0])
+        self.assertEqual(self.session.calls, [])
+
+    def test_document_annotation_returns_reviewable_candidates_without_chat_or_storage(self):
+        status, raw = self.request("POST", DOCUMENT_ANNOTATE_PATH, {
+            "filename": "notes.md",
+            "content": "Roger is testing document intake.",
+            "domain": "personal",
+        })
+        payload = json.loads(raw)
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["object"], "starfur.document.annotation")
+        self.assertEqual(payload["source"]["domain"], "personal")
+        self.assertEqual(len(payload["candidates"]), 1)
+        candidate = payload["candidates"][0]
+        self.assertEqual(candidate["proposal"]["source"], "external_document_annotation")
+        self.assertEqual(candidate["provenance"]["chunk_id"], self.annotation_chunks[0].chunk_id)
+        self.assertNotIn("observation_text", candidate["provenance"])
+        self.assertEqual(self.session.calls, [])
+
+    def test_document_annotation_is_authenticated_and_reports_invalid_model_output(self):
+        status, _ = self.request("POST", DOCUMENT_ANNOTATE_PATH, {
+            "filename": "notes.md", "content": "text",
+        }, auth=False)
+        self.assertEqual(status, 401)
+        self.api.document_annotator = lambda _chunk: {"proposals": "not a list"}
+        status, raw = self.request("POST", DOCUMENT_ANNOTATE_PATH, {
+            "filename": "notes.md", "content": "text",
+        })
+        self.assertEqual(status, 422)
+        self.assertEqual(json.loads(raw)["error"]["type"], "document_annotation_error")
+        self.assertEqual(self.session.calls, [])
+    def test_document_preparation_rejects_untrusted_filename_content_and_unknown_fields(self):
+        status, raw = self.request("POST", DOCUMENT_PREPARE_PATH, {
+            "filename": "../notes.md", "content": "content",
+        })
+        self.assertEqual(status, 400)
+        self.assertIn("must not contain a path", json.loads(raw)["error"]["message"])
+        status, raw = self.request("POST", DOCUMENT_PREPARE_PATH, {
+            "filename": "notes.md", "content": 42,
+        })
+        self.assertEqual(status, 400)
+        self.assertIn("text string", json.loads(raw)["error"]["message"])
+        status, raw = self.request("POST", DOCUMENT_PREPARE_PATH, {
+            "filename": "notes.md", "content": "content", "source": "untrusted",
+        })
+        self.assertEqual(status, 400)
+        self.assertIn("Unknown document-preparation", json.loads(raw)["error"]["message"])
+        self.assertEqual(self.session.calls, [])
 
 if __name__ == "__main__":
     unittest.main()

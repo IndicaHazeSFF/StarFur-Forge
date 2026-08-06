@@ -15,18 +15,27 @@ from typing import Callable, Iterator
 from pipeline.assistant import AssistantSession, load_config, load_persona, load_policy
 from pipeline.capabilities import CapabilityManifest, CapabilityRegistry, build_core_capability_registry
 from pipeline.db import upsert_assistant_memory_proposal
+from pipeline.document_annotation import DocumentProposalAnnotator
+from pipeline.document_intake import PreparedDocument, extract_document_memory_candidates
 
 
 class AssistantApplication:
     """Shared application facade around a single Assistant Mode session."""
 
-    def __init__(self, session: AssistantSession, *, capability_manifest: CapabilityManifest | None = None):
+    def __init__(
+        self,
+        session: AssistantSession,
+        *,
+        capability_manifest: CapabilityManifest | None = None,
+        proposal_creator=upsert_assistant_memory_proposal,
+    ):
         self.session = session
         self.capability_manifest = capability_manifest or build_core_capability_registry().build_manifest()
         setter = getattr(session, "set_capability_manifest", None)
         if callable(setter):
             setter(self.capability_manifest)
         self._lock = threading.RLock()
+        self._proposal_creator = proposal_creator
 
     @property
     def active_model(self):
@@ -58,6 +67,43 @@ class AssistantApplication:
         """Expose the session's bounded, read-only latest-turn diagnostics."""
         with self._lock:
             return self.session.context_stats()
+
+    def annotate_document(self, document: PreparedDocument, *, annotator=None):
+        """Return validated external-document candidates without persistence.
+
+        This is intentionally separate from ``respond``: documents are source
+        material rather than chat turns, and the result remains review-only.
+        ``annotator`` is injectable so presentation/API tests never need Ollama.
+        """
+        with self._lock:
+            if annotator is None:
+                provider = getattr(self.session, "provider", None)
+                if provider is None:
+                    raise RuntimeError("Document annotation provider is unavailable.")
+                annotator = DocumentProposalAnnotator(provider, self.active_model)
+            lifecycle = getattr(self.session, "provider_lifecycle", None)
+            if lifecycle is not None:
+                lifecycle.begin_generation(stream=False, model=self.active_model)
+            try:
+                candidates = extract_document_memory_candidates(document, annotator)
+            except Exception as error:
+                if lifecycle is not None:
+                    lifecycle.fail(error)
+                raise
+            if lifecycle is not None:
+                lifecycle.finish()
+            return candidates
+
+    def create_document_pending_proposal(self, candidate):
+        """Explicitly hand one server-reviewed candidate to the normal proposal store."""
+        with self._lock:
+            proposal = candidate.proposal
+            return self._proposal_creator(
+                proposal,
+                domain=proposal["domain"],
+                source_reference=candidate.source_reference,
+                observation_text=candidate.observation_text,
+            )
 
     def runtime_diagnostics(self):
         """Return bounded provider/application diagnostics without probing services.

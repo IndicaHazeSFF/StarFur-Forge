@@ -203,44 +203,40 @@ def chunk_scene(
     return chunks
 
 
-def chunk_markdown(
-    path: Path,
+def chunk_text(
+    text: str,
     max_chars: int = 1200,
     overlap_paragraphs: int = 1,
 ):
-    """
-    Read a Markdown document, extract frontmatter,
-    split into scenes, and produce retrieval chunks.
-    """
-    text = path.read_text(
-        encoding="utf-8"
-    )
-
-    frontmatter, text = extract_frontmatter(
-        text
-    )
-
-    scenes = split_scenes(text)
-
+    """Chunk Markdown text using the same semantics as ``chunk_markdown``."""
+    frontmatter, body = extract_frontmatter(text)
+    scenes = split_scenes(body)
     chunks = []
 
     for scene_index, scene in enumerate(scenes):
-
         scene = scene.strip()
-
         if not scene:
             continue
-
         scene_chunks = chunk_scene(
             scene,
             scene_index,
             max_chars=max_chars,
             overlap_paragraphs=overlap_paragraphs,
         )
-
         for chunk in scene_chunks:
             chunk["frontmatter"] = frontmatter
-
         chunks.extend(scene_chunks)
-
     return chunks
+
+
+def chunk_markdown(
+    path: Path,
+    max_chars: int = 1200,
+    overlap_paragraphs: int = 1,
+):
+    """Read a Markdown document and chunk it with ``chunk_text`` semantics."""
+    return chunk_text(
+        path.read_text(encoding="utf-8"),
+        max_chars=max_chars,
+        overlap_paragraphs=overlap_paragraphs,
+    )

@@ -538,3 +538,67 @@
 - Files modified: `config/assistant_policy.md`, `tests/test_assistant.py`, `tests/test_context.py`, `AGENTS.md`, and `CHANGELOG.md`.
 - Behavior: retrieved/user/approved/system context is the only basis for factual shared history; hypothetical examples remain allowed when explicitly labeled.
 - Verification: focused assistant and context tests passed; no memory or semantic-store changes.
+## 2026-08-05 - Roadmap: chunked document intake
+
+- Purpose: record the future OpenWebUI/API document-upload path for large external files.
+- Files modified: ROADMAP.md, AGENTS.md, and CHANGELOG.md.
+- Behavior: future intake validates uploads, uses Prechunker/Mr. Chonker, preserves provenance/domain, and retrieves bounded chunks instead of injecting whole documents.
+- Verification: roadmap/documentation-only change; no sync, database, or Chroma mutation.
+
+## 2026-08-05 - Roadmap: external RAG integration gate
+
+- Purpose: record the pre-release requirement to integrate external UI uploads/RAG with StarFur’s canonical document pipeline.
+- Files modified: ROADMAP.md, AGENTS.md, and CHANGELOG.md.
+- Behavior: future intake must preserve user-request/source separation, reliable command routing, chunk identity, and provenance.
+- Verification: documentation-only change; no production data or runtime behavior changed.
+
+## 2026-08-06 - Add isolated external document preparation
+
+- Purpose: establish the first safe intake primitive for future external UI/API document uploads.
+- Files modified: pipeline/document_intake.py, 	ests/test_document_intake.py, AGENTS.md, and CHANGELOG.md.
+- Behavior: accepts bounded UTF-8 Markdown/plain text only, assigns content-hash external source identities, and prepares deterministic chunks with domain/provenance metadata. It performs no upload handling, annotation, SQLite/Chroma write, or prompt injection.
+- Verification: python -m unittest discover -s tests -p test_document_intake.py -q (4 passed) and Python compilation passed. No migrations or version bumps.
+
+## 2026-08-06 - Validate external document memory candidates
+
+- Purpose: connect prepared external-document chunks to the existing assistant-memory proposal schema without persistence.
+- Files modified: pipeline/memory_proposal_validation.py, pipeline/assistant.py, pipeline/document_intake.py, 	ests/test_document_intake.py, AGENTS.md, and CHANGELOG.md.
+- Behavior: the existing proposal validator is shared; injected document annotators receive provenance-carrying chunks and may return only candidate fields. Engine code fixes domain/source, rejects untrusted fields, omits store=false, and returns non-persistent reviewable candidates with chunk evidence.
+- Verification: intake tests (6 passed), Python compilation, and full suite run (161 tests; known unrelated Windows 	est_reset restore permission failure remains). No migrations, model calls, SQLite/Chroma writes, or prompt changes.
+
+## 2026-08-06 - Expose isolated document preparation API
+
+- Purpose: create the first explicit external UI/API boundary for safe text document preparation.
+- Files modified: pipeline/chunker.py, pipeline/document_intake.py, pipeline/api.py, 	ests/test_document_intake.py, 	ests/test_api.py, docs/COMMANDS.md, AGENTS.md, and CHANGELOG.md.
+- Behavior: POST /v1/starfur/documents/prepare accepts bounded UTF-8 Markdown/plain text with a safe filename and optional domain, then returns deterministic source/chunk metadata. It is authenticated and isolated from chat, model calls, annotation, proposals, SQLite/Chroma, and prompt injection.
+- Verification: document-intake tests (7 passed), API tests (6 passed), and Python compilation passed. No migrations or version bumps.
+
+## 2026-08-06 - Add provider-injected external document annotation
+
+- Purpose: turn prepared external document chunks into validated, reviewable assistant-memory candidates through a dedicated prompt/schema boundary.
+- Files modified: `pipeline/document_annotation.py`, `pipeline/api.py`, `tests/test_document_annotation.py`, `AGENTS.md`, `docs/COMMANDS.md`, and `CHANGELOG.md`.
+- Behavior: the injected `ChatProvider` receives one document chunk as untrusted data and returns only a JSON proposal list; output is bounded, chunk-scoped on errors, validated by the existing intake boundary, and remains non-persistent. No OpenWebUI interception, SQLite/Chroma write, semantic indexing, automatic approval, or assistant prompt change was added.
+- Verification: `python -m py_compile pipeline/document_annotation.py tests/test_document_annotation.py`; focused document-annotation (5) and document-intake (7) tests passed. No migrations or version bumps.
+## 2026-08-06 - Expose review-only external document annotation
+
+- Purpose: provide an explicit application/API path to inspect document-derived assistant-memory candidates before any persistence work.
+- Files modified: `pipeline/application.py`, `pipeline/api.py`, `tests/test_application.py`, `tests/test_api.py`, `AGENTS.md`, `docs/COMMANDS.md`, and `CHANGELOG.md`.
+- Behavior: authenticated `POST /v1/starfur/documents/annotate` validates/prepares text, invokes the active provider through the shared application facade (including bounded lifecycle transitions), and returns candidates plus bounded source/chunk provenance. It does not add pending proposals, write SQLite/Chroma, alter chat history, auto-approve, or intercept OpenWebUI attachments. Invalid annotation output is reported as HTTP 422.
+- Verification: focused document-annotation (5), document-intake (7), application (8), and API (8) tests passed; syntax parsing passed. No migrations or version bumps.
+## 2026-08-06 - Add explicit external document review handoff
+
+- Purpose: let a user move one previously reviewed external-document candidate into the established pending-proposal workflow without trusting client-supplied proposal data.
+- Files modified: `pipeline/document_review.py`, `pipeline/application.py`, `pipeline/api.py`, `tests/test_document_review.py`, `tests/test_application.py`, `tests/test_api.py`, `AGENTS.md`, `docs/COMMANDS.md`, and `CHANGELOG.md`.
+- Behavior: annotation creates a bounded 15-minute in-memory review session and stable `C-###` candidate IDs. Authenticated `/v1/starfur/documents/review` requires an exact confirmation, retrieves the original server-side candidate, and invokes the existing idempotent proposal writer with source/chunk evidence. The result is pending only; approval/rejection remains unchanged. Expiry/restart safely requires re-annotation.
+- Verification: document review (3), application (9), API (10), document intake (7), and document annotation (5) tests passed; syntax parsing passed. No schema migration, production SQLite mutation, Chroma write, sync, or automatic approval.## 2026-08-06 - Harden external annotation response parsing
+
+- Purpose: accept common provider JSON wrappers so valid document annotations are not rejected unnecessarily.
+- Files modified: `pipeline/document_annotation.py`, `tests/test_document_annotation.py`, `AGENTS.md`, and `CHANGELOG.md`.
+- Behavior: direct top-level `content` responses and Markdown-fenced JSON are normalized before the existing schema/candidate validation; malformed content remains an explicit non-persistent annotation error.
+- Verification: focused document-annotation suite passed (6 tests). No migrations or production data changes.
+## 2026-08-06 - Accept prose-wrapped annotation JSON
+
+- Purpose: tolerate local-model reasoning/prose surrounding an otherwise valid document annotation object.
+- Files modified: `pipeline/document_annotation.py`, `tests/test_document_annotation.py`, `AGENTS.md`, and `CHANGELOG.md`.
+- Behavior: after raw/fenced JSON parsing fails, the adapter isolates the outermost JSON object; existing proposal validation remains unchanged and no malformed payload is persisted.
+- Verification: focused document-annotation suite passed (6 tests). No migrations or production data changes.
