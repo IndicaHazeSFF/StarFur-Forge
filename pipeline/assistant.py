@@ -15,7 +15,7 @@ from pipeline.db import (
     assistant_public_id, resolve_assistant_id,
     get_assistant_memory,
     list_assistant_memories,
-    search_assistant_memories, retrieve_assistant_memories,
+    search_assistant_memories,
     update_assistant_memory,
     assistant_memory_type_prompt,
 )
@@ -30,6 +30,7 @@ from pipeline.capabilities import CapabilityManifest
 from pipeline.command_help import detect_command_help
 from pipeline.providers import CallableChatProvider, ChatProvider, OllamaChatProvider
 from pipeline.provider_state import ProviderLifecycle
+from pipeline.retrieval import DeterministicMemoryRetriever, MemoryLoaderRetriever, MemoryRetriever
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config" / "assistant.json"
@@ -130,7 +131,8 @@ class AssistantSession:
     def __init__(self, config, persona, chat=None, memory_loader=list_assistant_memories,
                  memory_creator=create_assistant_memory, memory_searcher=search_assistant_memories,
                  memory_updater=update_assistant_memory, debug_level=None, policy=None, proposal_creator=None,
-                 stream=False, stream_writer=None, model_lister=None, provider: ChatProvider | None = None, capability_manifest: CapabilityManifest | None = None):
+                 stream=False, stream_writer=None, model_lister=None, provider: ChatProvider | None = None,
+                 capability_manifest: CapabilityManifest | None = None, retriever: MemoryRetriever | None = None):
         if config.max_session_messages <= 0:
             raise ValueError("max_session_messages must be positive")
         if provider is not None and chat is not None:
@@ -156,6 +158,12 @@ class AssistantSession:
         self.active_model = config.chat_model
         self.model_lister = model_lister
         self.memory_loader = memory_loader
+        self._uses_default_memory_store = memory_loader is list_assistant_memories
+        self.retriever = retriever or (
+            DeterministicMemoryRetriever()
+            if self._uses_default_memory_store else MemoryLoaderRetriever(memory_loader)
+        )
+        self._validate_retriever(self.retriever)
         self.memory_creator = memory_creator
         self.memory_searcher = memory_searcher
         self.memory_updater = memory_updater
@@ -181,11 +189,21 @@ class AssistantSession:
             raise TypeError("capability_manifest must be a CapabilityManifest or None.")
         self.capability_manifest = capability_manifest
 
+    @staticmethod
+    def _validate_retriever(retriever) -> None:
+        if not callable(getattr(retriever, "retrieve", None)):
+            raise TypeError("retriever must provide a callable retrieve method.")
+
+    def set_retriever(self, retriever: MemoryRetriever) -> None:
+        """Attach a read-only retrieval dependency without changing memory data."""
+        self._validate_retriever(retriever)
+        self.retriever = retriever
+
     def _display_memory_id(self, memory):
         memory_id = memory.get("id")
         if memory_id is None:
             return "unknown"
-        if self.memory_loader is list_assistant_memories:
+        if self._uses_default_memory_store:
             return assistant_public_id("memory", memory_id, self.config.domain)
         return f"M-{int(memory_id):03d}"
 
@@ -371,26 +389,18 @@ class AssistantSession:
         self.trace = RetrievalTrace(self.debug_level)
         phase_timings = {}
         retrieval_started = time.perf_counter()
-        if self.memory_loader is list_assistant_memories:
-            retrieved = retrieve_assistant_memories(
-                user_text,
-                domain=self.config.domain,
-                limit=max(1, self.config.max_memories),
-                timings=phase_timings,
-            )
-            memories = [item["memory"] for item in retrieved]
-        else:
-            memories = self.memory_loader(
-                domain=self.config.domain,
-                status="active",
-                limit=self.config.max_memories,
-            )
-            phase_timings["retrieval_ms"] = round((time.perf_counter() - retrieval_started) * 1000, 2)
-            phase_timings["association_ms"] = 0.0
-            retrieved = [
-                {"memory": memory, "score": None, "reasons": ["custom memory loader"]}
-                for memory in memories
-            ]
+        retrieved = self.retriever.retrieve(
+            user_text,
+            domain=self.config.domain,
+            limit=max(1, self.config.max_memories),
+            timings=phase_timings,
+        )
+        phase_timings.setdefault(
+            "retrieval_ms",
+            round((time.perf_counter() - retrieval_started) * 1000, 2),
+        )
+        phase_timings.setdefault("association_ms", 0.0)
+        memories = [item["memory"] for item in retrieved]
         prompt_started = time.perf_counter()
         recent = self.messages[-self.config.max_session_messages:]
         selected_capabilities = (
@@ -704,8 +714,8 @@ class AssistantSession:
     def explain_memory(self, query=None):
         """Return a bounded, provenance-safe explanation payload."""
         retrieval_items = []
-        if self.memory_loader is list_assistant_memories:
-            retrieval_items = retrieve_assistant_memories(query, domain=self.config.domain, limit=self.config.max_memories) if query is not None else [{"memory":{"id": memory_id}, "reasons": []} for memory_id in self.last_memory_ids]
+        if self._uses_default_memory_store:
+            retrieval_items = self.retriever.retrieve(query, domain=self.config.domain, limit=self.config.max_memories) if query is not None else [{"memory":{"id": memory_id}, "reasons": []} for memory_id in self.last_memory_ids]
             target_ids = [item["memory"]["id"] for item in retrieval_items]
             source_memories = {memory_id: inspect_assistant_memory(memory_id, domain=self.config.domain) for memory_id in target_ids}
         else:

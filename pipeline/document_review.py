@@ -122,6 +122,46 @@ class DocumentReviewStore:
                 raise DocumentReviewError("Document review candidate not found.")
             return session.candidates[index]
 
+    def get_candidates(
+        self,
+        review_id: object,
+        candidate_ids: object,
+    ) -> tuple[tuple[str, DocumentMemoryCandidate], ...]:
+        """Return an ordered, validated batch of original server candidates.
+
+        Validate every identifier before any caller can persist a candidate so
+        a malformed batch cannot produce a partial handoff.  Candidate IDs
+        remain display ordinals local to one review; their persistence
+        provenance is content-derived by document intake.
+        """
+        if not isinstance(candidate_ids, list) or not candidate_ids:
+            raise DocumentReviewError("candidate_ids must be a non-empty list.")
+        if len(candidate_ids) > 128:
+            raise DocumentReviewError("candidate_ids exceeds the review batch limit.")
+        normalized_ids: list[str] = []
+        for candidate_id in candidate_ids:
+            if not isinstance(candidate_id, str) or not candidate_id.strip():
+                raise DocumentReviewError("candidate_ids must contain C-### identifiers.")
+            normalized = candidate_id.strip().upper()
+            if not normalized.startswith("C-") or not normalized[2:].isdigit():
+                raise DocumentReviewError("candidate_ids must contain C-### identifiers.")
+            if normalized in normalized_ids:
+                raise DocumentReviewError("candidate_ids must not contain duplicates.")
+            normalized_ids.append(normalized)
+        now = self._now()
+        with self._lock:
+            self._prune(now)
+            session = self._sessions.get(review_id.strip() if isinstance(review_id, str) else "")
+            if session is None:
+                raise DocumentReviewError("Document review not found or expired.")
+            selected: list[tuple[str, DocumentMemoryCandidate]] = []
+            for candidate_id in normalized_ids:
+                index = int(candidate_id[2:]) - 1
+                if index < 0 or index >= len(session.candidates):
+                    raise DocumentReviewError("Document review candidate not found.")
+                selected.append((candidate_id, session.candidates[index]))
+            return tuple(selected)
+
 
 def candidate_public_id(index: int) -> str:
     """Return the stable display identifier for a candidate within one review."""

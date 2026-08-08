@@ -207,7 +207,10 @@ class AssistantApplicationTests(unittest.TestCase):
 
         self.assertEqual(result["proposal_id"], 41)
         self.assertEqual(writes[0]["domain"], "personal")
-        self.assertEqual(writes[0]["source_reference"], f"{candidate.chunk_id}:candidate:0")
+        self.assertRegex(
+            writes[0]["source_reference"],
+            rf"^{candidate.chunk_id}:candidate:[0-9a-f]{{64}}$",
+        )
         self.assertEqual(writes[0]["observation_text"], "Roger prefers tea.")
         self.assertEqual(writes[0]["proposal"]["source"], "external_document_annotation")
     def test_runtime_diagnostics_are_bounded_and_do_not_probe_provider(self):

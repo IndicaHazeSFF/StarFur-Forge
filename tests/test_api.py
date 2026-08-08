@@ -270,9 +270,68 @@ class APITests(unittest.TestCase):
         self.assertEqual(payload["proposal_status"], "pending")
         self.assertEqual(payload["persistence_action"], "created")
         self.assertEqual(self.proposal_writes[0]["domain"], "personal")
-        self.assertEqual(self.proposal_writes[0]["source_reference"], f"{self.annotation_chunks[0].chunk_id}:candidate:0")
+        self.assertRegex(
+            self.proposal_writes[0]["source_reference"],
+            rf"^{self.annotation_chunks[0].chunk_id}:candidate:[0-9a-f]{{64}}$",
+        )
         self.assertEqual(self.proposal_writes[0]["observation_text"], self.annotation_chunks[0].text)
         self.assertEqual(self.session.calls, [])
+
+    def test_document_candidate_batch_handoff_requires_plural_confirmation_and_preserves_order(self):
+        self.api.document_annotator = lambda _chunk: {"proposals": [
+            {
+                "store": True, "subject": "Roger", "memory_type": "preference",
+                "summary": "Roger prefers tea.", "details": None,
+                "importance": 0.6, "confidence": 0.9, "retention": "long_term",
+            },
+            {
+                "store": True, "subject": "Roger", "memory_type": "preference",
+                "summary": "Roger prefers coffee.", "details": None,
+                "importance": 0.6, "confidence": 0.9, "retention": "long_term",
+            },
+        ]}
+        status, raw = self.request("POST", DOCUMENT_ANNOTATE_PATH, {
+            "filename": "notes.md", "content": "Roger is testing document intake.",
+        })
+        annotation = json.loads(raw)
+        self.assertEqual(status, 200)
+        review_id = annotation["review"]["id"]
+        candidate_ids = [candidate["id"] for candidate in annotation["candidates"]]
+
+        status, raw = self.request("POST", DOCUMENT_REVIEW_PATH, {
+            "review_id": review_id,
+            "candidate_ids": candidate_ids,
+            "confirm": "create pending proposal",
+        })
+        self.assertEqual(status, 400)
+        self.assertIn("batch handoff requires", json.loads(raw)["error"]["message"])
+        self.assertEqual(self.proposal_writes, [])
+
+        status, raw = self.request("POST", DOCUMENT_REVIEW_PATH, {
+            "review_id": review_id,
+            "candidate_ids": candidate_ids,
+            "confirm": "create pending proposals",
+        })
+        payload = json.loads(raw)
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["object"], "starfur.document.proposal_handoff_batch")
+        self.assertEqual(payload["count"], 2)
+        self.assertEqual([item["candidate_id"] for item in payload["handoffs"]], candidate_ids)
+        self.assertEqual(len(self.proposal_writes), 2)
+        self.assertEqual(self.session.calls, [])
+
+    def test_document_candidate_batch_validates_all_ids_before_writing(self):
+        status, raw = self.request("POST", DOCUMENT_ANNOTATE_PATH, {
+            "filename": "notes.md", "content": "Roger is testing document intake.",
+        })
+        annotation = json.loads(raw)
+        status, raw = self.request("POST", DOCUMENT_REVIEW_PATH, {
+            "review_id": annotation["review"]["id"],
+            "candidate_ids": [annotation["candidates"][0]["id"], "C-999"],
+            "confirm": "create pending proposals",
+        })
+        self.assertEqual(status, 404)
+        self.assertEqual(self.proposal_writes, [])
 
     def test_document_candidate_handoff_rejects_unknown_or_forged_review_identifiers(self):
         status, raw = self.request("POST", DOCUMENT_REVIEW_PATH, {

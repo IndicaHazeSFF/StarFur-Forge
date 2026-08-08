@@ -165,6 +165,7 @@ class StarFurAPI:
             "candidates": [
                 {
                     "id": candidate_public_id(index),
+                    "identity": candidate.source_reference.rsplit(":candidate:", 1)[-1],
                     "proposal": dict(candidate.proposal),
                     "provenance": {
                         "source": candidate.proposal["source"],
@@ -199,6 +200,39 @@ class StarFurAPI:
             "proposal_status": "pending",
             "persistence_action": result["action"],
             "evidence_count": result["evidence_count"],
+        }
+
+    def create_document_pending_proposals(self, payload):
+        """Persist an explicitly selected review batch as pending proposals."""
+        if not isinstance(payload, dict):
+            raise ValueError("Request body must be a JSON object.")
+        allowed = {"review_id", "candidate_ids", "confirm"}
+        unknown = set(payload) - allowed
+        if unknown:
+            raise ValueError(f"Unknown document-review field(s): {sorted(unknown)}")
+        if payload.get("confirm") != "create pending proposals":
+            raise ValueError("Document proposal batch handoff requires confirm='create pending proposals'.")
+        selected = self.document_review_store.get_candidates(
+            payload.get("review_id"), payload.get("candidate_ids"),
+        )
+        results = self.application.create_document_pending_proposals(
+            [candidate for _, candidate in selected],
+        )
+        handoffs = [
+            {
+                "candidate_id": candidate_id,
+                "proposal_id": result["proposal_id"],
+                "proposal_status": "pending",
+                "persistence_action": result["action"],
+                "evidence_count": result["evidence_count"],
+            }
+            for (candidate_id, _), result in zip(selected, results, strict=True)
+        ]
+        return {
+            "object": "starfur.document.proposal_handoff_batch",
+            "review_id": payload["review_id"],
+            "count": len(handoffs),
+            "handoffs": handoffs,
         }
 
     def complete(self, payload, *, stream_writer=None, conversation_id=None):
@@ -294,7 +328,11 @@ class _Handler(BaseHTTPRequestHandler):
                 elif self.path == DOCUMENT_ANNOTATE_PATH:
                     result = self.api.annotate_document(payload)
                 else:
-                    result = self.api.create_document_pending_proposal(payload)
+                    result = (
+                        self.api.create_document_pending_proposals(payload)
+                        if "candidate_ids" in payload
+                        else self.api.create_document_pending_proposal(payload)
+                    )
             except DocumentReviewError as error:
                 self._send_json(404, {"error": {"message": str(error), "type": "document_review_not_found"}})
                 return

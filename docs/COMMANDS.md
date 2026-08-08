@@ -108,15 +108,49 @@ Endpoints:
 
 `/v1/starfur/documents/prepare` is the first explicit external-document intake boundary. Send a JSON object with `filename`, UTF-8 text `content`, and optional `domain` (`personal` or `project:<slug>`). It accepts `.md`, `.markdown`, and `.txt` names up to 2 MiB of UTF-8 content, validates/chunks them through StarFur, and returns source/chunk metadata only. It does not call a model, create proposals, write SQLite/Chroma, or inject the document into a chat turn. OpenWebUI attachment/RAG interception is not wired to this endpoint yet.
 
-`/v1/starfur/documents/annotate` accepts the same validated request body, sends each prepared chunk to the currently active configured provider through the shared application facade, and returns reviewable candidate proposals with source/chunk provenance. Annotation itself does not create pending proposals, write SQLite/Chroma, approve anything, or inject document text into chat. The response includes a short-lived `review.id` and candidate IDs such as `C-001`; invalid model output returns HTTP 422.
+`/v1/starfur/documents/annotate` accepts the same validated request body, sends each prepared chunk to the currently active configured provider through the shared application facade, and returns reviewable candidate proposals with source/chunk provenance. Annotation itself does not create pending proposals, write SQLite/Chroma, approve anything, or inject document text into chat. The response includes a short-lived `review.id`, display candidate IDs such as `C-001`, and a content-derived candidate identity; invalid model output returns HTTP 422.
 
 To deliberately add one reviewed candidate to the existing pending-proposal workflow, call `/v1/starfur/documents/review` with only its returned `review_id`, `candidate_id`, and exact confirmation:
 
     {"review_id":"DR-...","candidate_id":"C-001","confirm":"create pending proposal"}
 
+To hand off several already-reviewed candidates at once, send only their returned IDs and the plural exact confirmation. The server validates the entire batch before it writes any candidate, then reports each normal idempotent pending-proposal result in request order:
+
+    {"review_id":"DR-...","candidate_ids":["C-001","C-002"],"confirm":"create pending proposals"}
+
 The server uses its in-memory validated candidate—not client-supplied proposal fields—then calls the normal idempotent pending-proposal writer with original chunk evidence. The result is still pending and must be approved/rejected through the existing proposal controls. Review sessions expire after 15 minutes and disappear on server restart. OpenWebUI attachment/RAG interception is still not wired.
 
 In OpenWebUI running in Docker, add an OpenAI connection with base URL `http://host.docker.internal:8001/v1` and model `starfur-assistant`; use the port selected when starting `serve`. The adapter preserves StarFur persona, retrieval, policy, proposals, and session state; it does not expose SQLite or Chroma. Use `--api-key <token>` for a bearer token. If OpenWebUI runs in Docker or another network namespace, bind explicitly with `--host 0.0.0.0` and use the host gateway address; do not expose an unauthenticated server beyond the local machine. Streaming uses OpenAI-compatible SSE chunks.
+
+### API conversation isolation
+
+StarFur keeps **ephemeral** chat state separate only when a client supplies a
+stable conversation identifier. This isolates recent conversation context,
+active model selection, last-selected memory references, and pending command
+confirmations. Canonical SQLite/Chroma memory remains shared and domain-scoped.
+
+For `POST /v1/chat/completions`, StarFur selects the identifier in this order:
+
+1. `X-StarFur-Conversation` request header;
+2. JSON `conversation_id` (StarFur extension);
+3. JSON `metadata.starfur_conversation_id` (StarFur extension);
+4. OpenAI-compatible JSON `user` field;
+5. the legacy shared `default` session when none is supplied.
+
+For example:
+
+    curl -H "Authorization: Bearer starfur-local" \
+      -H "X-StarFur-Conversation: openwebui-chat-42" \
+      -H "Content-Type: application/json" \
+      http://127.0.0.1:8001/v1/chat/completions \
+      -d '{"model":"starfur-assistant","messages":[{"role":"user","content":"Hello"}]}'
+
+Identifiers are opaque local map keys, not user authentication or a security
+boundary. They are limited to 128 safe identifier characters. Sessions are
+in-memory and bounded with least-recently-used eviction; a restart clears only
+ephemeral chat state. A frontend that does not send a stable per-chat key still
+uses the legacy default session, so it does **not** gain separate-chat isolation
+automatically.
 
 ## Runtime Ollama Model Selection
 
@@ -498,3 +532,15 @@ This is read-only and shows bounded state metadata without displaying the full p
 ### External document candidate identity
 
 Each reviewed document candidate has stable provenance derived from its source chunk plus candidate ordinal. Multiple valid facts extracted from one chunk therefore become separate pending proposals when explicitly handed off; repeating the same `C-###` handoff remains idempotent and returns `duplicate_evidence` rather than creating another proposal.
+
+### Approved document retrieval
+
+A reviewed document candidate affects assistant chat only after normal proposal approval. The resulting active assistant memory participates in the same deterministic, domain-scoped retrieval as other approved memories. Context and context stats may label it as an `approved external document`; they do not expose raw uploaded text, source IDs, or chunk identifiers. Pending, rejected, and forgotten document-derived records are not retrievable.
+
+### Retrieval benchmark
+
+`python starfur.py retrieval-eval` runs the deterministic fixture benchmark against a temporary SQLite database. Results now include `benchmark_version`, strategy, per-case expected/returned IDs, Recall@K, Precision@K, irrelevant-result count, and repeatability. It does not read or mutate production memory/Chroma.
+
+### Benchmark manifests
+
+`pipeline/benchmark.py` provides the first metadata-only benchmark layer. `BenchmarkRunManifest` records workload, architecture fingerprint, provider/model/quantization, context size, seed, hardware, and run identity. `build_scaling_plan()` creates same-workload/different-model plans without invoking providers or touching production data.

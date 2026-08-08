@@ -126,20 +126,28 @@ Beta paragraph.
         candidate = candidates[0]
         self.assertEqual(candidate.proposal["domain"], "project:starfur")
         self.assertEqual(candidate.proposal["source"], DOCUMENT_ANNOTATION_SOURCE)
-        self.assertEqual(candidate.source_reference, f"{document.chunks[0].chunk_id}:candidate:0")
+        self.assertRegex(
+            candidate.source_reference,
+            rf"^{document.chunks[0].chunk_id}:candidate:[0-9a-f]{{64}}$",
+        )
         self.assertEqual(candidate.observation_text, document.chunks[0].text)
 
-    def test_candidates_from_one_chunk_have_stable_distinct_provenance(self):
+    def test_candidates_from_one_chunk_have_stable_distinct_content_provenance(self):
         with tempfile.TemporaryDirectory() as directory:
             document = prepare_document(self._write(directory, "notes.md", "Two project facts."))
             candidates = extract_document_memory_candidates(document, lambda _chunk: {"proposals": [
                 {"store": True, "subject": "StarFur", "memory_type": "project_context", "summary": "First fact.", "details": None, "importance": 0.5, "confidence": 0.8, "retention": "short_term"},
                 {"store": True, "subject": "StarFur", "memory_type": "project_context", "summary": "Second fact.", "details": None, "importance": 0.5, "confidence": 0.8, "retention": "short_term"},
             ]})
-        self.assertEqual(
-            [candidate.source_reference for candidate in candidates],
-            [f"{document.chunks[0].chunk_id}:candidate:0", f"{document.chunks[0].chunk_id}:candidate:1"],
-        )
+        references = [candidate.source_reference for candidate in candidates]
+        self.assertEqual(len(set(references)), 2)
+        self.assertTrue(all(reference.startswith(f"{document.chunks[0].chunk_id}:candidate:") for reference in references))
+
+        reordered = extract_document_memory_candidates(document, lambda _chunk: {"proposals": [
+            {"store": True, "subject": "StarFur", "memory_type": "project_context", "summary": "Second fact.", "details": None, "importance": 0.8, "confidence": 0.5, "retention": "short_term"},
+            {"store": True, "subject": "StarFur", "memory_type": "project_context", "summary": "First fact.", "details": None, "importance": 0.1, "confidence": 0.9, "retention": "short_term"},
+        ]})
+        self.assertEqual(set(references), {candidate.source_reference for candidate in reordered})
     def test_document_candidates_reject_untrusted_fields_and_omit_store_false(self):
         with tempfile.TemporaryDirectory() as directory:
             document = prepare_document(self._write(directory, "notes.md", "An observation."))

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from hashlib import sha256
+import json
 from pathlib import Path
 from typing import Callable, Iterable, Mapping
 
@@ -91,6 +92,41 @@ class DocumentMemoryCandidate:
     source_reference: str
     chunk_id: str
     observation_text: str
+
+
+def _normalized_candidate_identity_text(value: object) -> str:
+    """Return a compact stable representation for candidate identity fields."""
+    if value is None:
+        return ""
+    return " ".join(str(value).split()).casefold()
+
+
+def document_candidate_identity(
+    *,
+    document: PreparedDocument,
+    chunk: IntakeChunk,
+    proposal: Mapping[str, object],
+) -> str:
+    """Return a content-derived identity for one external-document candidate.
+
+    The extraction model may reorder candidates inside a chunk.  Proposal
+    persistence therefore cannot use an extraction ordinal as the source
+    reference.  This fingerprint scopes the normalized asserted content to the
+    already content-addressed document and chunk while deliberately excluding
+    confidence/importance, which may vary between equivalent extractions.
+    """
+    identity_payload = {
+        "source_id": document.source_id,
+        "chunk_id": chunk.chunk_id,
+        "domain": proposal["domain"],
+        "subject": _normalized_candidate_identity_text(proposal["subject"]),
+        "memory_type": proposal["memory_type"],
+        "summary": _normalized_candidate_identity_text(proposal["summary"]),
+        "details": _normalized_candidate_identity_text(proposal.get("details")),
+        "retention": proposal["retention"],
+    }
+    serialized = json.dumps(identity_payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return sha256(serialized.encode("utf-8")).hexdigest()
 
 
 def _validate_source_name(value: object) -> str:
@@ -239,16 +275,17 @@ def _extract_chunk_candidates(
     retryable = getattr(annotator, "annotate_with_retry", None)
     output = retryable(chunk, attempt=attempt) if callable(retryable) else annotator(chunk)
     candidates: list[DocumentMemoryCandidate] = []
-    for candidate_index, raw in enumerate(_candidate_records(output, chunk.chunk_id)):
+    for raw in _candidate_records(output, chunk.chunk_id):
         complete = {**raw, "domain": document.domain, "source": DOCUMENT_ANNOTATION_SOURCE}
         try:
             proposal = validate_memory_proposal(complete, document.domain)
         except ValueError as error:
             raise DocumentAnnotationError(f"Invalid document proposal for {chunk.chunk_id}: {error}") from error
         if proposal["store"]:
+            identity = document_candidate_identity(document=document, chunk=chunk, proposal=proposal)
             candidates.append(DocumentMemoryCandidate(
                 proposal=proposal, source_id=document.source_id,
-                source_reference=f"{chunk.chunk_id}:candidate:{candidate_index}", chunk_id=chunk.chunk_id,
+                source_reference=f"{chunk.chunk_id}:candidate:{identity}", chunk_id=chunk.chunk_id,
                 observation_text=chunk.text,
             ))
     return tuple(candidates)
@@ -303,6 +340,7 @@ __all__ = [
     "DocumentAnnotationResult",
     "DocumentIntakeError",
     "DocumentMemoryCandidate",
+    "document_candidate_identity",
     "IntakeChunk",
     "PreparedDocument",
     "extract_document_memory_candidates",

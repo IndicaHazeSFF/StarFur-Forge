@@ -19,6 +19,7 @@ from pipeline.capabilities import CapabilityManifest, CapabilityRegistry, build_
 from pipeline.db import upsert_assistant_memory_proposal
 from pipeline.document_annotation import DocumentProposalAnnotator
 from pipeline.document_intake import PreparedDocument, extract_document_memory_candidates_resilient
+from pipeline.retrieval import DeterministicMemoryRetriever, MemoryRetriever
 
 
 DEFAULT_CONVERSATION_ID = "default"
@@ -58,10 +59,12 @@ class AssistantApplication:
         proposal_creator=upsert_assistant_memory_proposal,
         session_factory: Callable[[], AssistantSession] | None = None,
         max_conversations: int = DEFAULT_MAX_CONVERSATIONS,
+        retriever: MemoryRetriever | None = None,
     ):
         if max_conversations <= 0:
             raise ValueError("max_conversations must be positive.")
         self.session = session
+        self.retriever = retriever or getattr(session, "retriever", None)
         self.capability_manifest = capability_manifest or build_core_capability_registry().build_manifest()
         self._lock = threading.RLock()
         self._proposal_creator = proposal_creator
@@ -69,11 +72,19 @@ class AssistantApplication:
         self._max_conversations = max_conversations
         self._sessions = OrderedDict([(DEFAULT_CONVERSATION_ID, session)])
         self._attach_capability_manifest(session)
+        self._attach_retriever(session)
 
     def _attach_capability_manifest(self, session):
         setter = getattr(session, "set_capability_manifest", None)
         if callable(setter):
             setter(self.capability_manifest)
+
+    def _attach_retriever(self, session):
+        if self.retriever is None:
+            return
+        setter = getattr(session, "set_retriever", None)
+        if callable(setter):
+            setter(self.retriever)
 
     def _session_for(self, conversation_id=None):
         """Return one ephemeral session, creating/evicting only non-default ones.
@@ -94,6 +105,7 @@ class AssistantApplication:
             )
         session = self._session_factory()
         self._attach_capability_manifest(session)
+        self._attach_retriever(session)
         self._sessions[key] = session
         self._evict_sessions_if_needed()
         return session
@@ -182,6 +194,19 @@ class AssistantApplication:
                 observation_text=candidate.observation_text,
             )
 
+    def create_document_pending_proposals(self, candidates):
+        """Hand an already validated review batch to the normal proposal writer.
+
+        Review validation happens before this method is called.  Each candidate
+        intentionally still uses the ordinary idempotent writer, so a retried
+        batch cannot create duplicate evidence or bypass proposal approval.
+        """
+        with self._lock:
+            return tuple(
+                self.create_document_pending_proposal(candidate)
+                for candidate in candidates
+            )
+
     def runtime_diagnostics(self, *, conversation_id=None):
         """Return bounded provider/application diagnostics without probing services.
 
@@ -245,11 +270,13 @@ def create_assistant_application(
     capability_registry: CapabilityRegistry | None = None,
     session_factory=AssistantSession,
     max_conversations: int = DEFAULT_MAX_CONVERSATIONS,
+    retriever: MemoryRetriever | None = None,
 ):
     """Create the standard Assistant Mode application for any presentation client."""
     config = load_config(config_path) if config_path else load_config()
     registry = capability_registry or build_core_capability_registry()
     manifest = registry.build_manifest()
+    shared_retriever = retriever or DeterministicMemoryRetriever()
     def make_session():
         return session_factory(
             config,
@@ -259,6 +286,7 @@ def create_assistant_application(
             stream=stream,
             stream_writer=stream_writer,
             debug_level=debug_level,
+            retriever=shared_retriever,
         )
 
     return AssistantApplication(
@@ -266,6 +294,7 @@ def create_assistant_application(
         capability_manifest=manifest,
         session_factory=make_session,
         max_conversations=max_conversations,
+        retriever=shared_retriever,
     )
 
 
