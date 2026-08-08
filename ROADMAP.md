@@ -71,6 +71,27 @@ Presentation clients
 - **COMPLETED:** Local OpenAI-compatible API and functional OpenWebUI integration.
 - **COMPLETED:** Confirmation-gated factory reset/restore with backup safeguards and lore/assistant separation.
 
+## Versioned benchmark foundation (begin early and grow continuously)
+
+StarFur must maintain a reproducible behavioral benchmark layer above unit and integration tests. Begin the harness during the shared application/provider foundation, before routing and resident-environment work, so every later architectural change can be compared against accumulated evidence.
+
+Each benchmark run records, when available: benchmark/schema version, git commit, provider/model/quantization, context size, hardware and resource profile, test case and expected result, actual result, pass/fail, retrieval IDs/scores/reasons, latency and time-to-first-token, and bounded CPU/RAM/VRAM/temperature metrics. Preserve real failures as permanent regression cases whenever practical.
+
+Initial benchmark families:
+
+1. Memory retrieval accuracy: Recall@K, Precision@K, false positives, and explicit no-match cases.
+2. Retrieval success separately from model answer/use success.
+3. Long-document RAG accuracy across increasing document sizes and chunk counts.
+4. Annotation/proposal extraction accuracy and false-positive rate.
+5. Context/RAG boundary isolation and prompt-contamination regressions.
+6. Persona and instruction adherence.
+7. Provider/model portability.
+8. Latency, TTFT, and resource utilization.
+9. Long-session, restart, persistence, and recovery behavior.
+
+Add a small-model scaling benchmark that holds the surrounding StarFur architecture constant while varying model size/quantization. Report memory/retrieval performance separately from reasoning, instruction following, persona quality, and prose quality; the goal is to identify the minimum viable model capacity for reliable resident-assistant behavior.
+
+Later add ablation runs that disable individual cognition components and compare full StarFur against those configurations and a raw-model baseline. Benchmark outputs should support local regression checks, technical validation, grant applications, and a public engineering portfolio without retaining unrestricted private conversations by default.
 ## The Persona Runtime
 
 The current persona file is a compatibility input. The target architecture is a runtime that computes behavior context from three state layers:
@@ -162,10 +183,11 @@ A persona may learn incrementally through verified tasks: interest signal -> bou
 ### Stage 6 - Tools, perception, and resident environment
 
 1. Add structured tool registry and permission engine with allow-once, always-allow, deny, and confirmation-required policies.
-2. Add one-shot `VisionProvider` screen/window/region/image/PDF inspection.
-3. Add image, speech, and media provider interfaces and explicit capability routing.
-4. Build the low-resource apartment as a state visualization: workbench for active projects, bookshelf for installed models, newspaper for feeds, calendar for schedule, window for permissioned desktop state, and frames for artwork.
-5. Keep generated/procedural placeholder assets replaceable by commissioned art through stable asset IDs.
+2. **IN PROGRESS:** Add document intake for large external files: OpenWebUI/API upload -> bounded validation -> Prechunker/Mr. Chonker chunking -> optional annotation/indexing -> provenance-aware retrieval. **COMPLETED INITIAL VERTICAL SLICE:** bounded text preparation, provider-backed annotation, explicit review/handoff, normal proposal approval, and deterministic retrieval of approved document memories with safe origin labels. Remaining: OpenWebUI attachment interception, canonical manuscript-path integration, selective source/RAG retrieval, and semantic indexing. Integrate or intercept external UI RAG so uploaded source text remains distinct from the user request, StarFur command routing remains reliable, and the canonical chunk/annotation/provenance pipeline owns document context before release. Do not inject entire documents into every assistant prompt; retain source identity, chunk identity, and domain.
+3. Add one-shot VisionProvider screen/window/region/image/PDF inspection.
+4. Add image, speech, and media provider interfaces and explicit capability routing.
+5. Build the low-resource apartment as a state visualization: workbench for active projects, bookshelf for installed models, newspaper for feeds, calendar for schedule, window for permissioned desktop state, and frames for artwork.
+6. Keep generated/procedural placeholder assets replaceable by commissioned art through stable asset IDs.
 
 ### Stage 7 - Resident intelligence and Crown of Claws writing mode
 
@@ -195,7 +217,7 @@ Ollama is the current chat/embedding implementation. LM Studio, hosted APIs, lla
 
 ## Evaluation, observability, and research instrumentation
 
-This stage begins after the provider registry and routing layer are functional and stable. Instrumentation exists to answer engineering and research questions, not to collect data for its own sake.
+The full instrumentation ledger and cross-system comparison reports mature after the provider registry and routing layer are functional and stable; the benchmark foundation above begins earlier and feeds this stage. Instrumentation exists to answer engineering and research questions, not to collect data for its own sake.
 
 ### Useful measurements
 

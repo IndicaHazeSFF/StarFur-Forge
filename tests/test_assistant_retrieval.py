@@ -38,6 +38,42 @@ class RetrievalTests(unittest.TestCase):
   first=db.explain_assistant_memory_retrieval("blue mug"); second=db.explain_assistant_memory_retrieval("blue mug")
   self.assertEqual(first,second); self.assertEqual(len(first["selected"]),1)
 
+ def test_approved_external_document_memory_is_retrievable_and_source_labeled(self):
+  proposal = {
+   "store": True, "subject": "Roger", "memory_type": "project_context",
+   "summary": "StarFur uses a resident intelligence architecture.",
+   "details": "The architecture is local-first and persists companion memory.",
+   "importance": .9, "confidence": .9, "retention": "long_term",
+   "source": "external_document_annotation",
+  }
+  pending = db.upsert_assistant_memory_proposal(
+   proposal, source_reference="external:roadmap:scene:0:chunk:0:candidate:0",
+   observation_text="StarFur is a local-first resident intelligence platform.",
+  )
+  memory = db.approve_assistant_memory_proposal(pending["proposal_id"])
+  result = db.retrieve_assistant_memories("What architecture does StarFur use?")
+  self.assertEqual([item["memory"]["id"] for item in result], [memory["id"]])
+  self.assertEqual(result[0]["origin"], "approved external document")
+  db.forget_assistant_memory(memory["id"])
+  self.assertEqual(db.retrieve_assistant_memories("What architecture does StarFur use?"), [])
+ def test_external_document_retrieval_respects_domain_isolation(self):
+  proposal = {
+   "store": True, "subject": "StarFur", "memory_type": "project_context",
+   "summary": "StarFur roadmap uses a resident architecture.", "details": None,
+   "importance": .9, "confidence": .9, "retention": "long_term",
+   "source": "external_document_annotation",
+  }
+  pending = db.upsert_assistant_memory_proposal(
+   proposal, domain="project:starfur", source_reference="external:roadmap:scene:0:chunk:0:candidate:0",
+   observation_text="The StarFur roadmap describes a resident architecture.",
+  )
+  memory = db.approve_assistant_memory_proposal(pending["proposal_id"], domain="project:starfur")
+  self.assertEqual(db.retrieve_assistant_memories("resident architecture", domain="personal"), [])
+  self.assertEqual(
+   [item["memory"]["id"] for item in db.retrieve_assistant_memories("resident architecture", domain="project:starfur")],
+   [memory["id"]],
+  )
+
 if __name__ == "__main__": unittest.main()
 
 

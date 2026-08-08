@@ -12,7 +12,9 @@ from pipeline.document_intake import (
     DocumentIntakeError,
     EXTERNAL_UPLOAD_SOURCE,
     extract_document_memory_candidates,
+    extract_document_memory_candidates_resilient,
     prepare_document,
+    prepare_document_text,
 )
 
 
@@ -124,9 +126,20 @@ Beta paragraph.
         candidate = candidates[0]
         self.assertEqual(candidate.proposal["domain"], "project:starfur")
         self.assertEqual(candidate.proposal["source"], DOCUMENT_ANNOTATION_SOURCE)
-        self.assertEqual(candidate.source_reference, document.chunks[0].chunk_id)
+        self.assertEqual(candidate.source_reference, f"{document.chunks[0].chunk_id}:candidate:0")
         self.assertEqual(candidate.observation_text, document.chunks[0].text)
 
+    def test_candidates_from_one_chunk_have_stable_distinct_provenance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            document = prepare_document(self._write(directory, "notes.md", "Two project facts."))
+            candidates = extract_document_memory_candidates(document, lambda _chunk: {"proposals": [
+                {"store": True, "subject": "StarFur", "memory_type": "project_context", "summary": "First fact.", "details": None, "importance": 0.5, "confidence": 0.8, "retention": "short_term"},
+                {"store": True, "subject": "StarFur", "memory_type": "project_context", "summary": "Second fact.", "details": None, "importance": 0.5, "confidence": 0.8, "retention": "short_term"},
+            ]})
+        self.assertEqual(
+            [candidate.source_reference for candidate in candidates],
+            [f"{document.chunks[0].chunk_id}:candidate:0", f"{document.chunks[0].chunk_id}:candidate:1"],
+        )
     def test_document_candidates_reject_untrusted_fields_and_omit_store_false(self):
         with tempfile.TemporaryDirectory() as directory:
             document = prepare_document(self._write(directory, "notes.md", "An observation."))
@@ -156,5 +169,30 @@ Beta paragraph.
             path = self._write(directory, "notes.md", markdown)
             self.assertEqual(chunk_text(markdown), chunk_markdown(path))
 
+    def test_resilient_extraction_retries_bad_chunks_and_continues(self):
+        document = prepare_document_text(
+            "# First\n\nFirst chunk.\n\n# Second\n\nSecond chunk.",
+            "notes.md", max_chars=20,
+        )
+        self.assertGreaterEqual(len(document.chunks), 2)
+        calls = []
+
+        def annotator(chunk):
+            calls.append(chunk.chunk_index)
+            if chunk.chunk_index == 0:
+                return {"proposals": "invalid"}
+            return {"proposals": [{
+                "store": True, "subject": "Roger", "memory_type": "personal_fact",
+                "summary": "Second chunk is valid.", "details": None,
+                "importance": 0.5, "confidence": 0.8, "retention": "short_term",
+            }]}
+
+        result = extract_document_memory_candidates_resilient(document, annotator, max_attempts=3)
+
+        self.assertEqual(calls.count(0), 3)
+        self.assertIn(1, calls)
+        self.assertGreaterEqual(len(result.candidates), 1)
+        self.assertEqual(result.failures[0].chunk_index, 0)
+        self.assertEqual(result.failures[0].attempts, 3)
 if __name__ == "__main__":
     unittest.main()

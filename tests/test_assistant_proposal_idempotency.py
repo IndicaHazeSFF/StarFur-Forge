@@ -45,6 +45,15 @@ class AssistantProposalIdempotencyTests(unittest.TestCase):
         self.assertEqual(row["evidence_count"], 1)
         self.assertEqual(row["summary"], base["summary"])
 
+    def test_document_candidates_from_same_chunk_remain_distinct_and_repeat_idempotently(self):
+        base = {"subject":"Stage 2","memory_type":"project_context","summary":"First capability","details":"","importance":0.7,"confidence":0.8,"retention":"long_term","source":"external_document_annotation"}
+        observation = "One document chunk describing several capabilities."
+        first = db.upsert_assistant_memory_proposal(base, source_reference="external:hash:chunk:0:candidate:0", observation_text=observation)
+        second = db.upsert_assistant_memory_proposal({**base, "summary":"Second capability"}, source_reference="external:hash:chunk:0:candidate:1", observation_text=observation)
+        repeated = db.upsert_assistant_memory_proposal(base, source_reference="external:hash:chunk:0:candidate:0", observation_text=observation)
+        self.assertNotEqual(first["proposal_id"], second["proposal_id"])
+        self.assertEqual(repeated["proposal_id"], first["proposal_id"])
+        self.assertEqual(repeated["action"], "duplicate_evidence")
     def test_different_observations_remain_separate(self):
         base = {"subject":"Roger","memory_type":"preference","summary":"Likes cats","details":"","importance":0.5,"confidence":0.5,"retention":"long_term"}
         a = db.upsert_assistant_memory_proposal(base, observation_text="I like cats")

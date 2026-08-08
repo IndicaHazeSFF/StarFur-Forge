@@ -83,7 +83,17 @@ class ContextManager:
         def format_memory(memory: Mapping) -> str:
             summary = str(memory.get("summary") or "(summary unavailable)")
             details = str(memory.get("details") or "").strip()
-            return f"- {summary}\n  Details: {details}" if details else f"- {summary}"
+            origin = (
+                "approved external document"
+                if memory.get("source") == "external_document_annotation"
+                else ""
+            )
+            lines = [f"- {summary}"]
+            if details:
+                lines.append(f"  Details: {details}")
+            if origin:
+                lines.append(f"  Origin: {origin}")
+            return "\n".join(lines)
 
         def format_capability(capability: object) -> str:
             title = str(getattr(capability, "title", "Capability"))

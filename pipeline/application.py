@@ -16,7 +16,7 @@ from pipeline.assistant import AssistantSession, load_config, load_persona, load
 from pipeline.capabilities import CapabilityManifest, CapabilityRegistry, build_core_capability_registry
 from pipeline.db import upsert_assistant_memory_proposal
 from pipeline.document_annotation import DocumentProposalAnnotator
-from pipeline.document_intake import PreparedDocument, extract_document_memory_candidates
+from pipeline.document_intake import PreparedDocument, extract_document_memory_candidates_resilient
 
 
 class AssistantApplication:
@@ -85,14 +85,14 @@ class AssistantApplication:
             if lifecycle is not None:
                 lifecycle.begin_generation(stream=False, model=self.active_model)
             try:
-                candidates = extract_document_memory_candidates(document, annotator)
+                result = extract_document_memory_candidates_resilient(document, annotator)
             except Exception as error:
                 if lifecycle is not None:
                     lifecycle.fail(error)
                 raise
             if lifecycle is not None:
                 lifecycle.finish()
-            return candidates
+            return result
 
     def create_document_pending_proposal(self, candidate):
         """Explicitly hand one server-reviewed candidate to the normal proposal store."""

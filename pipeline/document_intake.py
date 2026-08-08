@@ -65,6 +65,24 @@ class PreparedDocument:
 
 
 @dataclass(frozen=True)
+class DocumentAnnotationFailure:
+    """Bounded record of one chunk that remained invalid after retries."""
+
+    chunk_id: str
+    scene_index: int
+    chunk_index: int
+    attempts: int
+    reason: str = "invalid_annotation_output"
+
+
+@dataclass(frozen=True)
+class DocumentAnnotationResult:
+    """Non-persistent candidates plus bounded per-chunk annotation failures."""
+
+    candidates: tuple["DocumentMemoryCandidate", ...]
+    failures: tuple[DocumentAnnotationFailure, ...]
+
+@dataclass(frozen=True)
 class DocumentMemoryCandidate:
     """A validated, non-persistent proposal from one document chunk."""
 
@@ -211,45 +229,69 @@ def _candidate_records(value: object, chunk_id: str) -> Iterable[Mapping[str, ob
         yield candidate
 
 
+def _extract_chunk_candidates(
+    document: PreparedDocument,
+    chunk: IntakeChunk,
+    annotator: Callable[[IntakeChunk], object],
+    *,
+    attempt: int = 1,
+) -> tuple[DocumentMemoryCandidate, ...]:
+    retryable = getattr(annotator, "annotate_with_retry", None)
+    output = retryable(chunk, attempt=attempt) if callable(retryable) else annotator(chunk)
+    candidates: list[DocumentMemoryCandidate] = []
+    for candidate_index, raw in enumerate(_candidate_records(output, chunk.chunk_id)):
+        complete = {**raw, "domain": document.domain, "source": DOCUMENT_ANNOTATION_SOURCE}
+        try:
+            proposal = validate_memory_proposal(complete, document.domain)
+        except ValueError as error:
+            raise DocumentAnnotationError(f"Invalid document proposal for {chunk.chunk_id}: {error}") from error
+        if proposal["store"]:
+            candidates.append(DocumentMemoryCandidate(
+                proposal=proposal, source_id=document.source_id,
+                source_reference=f"{chunk.chunk_id}:candidate:{candidate_index}", chunk_id=chunk.chunk_id,
+                observation_text=chunk.text,
+            ))
+    return tuple(candidates)
+
+
 def extract_document_memory_candidates(
     document: PreparedDocument,
     annotator: Callable[[IntakeChunk], object],
 ) -> tuple[DocumentMemoryCandidate, ...]:
-    """Validate document candidates without calling a model or storing anything.
-
-    The injected annotator receives one provenance-carrying chunk and may return
-    a proposal list or ``{"proposals": [...]}``. Domain and source are supplied
-    by this boundary rather than trusted from annotation output.
-    """
+    """Strict candidate extraction retained for callers needing fail-fast behavior."""
     if not callable(annotator):
         raise TypeError("annotator must be callable.")
     candidates: list[DocumentMemoryCandidate] = []
     for chunk in document.chunks:
-        for raw in _candidate_records(annotator(chunk), chunk.chunk_id):
-            complete = {
-                **raw,
-                "domain": document.domain,
-                "source": DOCUMENT_ANNOTATION_SOURCE,
-            }
-            try:
-                proposal = validate_memory_proposal(complete, document.domain)
-            except ValueError as error:
-                raise DocumentAnnotationError(
-                    f"Invalid document proposal for {chunk.chunk_id}: {error}"
-                ) from error
-            if not proposal["store"]:
-                continue
-            candidates.append(
-                DocumentMemoryCandidate(
-                    proposal=proposal,
-                    source_id=document.source_id,
-                    source_reference=chunk.chunk_id,
-                    chunk_id=chunk.chunk_id,
-                    observation_text=chunk.text,
-                )
-            )
+        candidates.extend(_extract_chunk_candidates(document, chunk, annotator))
     return tuple(candidates)
 
+
+def extract_document_memory_candidates_resilient(
+    document: PreparedDocument,
+    annotator: Callable[[IntakeChunk], object],
+    *,
+    max_attempts: int = 3,
+) -> DocumentAnnotationResult:
+    """Retry invalid chunks without allowing one failure to abort a document."""
+    if not callable(annotator):
+        raise TypeError("annotator must be callable.")
+    if isinstance(max_attempts, bool) or not isinstance(max_attempts, int) or max_attempts <= 0:
+        raise ValueError("max_attempts must be a positive integer.")
+    candidates: list[DocumentMemoryCandidate] = []
+    failures: list[DocumentAnnotationFailure] = []
+    for chunk in document.chunks:
+        for attempt in range(1, max_attempts + 1):
+            try:
+                candidates.extend(_extract_chunk_candidates(document, chunk, annotator, attempt=attempt))
+                break
+            except DocumentAnnotationError:
+                if attempt == max_attempts:
+                    failures.append(DocumentAnnotationFailure(
+                        chunk_id=chunk.chunk_id, scene_index=chunk.scene_index,
+                        chunk_index=chunk.chunk_index, attempts=attempt,
+                    ))
+    return DocumentAnnotationResult(tuple(candidates), tuple(failures))
 
 __all__ = [
     "DEFAULT_MAX_DOCUMENT_BYTES",
@@ -257,11 +299,14 @@ __all__ = [
     "EXTERNAL_UPLOAD_SOURCE",
     "SUPPORTED_DOCUMENT_SUFFIXES",
     "DocumentAnnotationError",
+    "DocumentAnnotationFailure",
+    "DocumentAnnotationResult",
     "DocumentIntakeError",
     "DocumentMemoryCandidate",
     "IntakeChunk",
     "PreparedDocument",
     "extract_document_memory_candidates",
+    "extract_document_memory_candidates_resilient",
     "prepare_document",
     "prepare_document_text",
 ]

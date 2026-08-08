@@ -602,3 +602,40 @@
 - Files modified: `pipeline/document_annotation.py`, `tests/test_document_annotation.py`, `AGENTS.md`, and `CHANGELOG.md`.
 - Behavior: after raw/fenced JSON parsing fails, the adapter isolates the outermost JSON object; existing proposal validation remains unchanged and no malformed payload is persisted.
 - Verification: focused document-annotation suite passed (6 tests). No migrations or production data changes.
+## 2026-08-07 - Add continuous behavioral benchmark roadmap
+
+- Purpose: establish a versioned benchmark layer above tests for measurable retrieval, RAG, annotation, boundary, persona, portability, latency/resource, persistence, scaling, and future ablation results.
+- Files modified: `ROADMAP.md`, `AGENTS.md`, and `CHANGELOG.md`.
+- Behavior: benchmark work begins during shared application/provider foundations, records reproducible run metadata, preserves real failures as regressions, and keeps raw private conversation capture opt-in.
+- Verification: documentation-only change; no production data, SQLite, Chroma, or runtime behavior modified.
+## 2026-08-07 - Make external annotation resilient per chunk
+
+- Purpose: prevent one malformed local-model annotation response from discarding an entire uploaded document.
+- Files modified: `pipeline/document_intake.py`, `pipeline/document_annotation.py`, `pipeline/application.py`, `pipeline/api.py`, `tests/test_document_intake.py`, `tests/test_document_annotation.py`, `tests/test_application.py`, `tests/test_api.py`, `AGENTS.md`, `docs/COMMANDS.md`, and `CHANGELOG.md`.
+- Behavior: each chunk retries up to three times; provider-backed retries use a stricter JSON-only cue. Successful later chunks remain reviewable while exhausted chunks appear only as bounded non-persistent failure metadata. No automatic proposal creation, approval, SQLite/Chroma write, or prompt injection was added.
+- Verification: focused document-intake (8), document-annotation (7), application (9), and API (10) tests passed. No migrations or production data changes.
+## 2026-08-07 - Preserve distinct document candidates from one chunk
+
+- Purpose: prevent several valid facts extracted from the same external-document chunk from collapsing into one pending proposal.
+- Files modified: `pipeline/document_intake.py`, `pipeline/db.py`, `tests/test_document_intake.py`, `tests/test_assistant_proposal_idempotency.py`, `tests/test_application.py`, `tests/test_api.py`, `AGENTS.md`, `docs/COMMANDS.md`, and `CHANGELOG.md`.
+- Behavior: document candidates receive stable ordinal provenance; external-document proposal identity includes that provenance while stored evidence remains the original chunk. The same candidate remains idempotent, but distinct candidates from the same chunk remain separate. Existing assistant-turn identity and schemas are unchanged.
+- Verification: document intake (9), application (9), and API (10) tests passed; direct temporary-SQLite identity check passed. The standalone idempotency test-discovery invocation is Windows import-path sensitive, so the authoritative WSL suite remains required. No migrations or production data changes.
+## 2026-08-07 - Version the first retrieval benchmark metrics
+
+- Purpose: begin the reproducible behavioral benchmark layer with measurable deterministic retrieval results.
+- Files modified: `pipeline/retrieval_eval.py`, `tests/test_retrieval_eval.py`, `AGENTS.md`, `docs/COMMANDS.md`, and `CHANGELOG.md`.
+- Behavior: retrieval-eval now reports versioned run metadata, per-case expected/actual IDs, Recall@K, Precision@K, false-positive count, and repeatability using temporary SQLite fixtures only.
+- Verification: retrieval-eval tests passed (2 tests). No production data or Chroma collections were touched.
+## 2026-08-07 - Add benchmark run manifests and scaling plans
+
+- Purpose: establish reproducible metadata for future small-model scaling comparisons.
+- Files modified: `pipeline/benchmark.py`, `tests/test_benchmark.py`, `AGENTS.md`, `docs/COMMANDS.md`, and `CHANGELOG.md`.
+- Behavior: adds `starfur-benchmark-v1` manifests and same-workload/different-model plans; metadata-only, provider-neutral, and safe to run without Ollama or production data.
+- Verification: benchmark manifest tests passed (3 tests). No migrations or runtime behavior changes.
+
+## 2026-08-07 - Integrate approved document memories with deterministic retrieval
+
+- Purpose: make the reviewed-document path complete through ordinary active assistant-memory recall without adding a parallel RAG store.
+- Files modified: `pipeline/db.py`, `pipeline/context.py`, `pipeline/assistant.py`, `ROADMAP.md`, `tests/test_assistant_retrieval.py`, `tests/test_context.py`, `AGENTS.md`, `docs/COMMANDS.md`, and `CHANGELOG.md`.
+- Behavior: once approved, externally annotated candidates are retrieved only as active memories in their own domain. Retrieval/context diagnostics label their bounded origin as `approved external document`; raw document text, source IDs, and chunk references are not injected into normal chat. Pending, rejected, and forgotten records remain unavailable.
+- Verification: Python syntax compilation; focused retrieval (8) and context (9) regression tests passed. No schema migration, production SQLite/Chroma mutation, sync, or automatic approval.

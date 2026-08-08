@@ -115,12 +115,45 @@ class AssistantApplicationTests(unittest.TestCase):
                 "retention": "long_term",
             }]}
 
-        candidates = app.annotate_document(document, annotator=annotator)
+        annotation = app.annotate_document(document, annotator=annotator)
+        candidates = annotation.candidates
 
         self.assertEqual(seen, [document.chunks[0].chunk_id])
         self.assertEqual(candidates[0].proposal["source"], "external_document_annotation")
         self.assertEqual(session.calls, [])
         self.assertEqual(lifecycle.events, [("begin", False, "fake:latest"), ("finish",)])
+    def test_document_proposal_handoff_uses_existing_writer_with_original_provenance(self):
+        writes = []
+
+        def proposal_creator(proposal, *, domain, source_reference, observation_text):
+            writes.append({
+                "proposal": proposal,
+                "domain": domain,
+                "source_reference": source_reference,
+                "observation_text": observation_text,
+            })
+            return {"proposal_id": 41, "action": "created", "evidence_count": 1}
+
+        app = AssistantApplication(FakeSession(), proposal_creator=proposal_creator)
+        document = prepare_document_text("Roger prefers tea.", "notes.md", domain="personal")
+        candidate = app.annotate_document(document, annotator=lambda _chunk: {"proposals": [{
+            "store": True,
+            "subject": "Roger",
+            "memory_type": "preference",
+            "summary": "Roger prefers tea.",
+            "details": None,
+            "importance": 0.6,
+            "confidence": 0.9,
+            "retention": "long_term",
+        }]}).candidates[0]
+
+        result = app.create_document_pending_proposal(candidate)
+
+        self.assertEqual(result["proposal_id"], 41)
+        self.assertEqual(writes[0]["domain"], "personal")
+        self.assertEqual(writes[0]["source_reference"], f"{candidate.chunk_id}:candidate:0")
+        self.assertEqual(writes[0]["observation_text"], "Roger prefers tea.")
+        self.assertEqual(writes[0]["proposal"]["source"], "external_document_annotation")
     def test_runtime_diagnostics_are_bounded_and_do_not_probe_provider(self):
         session = FakeSession()
         app = AssistantApplication(session)

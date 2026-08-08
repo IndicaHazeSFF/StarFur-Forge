@@ -9,7 +9,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.modules.setdefault("ollama", types.ModuleType("ollama"))
 
-from pipeline.api import API_MODEL_ID, DOCUMENT_ANNOTATE_PATH, DOCUMENT_PREPARE_PATH, StarFurAPI, StarFurHTTPServer
+from pipeline.application import AssistantApplication
+
+from pipeline.api import API_MODEL_ID, DOCUMENT_ANNOTATE_PATH, DOCUMENT_PREPARE_PATH, DOCUMENT_REVIEW_PATH, StarFurAPI, StarFurHTTPServer
 
 
 class FakeConfig:
@@ -35,6 +37,21 @@ class APITests(unittest.TestCase):
     def setUp(self):
         self.session = FakeSession()
         self.annotation_chunks = []
+        self.proposal_writes = []
+
+        def proposal_creator(proposal, *, domain, source_reference, observation_text):
+            self.proposal_writes.append({
+                "proposal": proposal,
+                "domain": domain,
+                "source_reference": source_reference,
+                "observation_text": observation_text,
+            })
+            return {"proposal_id": 77, "action": "created", "evidence_count": 1}
+
+        self.application = AssistantApplication(
+            self.session,
+            proposal_creator=proposal_creator,
+        )
 
         def document_annotator(chunk):
             self.annotation_chunks.append(chunk)
@@ -50,7 +67,7 @@ class APITests(unittest.TestCase):
             }]}
 
         self.api = StarFurAPI(
-            self.session,
+            self.application,
             api_key="local-test",
             document_annotator=document_annotator,
         )
@@ -164,6 +181,50 @@ class APITests(unittest.TestCase):
         self.assertNotIn("observation_text", candidate["provenance"])
         self.assertEqual(self.session.calls, [])
 
+    def test_document_candidate_handoff_requires_confirmation_and_writes_only_selected_server_candidate(self):
+        status, raw = self.request("POST", DOCUMENT_ANNOTATE_PATH, {
+            "filename": "notes.md",
+            "content": "Roger is testing document intake.",
+            "domain": "personal",
+        })
+        annotation = json.loads(raw)
+        review_id = annotation["review"]["id"]
+        candidate_id = annotation["candidates"][0]["id"]
+        self.assertEqual(self.proposal_writes, [])
+
+        status, raw = self.request("POST", DOCUMENT_REVIEW_PATH, {
+            "review_id": review_id,
+            "candidate_id": candidate_id,
+        })
+        self.assertEqual(status, 400)
+        self.assertIn("requires confirm", json.loads(raw)["error"]["message"])
+        self.assertEqual(self.proposal_writes, [])
+
+        status, raw = self.request("POST", DOCUMENT_REVIEW_PATH, {
+            "review_id": review_id,
+            "candidate_id": candidate_id,
+            "confirm": "create pending proposal",
+        })
+        payload = json.loads(raw)
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["object"], "starfur.document.proposal_handoff")
+        self.assertEqual(payload["proposal_id"], 77)
+        self.assertEqual(payload["proposal_status"], "pending")
+        self.assertEqual(payload["persistence_action"], "created")
+        self.assertEqual(self.proposal_writes[0]["domain"], "personal")
+        self.assertEqual(self.proposal_writes[0]["source_reference"], f"{self.annotation_chunks[0].chunk_id}:candidate:0")
+        self.assertEqual(self.proposal_writes[0]["observation_text"], self.annotation_chunks[0].text)
+        self.assertEqual(self.session.calls, [])
+
+    def test_document_candidate_handoff_rejects_unknown_or_forged_review_identifiers(self):
+        status, raw = self.request("POST", DOCUMENT_REVIEW_PATH, {
+            "review_id": "DR-not-real",
+            "candidate_id": "C-001",
+            "confirm": "create pending proposal",
+        })
+        self.assertEqual(status, 404)
+        self.assertEqual(json.loads(raw)["error"]["type"], "document_review_not_found")
+        self.assertEqual(self.proposal_writes, [])
     def test_document_annotation_is_authenticated_and_reports_invalid_model_output(self):
         status, _ = self.request("POST", DOCUMENT_ANNOTATE_PATH, {
             "filename": "notes.md", "content": "text",
@@ -173,8 +234,11 @@ class APITests(unittest.TestCase):
         status, raw = self.request("POST", DOCUMENT_ANNOTATE_PATH, {
             "filename": "notes.md", "content": "text",
         })
-        self.assertEqual(status, 422)
-        self.assertEqual(json.loads(raw)["error"]["type"], "document_annotation_error")
+        self.assertEqual(status, 200)
+        payload = json.loads(raw)
+        self.assertEqual(payload["candidates"], [])
+        self.assertEqual(payload["failures"][0]["attempts"], 3)
+        self.assertEqual(payload["failures"][0]["reason"], "invalid_annotation_output")
         self.assertEqual(self.session.calls, [])
     def test_document_preparation_rejects_untrusted_filename_content_and_unknown_fields(self):
         status, raw = self.request("POST", DOCUMENT_PREPARE_PATH, {

@@ -104,10 +104,17 @@ Endpoints:
     POST /v1/chat/completions
     POST /v1/starfur/documents/prepare
     POST /v1/starfur/documents/annotate
+    POST /v1/starfur/documents/review
 
 `/v1/starfur/documents/prepare` is the first explicit external-document intake boundary. Send a JSON object with `filename`, UTF-8 text `content`, and optional `domain` (`personal` or `project:<slug>`). It accepts `.md`, `.markdown`, and `.txt` names up to 2 MiB of UTF-8 content, validates/chunks them through StarFur, and returns source/chunk metadata only. It does not call a model, create proposals, write SQLite/Chroma, or inject the document into a chat turn. OpenWebUI attachment/RAG interception is not wired to this endpoint yet.
 
-`/v1/starfur/documents/annotate` accepts the same validated request body, sends each prepared chunk to the currently active configured provider through the shared application facade, and returns reviewable candidate proposals with source/chunk provenance. It does not create pending proposals, write SQLite/Chroma, approve anything, or inject document text into chat. Invalid model output returns HTTP 422. This is an explicit API call; OpenWebUI attachment/RAG interception is still not wired.
+`/v1/starfur/documents/annotate` accepts the same validated request body, sends each prepared chunk to the currently active configured provider through the shared application facade, and returns reviewable candidate proposals with source/chunk provenance. Annotation itself does not create pending proposals, write SQLite/Chroma, approve anything, or inject document text into chat. The response includes a short-lived `review.id` and candidate IDs such as `C-001`; invalid model output returns HTTP 422.
+
+To deliberately add one reviewed candidate to the existing pending-proposal workflow, call `/v1/starfur/documents/review` with only its returned `review_id`, `candidate_id`, and exact confirmation:
+
+    {"review_id":"DR-...","candidate_id":"C-001","confirm":"create pending proposal"}
+
+The server uses its in-memory validated candidate—not client-supplied proposal fields—then calls the normal idempotent pending-proposal writer with original chunk evidence. The result is still pending and must be approved/rejected through the existing proposal controls. Review sessions expire after 15 minutes and disappear on server restart. OpenWebUI attachment/RAG interception is still not wired.
 
 In OpenWebUI running in Docker, add an OpenAI connection with base URL `http://host.docker.internal:8001/v1` and model `starfur-assistant`; use the port selected when starting `serve`. The adapter preserves StarFur persona, retrieval, policy, proposals, and session state; it does not expose SQLite or Chroma. Use `--api-key <token>` for a bearer token. If OpenWebUI runs in Docker or another network namespace, bind explicitly with `--host 0.0.0.0` and use the host gateway address; do not expose an unauthenticated server beyond the local machine. Streaming uses OpenAI-compatible SSE chunks.
 
@@ -483,3 +490,11 @@ Persona Runtime diagnostics:
     persona inspect
 
 This is read-only and shows bounded state metadata without displaying the full persona prompt or changing runtime state. Normal chat receives the same bounded presentation-only trait and momentary-state snapshot; it cannot override engine policy, factual grounding, provenance, commands, or permissions.
+
+### External document annotation resilience
+
+`POST /v1/starfur/documents/annotate` processes chunks independently. Invalid or empty annotation output is retried up to three times; later attempts tell the provider to return only a JSON object or `{"proposals": []}`. A partially successful response remains reviewable and includes a bounded `failures` list with chunk ID, ordering metadata, attempt count, and `invalid_annotation_output`; failed chunks do not create proposals or persist source text. Re-annotate a source later to retry failed chunks.
+
+### External document candidate identity
+
+Each reviewed document candidate has stable provenance derived from its source chunk plus candidate ordinal. Multiple valid facts extracted from one chunk therefore become separate pending proposals when explicitly handed off; repeating the same `C-###` handoff remains idempotent and returns `duplicate_evidence` rather than creating another proposal.

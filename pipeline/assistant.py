@@ -197,6 +197,7 @@ class AssistantSession:
                 "public_id": self._display_memory_id(memory),
                 "score": item.get("score"),
                 "reasons": list(item.get("reasons") or []),
+                "origin": item.get("origin", "assistant memory"),
             })
         self._current_context_diagnostics = {
             "model": self.active_model,
@@ -270,6 +271,8 @@ class AssistantSession:
                 score = "unscored" if item["score"] is None else f"{item['score']:.6g}"
                 lines.append(f"  {item['public_id']} score={score}")
                 lines.append("    reasons: " + ("; ".join(item["reasons"]) if item["reasons"] else "(none)"))
+                if item.get("origin") != "assistant memory":
+                    lines.append(f"    origin: {item['origin']}")
         lines.extend([
             f"Prompt: {snapshot.get('prompt_characters', 0)} characters (estimated {snapshot.get('prompt_estimated_tokens', 0)} tokens)",
             f"Completion: {snapshot.get('response_characters', 0)} characters (estimated {snapshot.get('completion_estimated_tokens', 0)} tokens)",

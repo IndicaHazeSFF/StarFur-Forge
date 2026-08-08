@@ -17,6 +17,7 @@ from pipeline.document_annotation import (
 from pipeline.document_intake import (
     DocumentAnnotationError,
     extract_document_memory_candidates,
+    extract_document_memory_candidates_resilient,
     prepare_document,
 )
 
@@ -112,6 +113,27 @@ class DocumentAnnotationTests(unittest.TestCase):
                     document, DocumentProposalAnnotator(FakeProvider(response), "annotation-model"),
                 )
                 self.assertEqual(len(candidates), 1)
+    def test_retry_uses_stricter_json_prompt_after_invalid_output(self):
+        document = self._prepared()
+        provider = FakeProvider({"message": {"content": "not json"}})
+        original_complete = provider.complete
+        responses = [
+            {"message": {"content": "not json"}},
+            {"message": {"content": json.dumps(self._valid_payload())}},
+        ]
+
+        def complete(messages, *, model=None, options=None, stream=False):
+            provider.calls.append({"messages": messages, "model": model, "options": dict(options or {}), "stream": stream})
+            return responses.pop(0)
+
+        provider.complete = complete
+        result = extract_document_memory_candidates_resilient(
+            document, DocumentProposalAnnotator(provider, "annotation-model"), max_attempts=2,
+        )
+
+        self.assertEqual(len(result.candidates), 1)
+        self.assertEqual(result.failures, ())
+        self.assertIn("Previous output was invalid", provider.calls[1]["messages"][0]["content"])
     def test_invalid_provider_outputs_are_chunk_scoped_and_do_not_persist(self):
         document = self._prepared()
         for response, phrase in (

@@ -926,6 +926,7 @@ def _rank_assistant_memories(query, domain, timings=None):
             "memory": row,
             "score": score,
             "reasons": reasons,
+            "origin": _assistant_memory_origin(row),
             "_overlap": overlap,
             "_phrase": phrase,
         }
@@ -959,7 +960,12 @@ def _rank_assistant_memories(query, domain, timings=None):
             for matched_id, related_id in ((source_id, target_id), (target_id, source_id)):
                 if matched_id not in direct_ids or related_id not in rows_by_id:
                     continue
-                item = ranked.setdefault(related_id, {"memory": rows_by_id[related_id], "score": 0.0, "reasons": []})
+                item = ranked.setdefault(related_id, {
+                    "memory": rows_by_id[related_id],
+                    "score": 0.0,
+                    "reasons": [],
+                    "origin": _assistant_memory_origin(rows_by_id[related_id]),
+                })
                 item["score"] += boost
                 item["reasons"].append(
                     f"association with memory #{matched_id}: {association['association_type']} "
@@ -980,6 +986,12 @@ def _rank_assistant_memories(query, domain, timings=None):
         })
     return sorted(output, key=lambda item: (-item["score"], -int(item["memory"]["id"])))
 
+
+def _assistant_memory_origin(memory):
+    """Return a bounded public origin label without exposing source text."""
+    if memory.get("source") == "external_document_annotation":
+        return "approved external document"
+    return "assistant memory"
 
 def retrieve_assistant_memories(query, domain="personal", limit=8, *, timings=None):
     """Return deterministic active-memory matches, including bounded association context."""
@@ -1160,8 +1172,14 @@ def inspect_assistant_memory(memory_id, domain="personal"):
 
 def upsert_assistant_memory_proposal(proposal, domain="personal", source_reference=None, observation_text=None):
     domain = normalize_domain(domain)
-    key = assistant_observation_key(domain, proposal["subject"], proposal["memory_type"], observation_text) if observation_text is not None else assistant_proposal_key(domain, proposal["subject"], proposal["memory_type"], proposal["summary"])
     source = proposal.get("source", "assistant_turn_proposal")
+    observation_identity = observation_text
+    # External documents can yield several distinct candidates from one source
+    # chunk. Stable candidate provenance distinguishes them without changing
+    # the retained evidence excerpt.
+    if observation_identity is not None and source == "external_document_annotation" and source_reference:
+        observation_identity = f"{observation_identity}\n[source_reference:{source_reference}]"
+    key = assistant_observation_key(domain, proposal["subject"], proposal["memory_type"], observation_identity) if observation_identity is not None else assistant_proposal_key(domain, proposal["subject"], proposal["memory_type"], proposal["summary"])
     evidence_text = observation_text if observation_text is not None else (source_reference or proposal["summary"])
     evidence_hash = hashlib.sha256((source + "|" + normalize_proposal_text(evidence_text)).encode("utf-8")).hexdigest()
     with connect() as connection:
@@ -1181,4 +1199,3 @@ def upsert_assistant_memory_proposal(proposal, domain="personal", source_referen
         connection.execute("INSERT INTO assistant_memory_proposal_evidence (proposal_id, source, source_reference, evidence_hash, raw_excerpt) VALUES (?, ?, ?, ?, ?)", (proposal_id, source, source_reference, evidence_hash, observation_text or proposal.get("summary")) )
         connection.commit()
     return {"proposal_id": proposal_id, "action": "created", "previous_evidence_count": 0, "evidence_count": 1}
-

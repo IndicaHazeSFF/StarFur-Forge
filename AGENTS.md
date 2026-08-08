@@ -192,3 +192,15 @@ The local API also exposes authenticated `POST /v1/starfur/documents/annotate`. 
 Document annotation parsing tolerates provider responses with direct top-level content and Markdown-fenced JSON, while still requiring the validated proposal object schema. Do not loosen candidate validation or persist malformed output.
 
 Document annotation may isolate the outer JSON object when a local model surrounds valid JSON with prose/reasoning; strict candidate validation still rejects malformed or schema-invalid payloads.
+
+ROADMAP.md now requires a versioned behavioral benchmark foundation to begin during the shared application/provider stages and accumulate evidence across retrieval, RAG, annotation, boundaries, persona adherence, portability, latency/resources, and persistence. Keep benchmark metadata reproducible and privacy-bounded; distinguish retrieval success from answer quality.
+
+External document annotation is resilient per chunk: it retries invalid/empty/model-malformed output up to three times, using a stricter JSON-only cue on provider-backed retries. /documents/annotate returns successful review candidates plus bounded failure metadata and must not let one failed chunk abort later chunks. Failures remain non-persistent; review/approval semantics are unchanged.
+
+External document candidates use stable :candidate:<ordinal> source references. For source external_document_annotation, pending-proposal identity incorporates this candidate provenance while evidence retains the original chunk text. This prevents separate facts from the same chunk collapsing, while repeat handoff of the same candidate remains idempotent. Existing assistant-turn and legacy proposal identity behavior is unchanged.
+
+Approved external-document candidates become ordinary active assistant memories only through the existing pending-proposal approval transaction. Deterministic retrieval remains domain-scoped and includes them without a separate document store; it emits a bounded `approved external document` origin label for diagnostics/context, while raw uploaded text, source IDs, and chunk references stay out of normal chat prompts. Forgotten/rejected/pending candidates remain unavailable to retrieval.
+
+The initial retrieval benchmark harness is versioned as etrieval-v1. It runs against temporary SQLite fixtures, reports per-case expected/returned IDs plus Recall@K/Precision@K, false-positive count, and repeatability, and must not use production memory or Chroma.
+
+pipeline/benchmark.py defines the provider-neutral starfur-benchmark-v1 manifest and model-scaling plan. Scaling runs must hold workload and architecture fingerprint constant while varying provider/model/quantization; this layer records metadata only and does not invoke models.

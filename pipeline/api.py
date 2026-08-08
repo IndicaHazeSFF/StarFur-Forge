@@ -120,17 +120,27 @@ class StarFurAPI:
         }
 
     def annotate_document(self, payload):
-        """Return reviewable document-memory candidates without persistence."""
+        """Return reviewable candidates plus bounded per-chunk failures."""
         document = self._prepared_document(payload)
-        candidates = self.application.annotate_document(
-            document,
-            annotator=self.document_annotator,
+        annotation = self.application.annotate_document(
+            document, annotator=self.document_annotator,
         )
+        candidates = annotation.candidates
         review = self.document_review_store.create(document, candidates)
         return {
             "object": "starfur.document.annotation",
             "source": self._document_source_payload(document),
             "review": review_public_payload(review),
+            "failures": [
+                {
+                    "chunk_id": failure.chunk_id,
+                    "scene_index": failure.scene_index,
+                    "chunk_index": failure.chunk_index,
+                    "attempts": failure.attempts,
+                    "reason": failure.reason,
+                }
+                for failure in annotation.failures
+            ],
             "candidates": [
                 {
                     "id": candidate_public_id(index),
@@ -146,7 +156,6 @@ class StarFurAPI:
                 for index, candidate in enumerate(candidates)
             ],
         }
-
     def create_document_pending_proposal(self, payload):
         """Persist one selected review candidate as a normal pending proposal."""
         if not isinstance(payload, dict):

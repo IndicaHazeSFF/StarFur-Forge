@@ -60,6 +60,20 @@ class ContextManagerTests(unittest.TestCase):
         self.assertIn("Details: The user uses a 0.8 mm nozzle instead of a 0.6 mm nozzle.", prompt)
         self.assertEqual(plan.retrieved_memory.text, "- Nozzle size correction\n  Details: The user uses a 0.8 mm nozzle instead of a 0.6 mm nozzle.")
 
+    def test_approved_external_document_memory_has_safe_origin_not_raw_evidence(self):
+        plan = self.manager.build_chat(
+            persona_text="Persona", policy_text="Policy", recent_messages=[],
+            retrieved_memories=[{
+                "id": 10,
+                "summary": "StarFur is local-first.",
+                "details": "Resident intelligence architecture.",
+                "source": "external_document_annotation",
+            }],
+            user_text="What architecture does StarFur use?",
+        )
+        self.assertIn("Origin: approved external document", plan.retrieved_memory.text)
+        self.assertNotIn("external:roadmap", plan.retrieved_memory.text)
+
     def test_no_memory_plan_matches_existing_none_format(self):
         plan = self.manager.build_chat(
             persona_text="Persona", policy_text="Policy", recent_messages=[],

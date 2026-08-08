@@ -20,7 +20,7 @@ from pipeline.providers import ChatProvider
 DOCUMENT_ANNOTATION_MAX_OUTPUT_TOKENS = 1024
 
 
-def build_document_annotation_messages(chunk: IntakeChunk) -> list[dict[str, str]]:
+def build_document_annotation_messages(chunk: IntakeChunk, *, retry_attempt: int = 1) -> list[dict[str, str]]:
     """Build the bounded, document-specific extraction request for one chunk."""
     taxonomy = assistant_memory_type_prompt()
     system = (
@@ -39,6 +39,7 @@ def build_document_annotation_messages(chunk: IntakeChunk) -> list[dict[str, str
         + taxonomy
         + "\nRetention must be exactly session, short_term, or long_term. "
         "importance and confidence must be JSON numbers between 0.0 and 1.0."
+        + (" Previous output was invalid: return only the JSON object, or {\"proposals\": []} when no candidate qualifies." if retry_attempt > 1 else "")
     )
     heading = chunk.heading or "(no heading)"
     return [
@@ -110,14 +111,12 @@ class DocumentProposalAnnotator:
         # option at their boundary; no provider conditionals live here.
         self._options["num_predict"] = self.max_output_tokens
 
-    def __call__(self, chunk: IntakeChunk) -> object:
-        messages = build_document_annotation_messages(chunk)
+    def annotate_with_retry(self, chunk: IntakeChunk, *, attempt: int = 1) -> object:
+        """Annotate one chunk; later attempts receive an explicit JSON repair cue."""
+        messages = build_document_annotation_messages(chunk, retry_attempt=attempt)
         try:
             response = self.provider.complete(
-                messages,
-                model=self.model,
-                options=self._options,
-                stream=False,
+                messages, model=self.model, options=self._options, stream=False,
             )
         except Exception as error:
             raise DocumentAnnotationError(
@@ -140,6 +139,8 @@ class DocumentProposalAnnotator:
             )
         return result
 
+    def __call__(self, chunk: IntakeChunk) -> object:
+        return self.annotate_with_retry(chunk)
 
 __all__ = [
     "DOCUMENT_ANNOTATION_MAX_OUTPUT_TOKENS",
