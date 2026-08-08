@@ -11,7 +11,7 @@ sys.modules.setdefault("ollama", types.ModuleType("ollama"))
 
 from pipeline.application import AssistantApplication
 
-from pipeline.api import API_MODEL_ID, DOCUMENT_ANNOTATE_PATH, DOCUMENT_PREPARE_PATH, DOCUMENT_REVIEW_PATH, StarFurAPI, StarFurHTTPServer
+from pipeline.api import API_MODEL_ID, CONVERSATION_HEADER, DOCUMENT_ANNOTATE_PATH, DOCUMENT_PREPARE_PATH, DOCUMENT_REVIEW_PATH, StarFurAPI, StarFurHTTPServer
 
 
 class FakeConfig:
@@ -25,9 +25,13 @@ class FakeSession:
         self.stream = False
         self.stream_writer = None
         self.calls = []
+        self.messages = []
+        self.last_memory_ids = []
+        self.pending_bulk_approval = None
 
     def respond(self, text):
         self.calls.append(text)
+        self.messages.append({"role": "user", "content": text})
         if self.stream and self.stream_writer:
             self.stream_writer("streamed answer")
         return "streamed answer" if self.stream else "normal answer"
@@ -36,8 +40,14 @@ class FakeSession:
 class APITests(unittest.TestCase):
     def setUp(self):
         self.session = FakeSession()
+        self.sessions = [self.session]
         self.annotation_chunks = []
         self.proposal_writes = []
+
+        def session_factory():
+            session = FakeSession()
+            self.sessions.append(session)
+            return session
 
         def proposal_creator(proposal, *, domain, source_reference, observation_text):
             self.proposal_writes.append({
@@ -51,6 +61,8 @@ class APITests(unittest.TestCase):
         self.application = AssistantApplication(
             self.session,
             proposal_creator=proposal_creator,
+            session_factory=session_factory,
+            max_conversations=2,
         )
 
         def document_annotator(chunk):
@@ -81,11 +93,13 @@ class APITests(unittest.TestCase):
         self.server.server_close()
         self.thread.join(timeout=2)
 
-    def request(self, method, path, body=None, *, auth=True):
+    def request(self, method, path, body=None, *, auth=True, extra_headers=None):
         connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=3)
         headers = {"Content-Type": "application/json"}
         if auth:
             headers["Authorization"] = "Bearer local-test"
+        if extra_headers:
+            headers.update(extra_headers)
         connection.request(method, path, json.dumps(body) if body is not None else None, headers)
         response = connection.getresponse()
         raw = response.read()
@@ -144,6 +158,50 @@ class APITests(unittest.TestCase):
         status, raw = self.request("POST", "/v1/chat/completions", {"messages": []})
         self.assertEqual(status, 400)
         self.assertIn("non-empty list", json.loads(raw)["error"]["message"])
+        self.assertEqual(self.session.calls, [])
+
+    def test_chat_isolates_ephemeral_sessions_and_honors_header_priority(self):
+        status, _ = self.request("POST", "/v1/chat/completions", {
+            "user": "chat-a",
+            "messages": [{"role": "user", "content": "a first"}],
+        })
+        self.assertEqual(status, 200)
+        status, _ = self.request("POST", "/v1/chat/completions", {
+            "user": "chat-b",
+            "messages": [{"role": "user", "content": "b first"}],
+        })
+        self.assertEqual(status, 200)
+        status, raw = self.request("POST", "/v1/chat/completions", {
+            "user": "chat-a",
+            "messages": [{"role": "user", "content": "a second"}],
+        })
+        self.assertEqual(status, 200)
+
+        session_a, session_b = self.sessions[1:3]
+        session_a.active_model = "model-a"
+        session_a.last_memory_ids = ["M-001"]
+        session_a.pending_bulk_approval = {"proposal": "P-001"}
+        self.assertEqual(session_a.calls, ["a first", "a second"])
+        self.assertEqual(session_b.calls, ["b first"])
+        self.assertEqual(session_b.active_model, "qwen3:8b")
+        self.assertEqual(session_b.last_memory_ids, [])
+        self.assertIsNone(session_b.pending_bulk_approval)
+
+        status, raw = self.request("POST", "/v1/chat/completions", {
+            "user": "body-session",
+            "messages": [{"role": "user", "content": "header wins"}],
+        }, extra_headers={CONVERSATION_HEADER: "header-session"})
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(raw)["model"], "qwen3:8b")
+        self.assertEqual(self.sessions[-1].calls, ["header wins"])
+
+    def test_invalid_conversation_identifier_returns_client_error(self):
+        status, raw = self.request("POST", "/v1/chat/completions", {
+            "conversation_id": "bad/session",
+            "messages": [{"role": "user", "content": "hello"}],
+        })
+        self.assertEqual(status, 400)
+        self.assertIn("Conversation identifier", json.loads(raw)["error"]["message"])
         self.assertEqual(self.session.calls, [])
 
 

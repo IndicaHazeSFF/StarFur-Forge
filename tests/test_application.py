@@ -24,9 +24,13 @@ class FakeSession:
         self.stream = False
         self.stream_writer = None
         self.calls = []
+        self.messages = []
+        self.last_memory_ids = []
+        self.pending_bulk_approval = None
 
     def respond(self, text):
         self.calls.append((text, self.stream))
+        self.messages.append({"role": "user", "content": text})
         if self.stream and self.stream_writer:
             self.stream_writer("chunk")
         return "answer"
@@ -77,6 +81,58 @@ class AssistantApplicationTests(unittest.TestCase):
 
     def test_context_stats_delegates_without_a_turn(self):
         self.assertEqual(AssistantApplication(FakeSession()).context_stats(), "stats")
+
+    def test_application_isolates_ephemeral_state_per_conversation(self):
+        default = FakeSession()
+        created = []
+
+        def make_session():
+            session = FakeSession()
+            created.append(session)
+            return session
+
+        app = AssistantApplication(default, session_factory=make_session, max_conversations=2)
+        app.respond("first turn", conversation_id="chat-a")
+        app.respond("second turn", conversation_id="chat-b")
+        app.respond("another a turn", conversation_id="chat-a")
+
+        session_a, session_b = created
+        session_a.active_model = "model-a"
+        session_a.last_memory_ids = ["M-001"]
+        session_a.pending_bulk_approval = {"proposal": "P-001"}
+
+        self.assertEqual(default.calls, [])
+        self.assertEqual([call[0] for call in session_a.calls], ["first turn", "another a turn"])
+        self.assertEqual([call[0] for call in session_b.calls], ["second turn"])
+        self.assertEqual(session_b.active_model, "fake:latest")
+        self.assertEqual(session_b.last_memory_ids, [])
+        self.assertIsNone(session_b.pending_bulk_approval)
+        self.assertEqual(app.active_model_for("chat-a"), "model-a")
+        self.assertEqual(app.active_model_for("chat-b"), "fake:latest")
+
+    def test_application_evicts_only_bounded_nondefault_conversations(self):
+        default = FakeSession()
+        created = []
+
+        def make_session():
+            session = FakeSession()
+            created.append(session)
+            return session
+
+        app = AssistantApplication(default, session_factory=make_session, max_conversations=1)
+        app.respond("one", conversation_id="chat-one")
+        app.respond("two", conversation_id="chat-two")
+        app.respond("one again", conversation_id="chat-one")
+
+        self.assertEqual(len(created), 3)
+        self.assertEqual(default.calls, [])
+        self.assertEqual([call[0] for call in created[-1].calls], ["one again"])
+
+    def test_application_rejects_invalid_conversation_identifiers(self):
+        app = AssistantApplication(FakeSession(), session_factory=FakeSession)
+
+        with self.assertRaisesRegex(ValueError, "Conversation identifier"):
+            app.respond("hello", conversation_id="not/a/session")
 
     def test_document_annotation_is_serialized_review_only_and_injectable(self):
         session = FakeSession()

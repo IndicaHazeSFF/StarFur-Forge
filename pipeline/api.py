@@ -24,6 +24,7 @@ from pipeline.document_intake import (
 
 
 API_MODEL_ID = "starfur-assistant"
+CONVERSATION_HEADER = "X-StarFur-Conversation"
 DOCUMENT_PREPARE_PATH = "/v1/starfur/documents/prepare"
 DOCUMENT_ANNOTATE_PATH = "/v1/starfur/documents/annotate"
 DOCUMENT_REVIEW_PATH = "/v1/starfur/documents/review"
@@ -44,6 +45,26 @@ def _content_from_message(message):
             if isinstance(part, dict) and part.get("type") == "text"
         )
     return str(content or "")
+
+
+def _conversation_id_from_request(payload, header_value=None):
+    """Resolve an opaque session key without using it for authorization.
+
+    A StarFur-specific header is preferred for frontends that know a stable
+    chat identifier. The documented ``conversation_id`` extension is next,
+    followed by OpenAI's standard ``user`` field. Omission preserves the
+    legacy default session.
+    """
+    if header_value is not None:
+        return header_value
+    if not isinstance(payload, dict):
+        return None
+    if "conversation_id" in payload:
+        return payload["conversation_id"]
+    metadata = payload.get("metadata")
+    if isinstance(metadata, dict) and "starfur_conversation_id" in metadata:
+        return metadata["starfur_conversation_id"]
+    return payload.get("user")
 
 
 class StarFurAPI:
@@ -68,8 +89,8 @@ class StarFurAPI:
             return True
         return headers.get("Authorization", "") == f"Bearer {self.api_key}"
 
-    def models(self):
-        active = self.application.active_model
+    def models(self, *, conversation_id=None):
+        active = self.application.active_model_for(conversation_id)
         return {
             "object": "list",
             "data": [{"id": self.model_id, "object": "model", "owned_by": "starfur", "active_backend": active}],
@@ -180,7 +201,7 @@ class StarFurAPI:
             "evidence_count": result["evidence_count"],
         }
 
-    def complete(self, payload, *, stream_writer=None):
+    def complete(self, payload, *, stream_writer=None, conversation_id=None):
         if not isinstance(payload, dict):
             raise ValueError("Request body must be a JSON object.")
         messages = payload.get("messages")
@@ -195,8 +216,13 @@ class StarFurAPI:
         requested_model = payload.get("model")
         if requested_model not in (None, self.model_id):
             raise ValueError(f"Unknown StarFur model: {requested_model}")
-        content = self.application.respond(user_text, stream_writer=stream_writer)
-        active = self.application.active_model
+        resolved_conversation = _conversation_id_from_request(payload, conversation_id)
+        content = self.application.respond(
+            user_text,
+            stream_writer=stream_writer,
+            conversation_id=resolved_conversation,
+        )
+        active = self.application.active_model_for(resolved_conversation)
         return {"content": content or "", "model": active}
 
 
@@ -232,9 +258,15 @@ class _Handler(BaseHTTPRequestHandler):
         if self.path == "/health":
             self._send_json(200, {"status": "ok", "service": "starfur"})
         elif self.path == "/v1/models":
-            self._send_json(200, self.api.models())
+            try:
+                self._send_json(200, self.api.models(conversation_id=self.headers.get(CONVERSATION_HEADER)))
+            except ValueError as error:
+                self._send_json(400, {"error": {"message": str(error), "type": "invalid_request_error"}})
         elif self.path == "/v1/starfur/diagnostics":
-            self._send_json(200, self.api.application.runtime_diagnostics())
+            try:
+                self._send_json(200, self.api.application.runtime_diagnostics(conversation_id=self.headers.get(CONVERSATION_HEADER)))
+            except ValueError as error:
+                self._send_json(400, {"error": {"message": str(error), "type": "invalid_request_error"}})
         else:
             self._send_json(404, {"error": {"message": "Not found", "type": "invalid_request_error"}})
 
@@ -298,7 +330,11 @@ class _Handler(BaseHTTPRequestHandler):
                 self.wfile.flush()
 
             try:
-                result = self.api.complete(payload, stream_writer=write_chunk)
+                result = self.api.complete(
+                    payload,
+                    stream_writer=write_chunk,
+                    conversation_id=self.headers.get(CONVERSATION_HEADER),
+                )
                 if not wrote_content["value"] and result["content"]:
                     write_chunk(result["content"])
                 finish = {"id": request_id, "object": "chat.completion.chunk", "created": created, "model": result["model"], "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}
@@ -315,7 +351,10 @@ class _Handler(BaseHTTPRequestHandler):
                     pass
             return
         try:
-            result = self.api.complete(payload)
+            result = self.api.complete(
+                payload,
+                conversation_id=self.headers.get(CONVERSATION_HEADER),
+            )
         except ValueError as error:
             self._send_json(400, {"error": {"message": str(error), "type": "invalid_request_error"}})
             return
@@ -357,4 +396,4 @@ def serve(*, host="127.0.0.1", port=8000, config_path=None, api_key=None, quiet=
         server.server_close()
 
 
-__all__ = ["API_MODEL_ID", "DOCUMENT_ANNOTATE_PATH", "DOCUMENT_PREPARE_PATH", "DOCUMENT_REVIEW_PATH", "StarFurAPI", "StarFurHTTPServer", "create_api_application", "create_api_session", "serve"]
+__all__ = ["API_MODEL_ID", "CONVERSATION_HEADER", "DOCUMENT_ANNOTATE_PATH", "DOCUMENT_PREPARE_PATH", "DOCUMENT_REVIEW_PATH", "StarFurAPI", "StarFurHTTPServer", "create_api_application", "create_api_session", "serve"]
