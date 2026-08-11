@@ -32,6 +32,9 @@ class RetrievalTests(unittest.TestCase):
   cleaning=db.create_assistant_memory("User","personal_fact","Glasses cleaning routine",importance=.5,confidence=.5)
   result=db.retrieve_assistant_memories("glasses", limit=5)
   self.assertEqual([item["memory"]["id"] for item in result],[glasses, cleaning])
+ def test_conservative_inflection_normalization_preserves_lexical_recall(self):
+  schedule=db.create_assistant_memory("User","routine","User works closing shifts",importance=.8,confidence=.8)
+  self.assertEqual([item["memory"]["id"] for item in db.retrieve_assistant_memories("When am I usually working?")],[schedule])
  def test_meaningful_single_term_recall_and_empty_meaningful_query(self):
   glasses=db.create_assistant_memory("User","personal_fact","New blue glasses",importance=.8,confidence=.9)
   self.assertEqual(db.retrieve_assistant_memories("What did I say about my glasses?")[0]["memory"]["id"],glasses)

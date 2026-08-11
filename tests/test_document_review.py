@@ -11,6 +11,7 @@ from pipeline.document_review import (
     DocumentReviewError,
     DocumentReviewStore,
     candidate_public_id,
+    review_candidate_public_payload,
     review_public_payload,
 )
 
@@ -45,6 +46,7 @@ class DocumentReviewStoreTests(unittest.TestCase):
         self.assertEqual(payload["id"], session.review_id)
         self.assertEqual(payload["candidate_count"], 1)
         self.assertNotIn("observation_text", payload)
+        self.assertEqual(store.get_document(session.review_id), document)
         self.assertEqual(candidate_public_id(0), "C-001")
 
     def test_missing_expired_and_invalid_candidate_ids_are_rejected(self):
@@ -81,6 +83,32 @@ class DocumentReviewStoreTests(unittest.TestCase):
         with self.assertRaisesRegex(DocumentReviewError, "does not match"):
             DocumentReviewStore().create(first_document, second_candidates)
         self.assertEqual(first_candidates[0].proposal["domain"], "personal")
+
+    def test_review_status_is_ephemeral_and_rejection_blocks_handoff(self):
+        document, candidates = self._document_and_candidate()
+        store = DocumentReviewStore()
+        session = store.create(document, candidates)
+
+        review, entries = store.get_review(session.review_id)
+        self.assertIs(review, session)
+        candidate_id, status, candidate = entries[0]
+        self.assertEqual((candidate_id, status), ("C-001", "pending"))
+        public = review_candidate_public_payload(candidate_id, status, candidate)
+        self.assertNotIn("observation_text", str(public))
+
+        self.assertEqual(store.reject_candidates(session.review_id, ["C-001"]), ("C-001",))
+        self.assertEqual(store.get_review(session.review_id)[1][0][1], "rejected")
+        with self.assertRaisesRegex(DocumentReviewError, "dismissed"):
+            store.get_candidate(session.review_id, "C-001")
+
+    def test_handed_off_status_keeps_idempotent_candidate_available(self):
+        document, candidates = self._document_and_candidate()
+        store = DocumentReviewStore()
+        session = store.create(document, candidates)
+
+        store.mark_handed_off(session.review_id, ["C-001"])
+        self.assertEqual(store.get_review(session.review_id)[1][0][1], "handed_off")
+        self.assertIs(store.get_candidate(session.review_id, "C-001"), candidates[0])
 
 
 if __name__ == "__main__":

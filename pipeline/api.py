@@ -11,10 +11,23 @@ import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Callable
+from urllib.parse import parse_qs, urlsplit
 
 from pipeline.assistant import GenerationInterrupted
 from pipeline.application import AssistantApplication, create_assistant_application
-from pipeline.document_review import DocumentReviewError, DocumentReviewStore, candidate_public_id, review_public_payload
+from pipeline.document_review import (
+    DocumentReviewError,
+    DocumentReviewStore,
+    candidate_public_id,
+    review_candidate_public_payload,
+    review_public_payload,
+)
+from pipeline.db import assistant_public_id
+from pipeline.document_context import (
+    DocumentContextError,
+    build_document_context_packet,
+    document_context_payload,
+)
 from pipeline.document_intake import (
     DEFAULT_MAX_DOCUMENT_BYTES,
     DocumentAnnotationError,
@@ -28,6 +41,7 @@ CONVERSATION_HEADER = "X-StarFur-Conversation"
 DOCUMENT_PREPARE_PATH = "/v1/starfur/documents/prepare"
 DOCUMENT_ANNOTATE_PATH = "/v1/starfur/documents/annotate"
 DOCUMENT_REVIEW_PATH = "/v1/starfur/documents/review"
+DOCUMENT_CONTEXT_PATH = "/v1/starfur/documents/context"
 MAX_DOCUMENT_REQUEST_BYTES = DEFAULT_MAX_DOCUMENT_BYTES * 6 + 64 * 1024
 
 
@@ -163,19 +177,21 @@ class StarFurAPI:
                 for failure in annotation.failures
             ],
             "candidates": [
-                {
-                    "id": candidate_public_id(index),
-                    "identity": candidate.source_reference.rsplit(":candidate:", 1)[-1],
-                    "proposal": dict(candidate.proposal),
-                    "provenance": {
-                        "source": candidate.proposal["source"],
-                        "source_id": candidate.source_id,
-                        "source_reference": candidate.source_reference,
-                        "chunk_id": candidate.chunk_id,
-                        "observation_characters": len(candidate.observation_text),
-                    },
-                }
+                review_candidate_public_payload(candidate_public_id(index), "pending", candidate)
                 for index, candidate in enumerate(candidates)
+            ],
+        }
+
+    def document_review(self, review_id):
+        """Return one short-lived review's candidates for an explicit UI."""
+        session, candidates = self.document_review_store.get_review(review_id)
+        return {
+            "object": "starfur.document.review",
+            "review": review_public_payload(session),
+            "source": self._document_source_payload(session.document),
+            "candidates": [
+                review_candidate_public_payload(candidate_id, status, candidate)
+                for candidate_id, status, candidate in candidates
             ],
         }
     def create_document_pending_proposal(self, payload):
@@ -192,11 +208,13 @@ class StarFurAPI:
             payload.get("review_id"), payload.get("candidate_id"),
         )
         result = self.application.create_document_pending_proposal(candidate)
+        self.document_review_store.mark_handed_off(payload["review_id"], [payload["candidate_id"]])
         return {
             "object": "starfur.document.proposal_handoff",
             "review_id": payload["review_id"],
             "candidate_id": payload["candidate_id"],
             "proposal_id": result["proposal_id"],
+            "proposal_ref": assistant_public_id("proposal", result["proposal_id"], self.application.domain_for(None)),
             "proposal_status": "pending",
             "persistence_action": result["action"],
             "evidence_count": result["evidence_count"],
@@ -218,10 +236,12 @@ class StarFurAPI:
         results = self.application.create_document_pending_proposals(
             [candidate for _, candidate in selected],
         )
+        self.document_review_store.mark_handed_off(payload["review_id"], payload["candidate_ids"])
         handoffs = [
             {
                 "candidate_id": candidate_id,
                 "proposal_id": result["proposal_id"],
+                "proposal_ref": assistant_public_id("proposal", result["proposal_id"], self.application.domain_for(None)),
                 "proposal_status": "pending",
                 "persistence_action": result["action"],
                 "evidence_count": result["evidence_count"],
@@ -234,6 +254,136 @@ class StarFurAPI:
             "count": len(handoffs),
             "handoffs": handoffs,
         }
+
+    def reject_document_review_candidates(self, payload):
+        """Dismiss selected ephemeral candidates without creating proposals."""
+        if not isinstance(payload, dict):
+            raise ValueError("Request body must be a JSON object.")
+        allowed = {"review_id", "candidate_ids", "confirm"}
+        unknown = set(payload) - allowed
+        if unknown:
+            raise ValueError(f"Unknown document-review rejection field(s): {sorted(unknown)}")
+        if payload.get("confirm") != "reject document candidates":
+            raise ValueError("Document candidate rejection requires confirm='reject document candidates'.")
+        candidate_ids = self.document_review_store.reject_candidates(
+            payload.get("review_id"), payload.get("candidate_ids"),
+        )
+        return {
+            "object": "starfur.document.review_rejection",
+            "review_id": payload["review_id"],
+            "count": len(candidate_ids),
+            "candidate_ids": list(candidate_ids),
+        }
+
+    @staticmethod
+    def _render_document_review(review):
+        lines = [
+            f"Document review {review['review']['id']}",
+            f"Source: {review['source']['name']}",
+            f"Candidates: {review['review']['candidate_count']} (expires {review['review']['expires_at']})",
+        ]
+        candidates = review["candidates"]
+        if not candidates:
+            lines.append("No memory candidates were found.")
+            return "\n".join(lines)
+        lines.extend(("", "Candidates:"))
+        for candidate in candidates:
+            proposal = candidate["proposal"]
+            lines.extend((
+                f"- {candidate['id']} [{candidate['status']}] {proposal['summary']}",
+                f"  Type: {proposal['memory_type']}; subject: {proposal['subject']}; confidence: {proposal['confidence']}; importance: {proposal['importance']}",
+            ))
+            if proposal.get("details"):
+                lines.append(f"  Details: {proposal['details']}")
+        lines.extend((
+            "",
+            "Use `document approve <review-id> <C-### ...>` to create pending proposal(s), or `document reject <review-id> <C-### ...>` to dismiss reviewed candidate(s).",
+        ))
+        return "\n".join(lines)
+
+    def document_review_command(self, command):
+        """Serve Filter-parsed review commands without invoking the chat model."""
+        if not isinstance(command, dict):
+            raise ValueError("starfur_document_review must be an object.")
+        allowed = {"action", "review_id", "candidate_ids", "confirm"}
+        unknown = set(command) - allowed
+        if unknown:
+            raise ValueError(f"Unknown starfur_document_review field(s): {sorted(unknown)}")
+        action = command.get("action")
+        if action == "show":
+            if set(command) != {"action", "review_id"}:
+                raise ValueError("Document review display requires only action and review_id.")
+            return self._render_document_review(self.document_review(command.get("review_id")))
+        if action == "approve":
+            result = self.create_document_pending_proposals({
+                "review_id": command.get("review_id"),
+                "candidate_ids": command.get("candidate_ids"),
+                "confirm": command.get("confirm"),
+            })
+            lines = [f"Created or reinforced {result['count']} pending document proposal(s):"]
+            lines.extend(
+                f"- {item['candidate_id']} -> {item.get('proposal_ref') or assistant_public_id('proposal', item['proposal_id'], self.application.domain_for(None))} ({item['persistence_action']})"
+                for item in result["handoffs"]
+            )
+            lines.append("Use `proposal list` and `proposal approve <id>` for final memory approval.")
+            return "\n".join(lines)
+        if action == "reject":
+            result = self.reject_document_review_candidates({
+                "review_id": command.get("review_id"),
+                "candidate_ids": command.get("candidate_ids"),
+                "confirm": command.get("confirm"),
+            })
+            return f"Dismissed {result['count']} review candidate(s): {', '.join(result['candidate_ids'])}. No proposals or memories were created."
+        raise ValueError("starfur_document_review action must be show, approve, or reject.")
+
+    def document_context(self, payload):
+        """Return bounded matching source chunks from one active review only.
+
+        This deliberately does not create a chat turn, mutate a review,
+        persist a proposal, or inject the returned text into an assistant
+        prompt.  Presentation connectors decide whether and how to use this
+        explicit packet in a subsequent request.
+        """
+        if not isinstance(payload, dict):
+            raise ValueError("Request body must be a JSON object.")
+        allowed = {"review_id", "query", "limit"}
+        unknown = set(payload) - allowed
+        if unknown:
+            raise ValueError(f"Unknown document-context field(s): {sorted(unknown)}")
+        document = self.document_review_store.get_document(payload.get("review_id"))
+        packet = build_document_context_packet(document, payload.get("query"), limit=payload.get("limit", 3))
+        return {
+            "object": "starfur.document.context",
+            "review_id": payload["review_id"],
+            "source": self._document_source_payload(document),
+            "query": packet.query,
+            "chunks": document_context_payload(packet),
+        }
+
+    def _chat_document_context(self, payload, user_text, conversation_id):
+        """Resolve a reviewed source packet from an explicit, non-text API extension."""
+        selection = payload.get("starfur_document_context")
+        if selection is None:
+            return None
+        if not isinstance(selection, dict):
+            raise ValueError("starfur_document_context must be an object.")
+        allowed = {"review_id", "limit"}
+        unknown = set(selection) - allowed
+        if unknown:
+            raise ValueError(f"Unknown starfur_document_context field(s): {sorted(unknown)}")
+        if "review_id" not in selection:
+            raise ValueError("starfur_document_context requires review_id.")
+        document = self.document_review_store.get_document(selection["review_id"])
+        session_domain = self.application.domain_for(conversation_id)
+        if document.domain != session_domain:
+            raise ValueError("Document review domain does not match the assistant session domain.")
+        # The actual latest user message is the only retrieval query.  Clients
+        # cannot supply a different query or arbitrary source text here.
+        return build_document_context_packet(
+            document,
+            user_text,
+            limit=selection.get("limit", 3),
+        )
 
     def complete(self, payload, *, stream_writer=None, conversation_id=None):
         if not isinstance(payload, dict):
@@ -251,10 +401,17 @@ class StarFurAPI:
         if requested_model not in (None, self.model_id):
             raise ValueError(f"Unknown StarFur model: {requested_model}")
         resolved_conversation = _conversation_id_from_request(payload, conversation_id)
+        review_command = payload.get("starfur_document_review")
+        if review_command is not None:
+            content = self.document_review_command(review_command)
+            active = self.application.active_model_for(resolved_conversation)
+            return {"content": content, "model": active}
+        document_context = self._chat_document_context(payload, user_text, resolved_conversation)
         content = self.application.respond(
             user_text,
             stream_writer=stream_writer,
             conversation_id=resolved_conversation,
+            external_document_context=document_context,
         )
         active = self.application.active_model_for(resolved_conversation)
         return {"content": content or "", "model": active}
@@ -289,16 +446,28 @@ class _Handler(BaseHTTPRequestHandler):
     def do_GET(self):  # noqa: N802
         if not self._authorized():
             return
-        if self.path == "/health":
+        parsed = urlsplit(self.path)
+        if parsed.path == "/health":
             self._send_json(200, {"status": "ok", "service": "starfur"})
-        elif self.path == "/v1/models":
+        elif parsed.path == "/v1/models":
             try:
                 self._send_json(200, self.api.models(conversation_id=self.headers.get(CONVERSATION_HEADER)))
             except ValueError as error:
                 self._send_json(400, {"error": {"message": str(error), "type": "invalid_request_error"}})
-        elif self.path == "/v1/starfur/diagnostics":
+        elif parsed.path == "/v1/starfur/diagnostics":
             try:
                 self._send_json(200, self.api.application.runtime_diagnostics(conversation_id=self.headers.get(CONVERSATION_HEADER)))
+            except ValueError as error:
+                self._send_json(400, {"error": {"message": str(error), "type": "invalid_request_error"}})
+        elif parsed.path == DOCUMENT_REVIEW_PATH:
+            try:
+                query = parse_qs(parsed.query, keep_blank_values=True)
+                review_ids = query.get("review_id", [])
+                if len(review_ids) != 1:
+                    raise ValueError("Document review display requires exactly one review_id query parameter.")
+                self._send_json(200, self.api.document_review(review_ids[0]))
+            except DocumentReviewError as error:
+                self._send_json(404, {"error": {"message": str(error), "type": "document_review_not_found"}})
             except ValueError as error:
                 self._send_json(400, {"error": {"message": str(error), "type": "invalid_request_error"}})
         else:
@@ -307,7 +476,7 @@ class _Handler(BaseHTTPRequestHandler):
     def do_POST(self):  # noqa: N802
         if not self._authorized():
             return
-        if self.path not in {"/v1/chat/completions", DOCUMENT_PREPARE_PATH, DOCUMENT_ANNOTATE_PATH, DOCUMENT_REVIEW_PATH}:
+        if self.path not in {"/v1/chat/completions", DOCUMENT_PREPARE_PATH, DOCUMENT_ANNOTATE_PATH, DOCUMENT_REVIEW_PATH, DOCUMENT_CONTEXT_PATH}:
             self._send_json(404, {"error": {"message": "Not found", "type": "invalid_request_error"}})
             return
         try:
@@ -321,12 +490,16 @@ class _Handler(BaseHTTPRequestHandler):
         except (ValueError, json.JSONDecodeError) as error:
             self._send_json(400, {"error": {"message": f"Invalid JSON request: {error}", "type": "invalid_request_error"}})
             return
-        if self.path in {DOCUMENT_PREPARE_PATH, DOCUMENT_ANNOTATE_PATH, DOCUMENT_REVIEW_PATH}:
+        if self.path in {DOCUMENT_PREPARE_PATH, DOCUMENT_ANNOTATE_PATH, DOCUMENT_REVIEW_PATH, DOCUMENT_CONTEXT_PATH}:
             try:
                 if self.path == DOCUMENT_PREPARE_PATH:
                     result = self.api.prepare_document(payload)
                 elif self.path == DOCUMENT_ANNOTATE_PATH:
                     result = self.api.annotate_document(payload)
+                elif self.path == DOCUMENT_CONTEXT_PATH:
+                    result = self.api.document_context(payload)
+                elif payload.get("confirm") == "reject document candidates":
+                    result = self.api.reject_document_review_candidates(payload)
                 else:
                     result = (
                         self.api.create_document_pending_proposals(payload)
@@ -339,7 +512,7 @@ class _Handler(BaseHTTPRequestHandler):
             except DocumentAnnotationError as error:
                 self._send_json(422, {"error": {"message": str(error), "type": "document_annotation_error"}})
                 return
-            except (ValueError, DocumentIntakeError) as error:
+            except (ValueError, DocumentIntakeError, DocumentContextError) as error:
                 self._send_json(400, {"error": {"message": str(error), "type": "invalid_request_error"}})
                 return
             except RuntimeError as error:
@@ -434,4 +607,4 @@ def serve(*, host="127.0.0.1", port=8000, config_path=None, api_key=None, quiet=
         server.server_close()
 
 
-__all__ = ["API_MODEL_ID", "CONVERSATION_HEADER", "DOCUMENT_ANNOTATE_PATH", "DOCUMENT_PREPARE_PATH", "DOCUMENT_REVIEW_PATH", "StarFurAPI", "StarFurHTTPServer", "create_api_application", "create_api_session", "serve"]
+__all__ = ["API_MODEL_ID", "CONVERSATION_HEADER", "DOCUMENT_ANNOTATE_PATH", "DOCUMENT_CONTEXT_PATH", "DOCUMENT_PREPARE_PATH", "DOCUMENT_REVIEW_PATH", "StarFurAPI", "StarFurHTTPServer", "create_api_application", "create_api_session", "serve"]

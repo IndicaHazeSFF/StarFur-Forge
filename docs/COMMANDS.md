@@ -71,6 +71,43 @@ The assistant persona is loaded from the path configured in `config/assistant.js
 Persona files control presentation and style only. Memory retrieval, policy, safety,
 commands, proposals, and provenance remain engine responsibilities. If the file is
 missing, unreadable, empty, or invalid, StarFur uses a neutral built-in persona.
+
+## Retrieval Evaluation
+
+Run the checked-in temporary-SQLite retrieval benchmark:
+
+    python starfur.py retrieval-eval
+
+The report separates `lexical`, `semantic`, and `no_match` fixture tiers. The
+production retriever intentionally uses lexical matching only; semantic-tier failures
+are a measured future capability gap, not a reason to silently enable semantic chat
+retrieval.
+
+To run isolated semantic or hybrid comparisons with the fixed local `nomic-embed-text`
+fixture embedder and a temporary Chroma collection:
+
+    python starfur.py retrieval-eval --strategy semantic --explain
+    python starfur.py retrieval-eval --strategy hybrid --explain
+
+To measure cutoff tradeoffs without changing any runtime policy:
+
+    python starfur.py retrieval-eval --strategy semantic --semantic-sweep
+    python starfur.py retrieval-eval --strategy hybrid --semantic-sweep
+
+To inspect one explicit fixture-only cutoff:
+
+    python starfur.py retrieval-eval --strategy semantic --semantic-min-similarity 0.47 --explain
+
+To measure whether a clear-first-result margin improves precision at a chosen cutoff:
+
+    python starfur.py retrieval-eval --strategy semantic --semantic-min-similarity 0.47 --semantic-margin-sweep
+
+To inspect one explicit cutoff-and-margin policy, including acceptance or ambiguity-rejection reasons:
+
+    python starfur.py retrieval-eval --strategy semantic --semantic-min-similarity 0.47 --semantic-min-margin 0.02 --explain
+
+These commands never read or modify the production assistant database or Chroma
+collection. They require the local embedding model and Chroma dependency to be available.
 ## Ollama Generation Options
 
 Optional, validated provider settings live in `config/assistant.json` and apply to
@@ -105,8 +142,9 @@ Endpoints:
     POST /v1/starfur/documents/prepare
     POST /v1/starfur/documents/annotate
     POST /v1/starfur/documents/review
+    POST /v1/starfur/documents/context
 
-`/v1/starfur/documents/prepare` is the first explicit external-document intake boundary. Send a JSON object with `filename`, UTF-8 text `content`, and optional `domain` (`personal` or `project:<slug>`). It accepts `.md`, `.markdown`, and `.txt` names up to 2 MiB of UTF-8 content, validates/chunks them through StarFur, and returns source/chunk metadata only. It does not call a model, create proposals, write SQLite/Chroma, or inject the document into a chat turn. OpenWebUI attachment/RAG interception is not wired to this endpoint yet.
+`/v1/starfur/documents/prepare` is the first explicit external-document intake boundary. Send a JSON object with `filename`, UTF-8 text `content`, and optional `domain` (`personal` or `project:<slug>`). It accepts `.md`, `.markdown`, and `.txt` names up to 2 MiB of UTF-8 content, validates/chunks them through StarFur, and returns source/chunk metadata only. It does not call a model, create proposals, write SQLite/Chroma, or inject the document into a chat turn.
 
 `/v1/starfur/documents/annotate` accepts the same validated request body, sends each prepared chunk to the currently active configured provider through the shared application facade, and returns reviewable candidate proposals with source/chunk provenance. Annotation itself does not create pending proposals, write SQLite/Chroma, approve anything, or inject document text into chat. The response includes a short-lived `review.id`, display candidate IDs such as `C-001`, and a content-derived candidate identity; invalid model output returns HTTP 422.
 
@@ -118,9 +156,51 @@ To hand off several already-reviewed candidates at once, send only their returne
 
     {"review_id":"DR-...","candidate_ids":["C-001","C-002"],"confirm":"create pending proposals"}
 
-The server uses its in-memory validated candidate—not client-supplied proposal fields—then calls the normal idempotent pending-proposal writer with original chunk evidence. The result is still pending and must be approved/rejected through the existing proposal controls. Review sessions expire after 15 minutes and disappear on server restart. OpenWebUI attachment/RAG interception is still not wired.
+The server uses its in-memory validated candidate—not client-supplied proposal fields—then calls the normal idempotent pending-proposal writer with original chunk evidence. The result is still pending and must be approved/rejected through the existing proposal controls. Review sessions expire after 15 minutes and disappear on server restart.
+
+`/v1/starfur/documents/context` is a separate, read-only source-selection endpoint for an active review. It accepts a `review_id`, an explicit `query`, and optional `limit` (1-8, default 3), then returns only lexical-matching chunks from the server-held source with stable scores and reasons. It does not create proposals, call a model, modify the review, or attach text to assistant chat on its own. This is the connector-facing context packet that later OpenWebUI custom retrieval will consume; raw source text remains absent from normal review metadata.
+
+    {"review_id":"DR-...","query":"What graphics card is in the desktop?","limit":1}
+
+To attach a reviewed document only to one chat turn, add the API extension below to the ordinary `/v1/chat/completions` request. StarFur uses the actual latest user message as the lookup query; the extension intentionally does **not** accept raw text or a client-selected query. The selected chunks are rendered as untrusted reference data, are reported in `context stats`, and do not become conversation history or a memory proposal source.
+
+    {
+      "model":"starfur-assistant",
+      "messages":[{"role":"user","content":"What graphics card is in the desktop?"}],
+      "starfur_document_context":{"review_id":"DR-...","limit":1}
+    }
+
+The review must be active and in the same assistant-memory domain. `context stats`, proposal commands, and memory introspection remain Core-owned command paths; an attached document never overrides them.
 
 In OpenWebUI running in Docker, add an OpenAI connection with base URL `http://host.docker.internal:8001/v1` and model `starfur-assistant`; use the port selected when starting `serve`. The adapter preserves StarFur persona, retrieval, policy, proposals, and session state; it does not expose SQLite or Chroma. Use `--api-key <token>` for a bearer token. If OpenWebUI runs in Docker or another network namespace, bind explicitly with `--host 0.0.0.0` and use the host gateway address; do not expose an unauthenticated server beyond the local machine. Streaming uses OpenAI-compatible SSE chunks.
+
+### Optional OpenWebUI attachment bridge
+
+For one-file, provenance-safe source context in OpenWebUI, install
+`integrations/openwebui/starfur_document_filter.py` as an OpenWebUI **Filter
+Function** and attach it only to `starfur-assistant`. Configure its Valves:
+
+    STARFUR_BASE_URL=http://host.docker.internal:8001
+    STARFUR_API_KEY=starfur-local
+    DOMAIN=personal
+    DOCUMENT_CONTEXT_LIMIT=3
+
+The Filter declares module-level `file_handler = True`, so OpenWebUI skips its
+built-in RAG for that model. It accepts exactly one UTF-8 `.md`, `.markdown`,
+or `.txt` attachment per turn, downloads it from the authenticated OpenWebUI
+file API, invokes StarFur `/documents/annotate`, then forwards only the
+short-lived `review_id` and bounded context limit in `starfur_document_context`.
+StarFur derives source retrieval from the user's actual latest message. Raw
+document text is never appended to the user message or conversation history.
+
+Annotation candidates are not persisted by the Filter. Its status message
+includes the short-lived `DR-...` review ID and candidate count; continue to
+use the document review API above to make selected candidates pending
+proposals. The Filter's process-local review cache lasts at most 14 minutes;
+restart/expiry safely requires re-annotation. Unsupported, multiple, or failed
+attachments produce a status notice and no source context—there is no hidden
+fallback to OpenWebUI RAG. See `integrations/openwebui/README.md` for full
+setup and the smoke test.
 
 ### API conversation isolation
 
@@ -544,3 +624,17 @@ A reviewed document candidate affects assistant chat only after normal proposal 
 ### Benchmark manifests
 
 `pipeline/benchmark.py` provides the first metadata-only benchmark layer. `BenchmarkRunManifest` records workload, architecture fingerprint, provider/model/quantization, context size, seed, hardware, and run identity. `build_scaling_plan()` creates same-workload/different-model plans without invoking providers or touching production data.
+
+### Explicit benchmark result recording
+
+`retrieval-eval` remains read-only by default. To append its temporary-fixture result to a local, privacy-bounded JSONL ledger, opt in with a path:
+
+    python starfur.py retrieval-eval --record-ledger data/experiment_ledger.jsonl --run-id retrieval-baseline-001 --git-commit <commit> --hardware-profile "RTX 4070"
+
+The ledger stores versioned manifest metadata, expected/returned fixture memory IDs, retrieval scores/reasons, aggregate metrics, and pass/fail results. It deliberately rejects raw prompts and responses, and does not read production assistant memory or Chroma.
+
+### Task/provider profiles
+
+`config/assistant.json` may declare validated `task_profiles` for workloads such as `assistant_chat`, `assistant_proposal`, `document_annotation`, `coding`, `vision`, and `image_generation`. A profile may declare a provider label, model, bounded generation settings, context size, output ceiling, and a future fallback task name. Profiles do not route requests or construct providers yet.
+
+An `assistant_chat` profile model establishes Assistant Mode's startup default; later `model use` selections still control chat and proposal calls for that session. Document annotation may use its own configured model. If a profile names a provider other than the already active provider, StarFur fails clearly rather than silently substituting a backend.

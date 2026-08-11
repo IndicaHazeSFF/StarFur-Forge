@@ -31,19 +31,15 @@ from pipeline.command_help import detect_command_help
 from pipeline.providers import CallableChatProvider, ChatProvider, OllamaChatProvider
 from pipeline.provider_state import ProviderLifecycle
 from pipeline.retrieval import DeterministicMemoryRetriever, MemoryLoaderRetriever, MemoryRetriever
+from pipeline.task_profiles import (
+    TASK_ASSISTANT_CHAT, TASK_ASSISTANT_PROPOSAL, TaskProfiles,
+    load_task_profiles, provider_matches, validate_generation_options,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config" / "assistant.json"
 DEFAULT_POLICY_PATH = PROJECT_ROOT / "config" / "assistant_policy.md"
 MEMORY_POLICIES = ("off", "conservative")
-OLLAMA_GENERATION_OPTION_VALIDATORS = {
-    "temperature": lambda value: isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0,
-    "top_k": lambda value: isinstance(value, int) and not isinstance(value, bool) and value >= 0,
-    "top_p": lambda value: isinstance(value, (int, float)) and not isinstance(value, bool) and 0 <= value <= 1,
-    "seed": lambda value: isinstance(value, int) and not isinstance(value, bool) and value >= -1,
-}
-
-
 @dataclass(frozen=True)
 class AssistantConfig:
     chat_model: str
@@ -55,25 +51,21 @@ class AssistantConfig:
     memory_policy: str
     debug_level: str
     ollama_options: dict[str, int | float] = field(default_factory=dict)
+    task_profiles: TaskProfiles = field(default_factory=TaskProfiles)
 
 
 def validate_ollama_options(value):
     """Validate the narrow, portable Ollama generation-options surface."""
-    if value is None:
-        return {}
-    if not isinstance(value, dict):
-        raise ValueError("ollama_options must be a JSON object.")
-    unknown = set(value) - set(OLLAMA_GENERATION_OPTION_VALIDATORS)
-    if unknown:
-        raise ValueError(f"Unknown Ollama generation option(s): {sorted(unknown)}")
-    for name, option_value in value.items():
-        if not OLLAMA_GENERATION_OPTION_VALIDATORS[name](option_value):
-            raise ValueError(f"Invalid Ollama generation option {name!r}: {option_value!r}")
-    return dict(value)
+    try:
+        return validate_generation_options(value)
+    except ValueError as error:
+        raise ValueError(str(error).replace("Task profile", "Ollama")) from error
 
 
 def load_config(path=DEFAULT_CONFIG_PATH):
     data = json.loads(Path(path).read_text(encoding="utf-8"))
+    task_profiles = load_task_profiles(data.get("task_profiles"))
+    chat_profile = task_profiles.get(TASK_ASSISTANT_CHAT)
     persona_path = Path(data.get("persona_path", "persona/default.md"))
     if not persona_path.is_absolute():
         persona_path = PROJECT_ROOT / persona_path
@@ -84,7 +76,9 @@ def load_config(path=DEFAULT_CONFIG_PATH):
     if policy not in MEMORY_POLICIES:
         raise ValueError(f"Invalid memory_policy: {policy!r}")
     return AssistantConfig(
-        chat_model=data.get("chat_model", "qwen3:8b"),
+        # A chat profile model is the declarative startup default. Later
+        # ``model use`` selections remain per-session runtime state.
+        chat_model=(chat_profile.model if chat_profile and chat_profile.model else data.get("chat_model", "qwen3:8b")),
         persona_path=persona_path,
         policy_path=policy_path,
         domain=normalize_domain(data.get("domain", "personal")),
@@ -93,6 +87,7 @@ def load_config(path=DEFAULT_CONFIG_PATH):
         memory_policy=policy,
         debug_level=normalize_debug_level(data.get("debug_level", "off")),
         ollama_options=validate_ollama_options(data.get("ollama_options")),
+        task_profiles=task_profiles,
     )
 
 
@@ -228,6 +223,9 @@ class AssistantSession:
             "recent_characters": plan.recent_conversation.characters,
             "recent_estimated_tokens": plan.recent_conversation.estimated_tokens,
             "retrieved": selected,
+            "external_document_characters": plan.external_document.characters,
+            "external_document_estimated_tokens": plan.external_document.estimated_tokens,
+            "selected_document_chunk_ids": list(plan.selected_document_chunk_ids),
             "selected_capability_ids": list(plan.selected_capability_ids),
             "capability_characters": plan.capabilities.characters,
             "prompt_characters": plan.prompt_characters,
@@ -283,6 +281,14 @@ class AssistantSession:
         capability_ids = snapshot.get("selected_capability_ids", [])
         if capability_ids:
             lines.append("Capability context: " + ", ".join(capability_ids))
+        document_chunks = snapshot.get("selected_document_chunk_ids", [])
+        if document_chunks:
+            lines.append(
+                "External document context: "
+                f"{len(document_chunks)} chunk(s), {snapshot.get('external_document_characters', 0)} characters "
+                f"(estimated {snapshot.get('external_document_estimated_tokens', 0)} tokens)"
+            )
+            lines.append("Selected document chunks: " + ", ".join(document_chunks))
         if selected:
             lines.append("Retrieval details:")
             for item in selected:
@@ -326,16 +332,31 @@ class AssistantSession:
             return "provider defaults"
         return ", ".join(f"{name}={options[name]}" for name in sorted(options))
 
-    def _model_request_kwargs(self, messages, *, model=None):
-        kwargs = {"model": model or self.active_model, "messages": messages}
-        options = self._ollama_options()
+    def _task_profile(self, task_id, *, model=None):
+        profiles = getattr(self.config, "task_profiles", TaskProfiles())
+        profile = profiles.resolve(
+            task_id,
+            default_model=model or self.active_model,
+            base_options=self._ollama_options(),
+        )
+        if not provider_matches(profile.provider, getattr(self.provider, "name", None)):
+            raise RuntimeError(
+                f"Task profile {task_id!r} requires provider {profile.provider!r}; "
+                f"active provider is {getattr(self.provider, 'name', 'unknown')!r}."
+            )
+        return profile
+
+    def _model_request_kwargs(self, messages, *, model=None, task_id=TASK_ASSISTANT_CHAT):
+        profile = self._task_profile(task_id, model=model)
+        kwargs = {"model": profile.model, "messages": messages}
+        options = dict(profile.options)
         if options:
             kwargs["options"] = options
         return kwargs
 
-    def _provider_complete(self, messages, *, model=None, stream=False):
+    def _provider_complete(self, messages, *, model=None, stream=False, task_id=TASK_ASSISTANT_CHAT):
         """Call the selected provider through the stable chat boundary."""
-        kwargs = self._model_request_kwargs(messages, model=model)
+        kwargs = self._model_request_kwargs(messages, model=model, task_id=task_id)
         self.provider_lifecycle.begin_generation(stream=stream, model=kwargs["model"])
         try:
             response = self.provider.complete(
@@ -350,15 +371,15 @@ class AssistantSession:
         except Exception as error:
             self.provider_lifecycle.fail(error)
             raise
-    def _chat_complete(self, messages, *, model=None, stream=None):
+    def _chat_complete(self, messages, *, model=None, stream=None, task_id=TASK_ASSISTANT_CHAT):
         """Return complete content while optionally rendering streamed chunks."""
         use_stream = self.stream if stream is None else stream
         if not use_stream:
-            response = self._provider_complete(messages, model=model)
+            response = self._provider_complete(messages, model=model, task_id=task_id)
             self.provider_lifecycle.finish()
             return response.get("message", {}).get("content", "")
         try:
-            response = self._provider_complete(messages, model=model, stream=True)
+            response = self._provider_complete(messages, model=model, stream=True, task_id=task_id)
             if isinstance(response, dict):
                 self.provider_lifecycle.finish()
                 return response.get("message", {}).get("content", "")
@@ -385,7 +406,7 @@ class AssistantSession:
             self.provider_lifecycle.fail(error)
             raise
 
-    def _context_plan(self, user_text):
+    def _context_plan(self, user_text, *, external_document_context=None):
         self.trace = RetrievalTrace(self.debug_level)
         phase_timings = {}
         retrieval_started = time.perf_counter()
@@ -414,6 +435,7 @@ class AssistantSession:
             retrieved_memories=memories,
             capabilities=selected_capabilities,
             behavior_context=BehaviorContext.from_persona_state(self.persona_state),
+            external_document_context=external_document_context,
             user_text=user_text,
         )
         phase_timings["prompt_build_ms"] = round((time.perf_counter() - prompt_started) * 1000, 2)
@@ -432,6 +454,7 @@ class AssistantSession:
             message_count=len(self.messages) + 1,
             context=plan.retrieved_memory.text,
             capability_ids=list(plan.selected_capability_ids),
+            document_chunk_ids=list(plan.selected_document_chunk_ids),
         )
         self._begin_turn_diagnostics(plan, retrieved, phase_timings)
         return plan
@@ -474,7 +497,7 @@ class AssistantSession:
             {"role": "user", "content": f"USER OBSERVATION (sole evidence source):\n{user_text}"},
         ]
         self.trace.record("proposal_request", model=self.active_model, messages=prompt, domain=self.config.domain, source="assistant_turn_proposal")
-        response = self._provider_complete(prompt)
+        response = self._provider_complete(prompt, task_id=TASK_ASSISTANT_PROPOSAL)
         content = response.get("message", {}).get("content", "").strip()
         self.trace.record("proposal_response", status="received" if content else "empty", response=content)
         try:
@@ -491,7 +514,7 @@ class AssistantSession:
                 {"role": "user", "content": f"Invalid proposal: {content}\nValidation error: {error}\nMEMORY TYPE TAXONOMY:\n{taxonomy}\nAllowed retention: session, short_term, long_term"},
             ]
             self.trace.record("proposal_repair_request", attempt=1, messages=repair_prompt)
-            repaired = self._provider_complete(repair_prompt)
+            repaired = self._provider_complete(repair_prompt, task_id=TASK_ASSISTANT_PROPOSAL)
             repaired_content = repaired.get("message", {}).get("content", "").strip()
             self.trace.record("proposal_repair_response", status="received" if repaired_content else "empty", response=repaired_content)
             raw = json.loads(repaired_content)
@@ -777,7 +800,7 @@ class AssistantSession:
         self._finish_turn_diagnostics(completed=True, response=content, latency_seconds=latency_seconds, proposal={"ran": False, "outcome": "skipped"})
         return content
 
-    def respond(self, user_text):
+    def respond(self, user_text, *, external_document_context=None):
         user_text = user_text.strip()
         if not user_text:
             return ""
@@ -802,7 +825,7 @@ class AssistantSession:
             return command_result
         previous_memory_ids = list(self.last_memory_ids)
         self._turn_started_at = time.perf_counter()
-        plan = self._context_plan(user_text)
+        plan = self._context_plan(user_text, external_document_context=external_document_context)
         messages = plan.model_messages()
         self.trace.record("model_request", model=self.active_model, message_count=len(messages), messages=messages)
         self._generation_started_at = time.perf_counter()

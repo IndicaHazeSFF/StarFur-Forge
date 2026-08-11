@@ -324,6 +324,15 @@ def main():
     serve_parser.add_argument("--quiet", action="store_true", help="Suppress HTTP access logs")
     eval_parser = subparsers.add_parser("retrieval-eval", help="Run the checked-in assistant retrieval benchmark")
     eval_parser.add_argument("--strategy", choices=("deterministic", "semantic", "hybrid"), default="deterministic")
+    eval_parser.add_argument("--explain", action="store_true", help="Show bounded per-case retrieval scores and reasons")
+    eval_parser.add_argument("--semantic-min-similarity", type=float, help="Fixture-only semantic acceptance cutoff from 0.0 to 1.0")
+    eval_parser.add_argument("--semantic-min-margin", type=float, help="Fixture-only semantic top-vs-runner-up ambiguity margin from 0.0 to 1.0")
+    eval_parser.add_argument("--semantic-sweep", action="store_true", help="Measure fixture-only semantic cutoff tradeoffs")
+    eval_parser.add_argument("--semantic-margin-sweep", action="store_true", help="Measure fixture-only semantic ambiguity-margin tradeoffs")
+    eval_parser.add_argument("--record-ledger", metavar="PATH", help="Explicitly append this fixture result to a local JSONL experiment ledger")
+    eval_parser.add_argument("--run-id", help="Optional reproducible benchmark run identifier")
+    eval_parser.add_argument("--git-commit", help="Optional source commit recorded with this benchmark run")
+    eval_parser.add_argument("--hardware-profile", help="Optional non-sensitive hardware profile label")
 
     context_parser = subparsers.add_parser("assistant-context", help="Show ranked assistant memory context")
     context_parser.add_argument("query", help="Question or query text")
@@ -457,17 +466,106 @@ def main():
         serve(host=args.host, port=args.port, config_path=args.config, api_key=args.api_key, quiet=args.quiet)
 
     elif args.command == "retrieval-eval":
-        from pipeline.retrieval_eval import run_benchmark
-        result = run_benchmark(strategy=args.strategy)
+        from pipeline.retrieval_eval import (
+            FIXTURE_EMBEDDING_MODEL,
+            build_ollama_fixture_embedder,
+            run_benchmark,
+            sweep_semantic_min_similarity,
+            sweep_semantic_min_similarity_margin,
+        )
+        if args.semantic_sweep or args.semantic_margin_sweep:
+            if args.strategy == "deterministic":
+                parser.error("semantic calibration requires --strategy semantic or --strategy hybrid")
+            if args.semantic_sweep and args.semantic_margin_sweep:
+                parser.error("Choose only one semantic calibration sweep")
+            if args.record_ledger:
+                parser.error("semantic calibration sweeps cannot be recorded as one benchmark result")
+            if args.semantic_margin_sweep and args.semantic_min_similarity is None:
+                parser.error("--semantic-margin-sweep requires --semantic-min-similarity")
+            embed_query = build_ollama_fixture_embedder()
+            sweep = (
+                sweep_semantic_min_similarity_margin(
+                    embed_query,
+                    strategy=args.strategy,
+                    min_similarity=args.semantic_min_similarity,
+                )
+                if args.semantic_margin_sweep
+                else sweep_semantic_min_similarity(embed_query, strategy=args.strategy)
+            )
+            print("Semantic Ambiguity Calibration\n------------------------------" if args.semantic_margin_sweep else "Semantic Similarity Calibration\n-------------------------------")
+            print(f"Strategy:           {args.strategy}")
+            print(f"Fixture embedder:   {FIXTURE_EMBEDDING_MODEL}")
+            if args.semantic_margin_sweep:
+                print(f"Min similarity:     {sweep['min_similarity']}")
+                print("margin   top-1   semantic top-1  no-match pass  irrelevant")
+            else:
+                print("minimum  top-1   semantic top-1  no-match pass  irrelevant")
+            for row in sweep["candidates"]:
+                candidate = row["min_similarity_margin"] if args.semantic_margin_sweep else row["min_similarity"]
+                print(
+                    f"{candidate:.3f}    {row['top1_hit_rate']:.1%}    "
+                    f"{row['semantic_top1_hit_rate']:.1%}           "
+                    f"{row['no_match_pass_rate']:.1%}          {row['irrelevant_result_count']}"
+                )
+            return
+        embed_query = build_ollama_fixture_embedder() if args.strategy != "deterministic" else None
+        result = run_benchmark(
+            strategy=args.strategy,
+            embed_query=embed_query,
+            semantic_min_similarity=args.semantic_min_similarity,
+            semantic_min_similarity_margin=args.semantic_min_margin,
+        )
         print("Retrieval Evaluation\n--------------------")
+        print(f"Strategy:           {args.strategy}")
+        if args.strategy != "deterministic":
+            print(f"Fixture embedder:   {FIXTURE_EMBEDDING_MODEL}")
+            print(f"Min similarity:     {result['semantic_min_similarity'] if result['semantic_min_similarity'] is not None else 'none'}")
+            print(f"Min margin:         {result['semantic_min_similarity_margin'] if result['semantic_min_similarity_margin'] is not None else 'none'}")
         print(f"Cases:              {result['cases']}")
         print(f"Top-1 hit rate:     {result['top1_hit_rate']:.1%}")
         print(f"Top-3 hit rate:     {result['top3_hit_rate']:.1%}")
         print(f"Irrelevant results: {result['irrelevant_result_count']}")
         print(f"Repeatability:      {'PASS' if result['repeatability'] else 'FAIL'}")
+        for expectation in ("lexical", "semantic", "no_match"):
+            metrics = result["expectation_metrics"][expectation]
+            if metrics["cases"]:
+                if expectation == "no_match":
+                    print(f"No Match baseline: {metrics['pass_rate']:.1%} pass ({metrics['cases']} cases)")
+                else:
+                    print(
+                        f"{expectation.title()} baseline: "
+                        f"{metrics['top1_hit_rate']:.1%} top-1, {metrics['top3_hit_rate']:.1%} top-3 "
+                        f"({metrics['cases']} cases)"
+                    )
         if result['failures']:
             print("\nFailures\n--------")
             for failure in result['failures']: print(f"{failure['name']}\n  expected: {failure['expected']}\n  returned: {failure['returned']}")
+        if args.explain:
+            print("\nRetrieval details\n-----------------")
+            for case in result["results"]:
+                print(f"{case['name']} [{case['expectation']}] expected={case['expected']} returned={case['returned']}")
+                if case["acceptance"]:
+                    print(f"  acceptance: {case['acceptance']['reason']}")
+                for item in case["retrieval"]:
+                    print(f"  #{item['id']} score={item['score']:.6f}; " + "; ".join(item["reasons"]))
+        if args.record_ledger:
+            from pipeline.benchmark import BenchmarkModelProfile, BenchmarkRunManifest
+            from pipeline.experiment_ledger import append_benchmark_result, build_benchmark_result_record
+            manifest = BenchmarkRunManifest(
+                benchmark_id="assistant-retrieval-fixture",
+                workload="assistant-memory-retrieval-fixture",
+                model_profile=BenchmarkModelProfile("Ollama" if embed_query else "internal", FIXTURE_EMBEDDING_MODEL if embed_query else args.strategy),
+                architecture_fingerprint=(
+                    f"retrieval-fixture-v3-min-{result['semantic_min_similarity']}"
+                    f"-margin-{result['semantic_min_similarity_margin']}"
+                ),
+                git_commit=args.git_commit,
+                run_id=args.run_id,
+                hardware={"profile": args.hardware_profile} if args.hardware_profile else {},
+            )
+            record = build_benchmark_result_record(manifest, result, run_id=args.run_id)
+            append_benchmark_result(args.record_ledger, record)
+            print(f"\nRecorded benchmark result: {record['record_id']} -> {args.record_ledger}")
 
     elif args.command == "assistant-context":
         from pipeline.db import retrieve_assistant_memories, explain_assistant_memory_retrieval

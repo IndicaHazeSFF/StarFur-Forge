@@ -1,3 +1,31 @@
+## 2026-08-09 - Add semantic retrieval cutoff calibration
+
+- Purpose: measure semantic-recall versus no-match false-positive tradeoffs before any production semantic-retrieval policy.
+- Files modified: `pipeline/retrieval.py`, `pipeline/retrieval_eval.py`, `starfur.py`, `tests/test_retrieval_eval.py`, `tests/test_retrieval_strategies.py`, `AGENTS.md`, `ROADMAP.md`, `docs/COMMANDS.md`, and `CHANGELOG.md`.
+- Behavior: fixture-only semantic/hybrid retrieval accepts an optional bounded minimum-similarity cutoff. `retrieval-eval --semantic-sweep` compares fixed cutoff candidates using cached local fixture embeddings; no cutoff is selected automatically and production assistant retrieval remains deterministic.
+- Verification: focused temporary-fixture retrieval tests cover cutoff filtering, invalid cutoff rejection, injected adapters, and sweep reporting. No production SQLite, Chroma, sync, document ingestion, or chat behavior changed.
+
+## 2026-08-09 - Make semantic and hybrid retrieval evaluation executable
+
+- Purpose: compare deterministic, semantic, and hybrid retrieval against the same versioned fixture corpus before any semantic chat opt-in.
+- Files modified: `pipeline/retrieval_eval.py`, `starfur.py`, `tests/test_retrieval_eval.py`, `AGENTS.md`, `ROADMAP.md`, `docs/COMMANDS.md`, and `CHANGELOG.md`.
+- Behavior: `retrieval-eval --strategy semantic|hybrid` now creates only temporary SQLite and Chroma state, embeds fixture text with fixed `nomic-embed-text`, and reports the same aggregate/tier metrics and optional bounded per-case diagnostics as deterministic evaluation. Test seams inject fake adapters/retrievers; live assistant retrieval remains deterministic.
+- Verification: temporary-fixture semantic/hybrid regression coverage added. No production SQLite, Chroma, sync, document ingestion, or chat behavior changed.
+
+## 2026-08-09 - Add declarative task/provider profile foundation
+
+- Purpose: make workload-specific model/settings configuration explicit before introducing automatic routing or specialist providers.
+- Files modified: `pipeline/task_profiles.py`, `pipeline/assistant.py`, `pipeline/application.py`, `config/assistant.json`, `tests/test_task_profiles.py`, `AGENTS.md`, `ROADMAP.md`, `docs/COMMANDS.md`, and `CHANGELOG.md`.
+- Behavior: profiles can provide a model, bounded generation options, context size, output ceiling, provider label, and future fallback name. An assistant-chat profile establishes the startup model, while later session model selection still governs chat/proposals; document annotation can opt into its own profile. Provider mismatches fail explicitly, and no routing/fallback is executed.
+- Verification: deterministic task-profile tests cover parsing, validation, chat option merge, document-annotation profile use, and provider mismatch behavior. No production data, SQLite, Chroma, sync, or model call was performed.
+
+## 2026-08-08 - Add explicit privacy-bounded benchmark result ledger
+
+- Purpose: turn the existing reproducible retrieval fixture benchmark into an opt-in, append-only source of comparable behavioral evidence.
+- Files modified: `pipeline/experiment_ledger.py`, `pipeline/retrieval_eval.py`, `starfur.py`, `tests/test_experiment_ledger.py`, `AGENTS.md`, `ROADMAP.md`, `docs/COMMANDS.md`, and `CHANGELOG.md`.
+- Behavior: `retrieval-eval --record-ledger PATH` records a versioned manifest, run metadata, expected/returned IDs, retrieval scores/reasons, aggregate metrics, and pass/fail outcome in JSONL. It rejects raw prompt/response content and remains temporary-fixture-only unless the user explicitly selects a ledger path.
+- Verification: focused ledger and retrieval-evaluation tests run locally; no production SQLite, Chroma, or assistant conversation data was accessed.
+
 ## 2026-08-03 - Persona-local memory roadmap detail
 
 - Purpose: make each persona's future self-learning memory explicit in the roadmap.
@@ -659,3 +687,54 @@
 - Modified: `pipeline/retrieval.py`, `pipeline/assistant.py`, `pipeline/application.py`, `tests/test_retrieval_injection.py`, `tests/test_retrieval_strategies.py`, `tests/test_assistant_retrieval.py`, `AGENTS.md`, `ROADMAP.md`, and `CHANGELOG.md`.
 - Behavior: `MemoryRetriever` now formalizes the read-only retrieval contract, with `DeterministicMemoryRetriever` preserving the existing production SQLite/association ranking and timing data. The standard application factory creates one shared deterministic retriever and supplies it to every bounded API session. Legacy custom memory-loader hooks are adapted for compatibility. Semantic/hybrid implementations remain evaluation-only and are not enabled for normal chat.
 - Verification: focused retrieval-injection, context, application, retrieval-strategy, and assistant-retrieval tests passed locally (33 tests). The local full-suite attempt ran 200 tests with 199 passing; the only failure is the pre-existing Windows-only `test_reset` SQLite replacement permission issue. No migration/version bump, Ollama request, production SQLite/Chroma mutation, sync, semantic rebuild, ranking change, or prompt-format change was performed.
+## 2026-08-09 - Clarify deterministic retrieval benchmark tiers
+
+- Purpose: distinguish real deterministic lexical regressions from intentionally deferred semantic-paraphrase capability gaps.
+- Files modified: `pipeline/db.py`, `pipeline/retrieval_eval.py`, `starfur.py`, `tests/fixtures/retrieval_cases.json`, `tests/test_assistant_retrieval.py`, `tests/test_retrieval_eval.py`, `AGENTS.md`, `ROADMAP.md`, `docs/COMMANDS.md`, and `CHANGELOG.md`.
+- Behavior: deterministic retrieval now normalizes conservative English inflections such as `working`/`works`; it still does not expand synonyms or use semantic retrieval. Fixture cases are labeled lexical, semantic, or no-match, and `retrieval-eval` prints tiered scores alongside aggregate metrics. Benchmark version is now `retrieval-v2`; no schema or runtime-data migration is required.
+- Verification: focused temporary-SQLite retrieval and evaluation tests added; no production SQLite, Chroma, sync, or model call performed.
+
+- Compatibility: legacy retrieval fixtures without an `expectation` field now default to lexical or no-match classification instead of failing validation.
+## 2026-08-10 - Add semantic retrieval ambiguity-margin calibration
+
+- Purpose: measure and reject near-tied semantic matches before considering any production semantic-retrieval policy.
+- Files modified: `pipeline/retrieval.py`, `pipeline/retrieval_eval.py`, `starfur.py`, `tests/test_retrieval_eval.py`, `tests/test_retrieval_strategies.py`, `AGENTS.md`, `ROADMAP.md`, `docs/COMMANDS.md`, and `CHANGELOG.md`.
+- Behavior: fixture-only semantic retrieval can apply a bounded top-versus-runner-up margin. When enabled, it returns one clear top result or rejects an ambiguous near tie with an explainable reason. `retrieval-eval --semantic-margin-sweep` compares margin candidates at an explicit similarity cutoff. Production assistant retrieval remains deterministic.
+- Verification: focused temporary-fixture regression tests cover near-tie rejection, clear-top acceptance, one-result behavior, validation, injected adapters, and margin sweep reporting. No production SQLite, Chroma, sync, document ingestion, or chat behavior changed.
+## 2026-08-10 - Clarify semantic rejection diagnostics
+
+- Purpose: make fixture semantic acceptance diagnostics distinguish cutoff rejection from ambiguity rejection.
+- Files modified: `pipeline/retrieval.py`, `tests/test_retrieval_strategies.py`, `AGENTS.md`, and `CHANGELOG.md`.
+- Behavior: a configured semantic acceptance policy now reports `semantic rejection: no candidate cleared minimum similarity` when cutoff filtering removes every candidate; no retrieval results or production behavior change.
+- Verification: focused semantic strategy tests pass, including the new cutoff-rejection explanation assertion. No production SQLite, Chroma, sync, or chat behavior changed.
+## 2026-08-10 - Add bounded review-scoped external-document context packets
+
+- Purpose: establish a provenance-safe, selective source-retrieval boundary before wiring OpenWebUI attachment interception or chat-time document context.
+- Files modified: `pipeline/document_context.py`, `pipeline/document_review.py`, `pipeline/api.py`, `tests/test_document_context.py`, `tests/test_document_review.py`, `tests/test_api.py`, `AGENTS.md`, `ROADMAP.md`, `docs/COMMANDS.md`, and `CHANGELOG.md`.
+- Behavior: authenticated `POST /v1/starfur/documents/context` selects up to eight deterministic lexical matches from the original bounded source retained only for an active 15-minute document-review session. It returns source/chunk identity, heading, score, reason, and selected text; it does not call a model, create a chat turn, write SQLite/Chroma, change proposals, or expose raw text in ordinary review metadata.
+- Verification: focused source-context, review-store, and local API tests passed. No production SQLite, Chroma, sync, document ingestion, or assistant prompt behavior changed.
+## 2026-08-11 - Bind reviewed document context into explicit API chat turns
+
+- Purpose: make the bounded external-document source packet useful for one assistant answer without allowing external UI RAG to inject raw text into user messages.
+- Files modified: `pipeline/document_context.py`, `pipeline/context.py`, `pipeline/assistant.py`, `pipeline/application.py`, `pipeline/api.py`, `tests/test_context.py`, `tests/test_api.py`, `AGENTS.md`, `ROADMAP.md`, `docs/COMMANDS.md`, and `CHANGELOG.md`.
+- Behavior: `/v1/chat/completions` accepts optional `starfur_document_context` with only an active `review_id` and bounded `limit`. StarFur derives retrieval from the actual latest user message, requires the review/session domains to match, renders selected chunks as explicit untrusted source data, and reports safe chunk references in context diagnostics. Ordinary chat, commands, introspection, proposal extraction, history, SQLite, and Chroma remain unchanged.
+- Verification: focused document-context, review, ContextManager, AssistantSession, and API regression tests passed. No production SQLite, Chroma, sync, document ingestion, or model call was performed.
+
+## 2026-08-11 - Add optional OpenWebUI reviewed-document Filter bridge
+
+- Purpose: let one OpenWebUI text attachment use StarFur's bounded intake, annotation, review, and source-context path instead of a second opaque RAG injection path.
+- Files added: `integrations/openwebui/starfur_document_filter.py`, `integrations/openwebui/README.md`, and `tests/test_openwebui_document_filter.py`.
+- Files modified: `AGENTS.md`, `ROADMAP.md`, `docs/COMMANDS.md`, and `CHANGELOG.md`.
+- Behavior: the self-contained OpenWebUI Filter declares module-level `file_handler = True`, so it must be attached only to `starfur-assistant`. It downloads exactly one authenticated UTF-8 `.md`, `.markdown`, or `.txt` upload from OpenWebUI, calls StarFur `/documents/annotate`, reports the short-lived review ID/candidate count, caches that review ID for at most 14 minutes, and forwards only `{review_id, limit}` through `starfur_document_context`. It never appends raw document text to chat messages, auto-creates/approves proposals, uses UI identity as a memory domain, or silently falls back to OpenWebUI RAG.
+- Verification: isolated filter-artifact tests cover module-level file handling, reference extraction, no-attachment/pass-through behavior, unsupported/multi-file safety, cache behavior, and reviewed-context binding. No StarFur schema/API migration, production SQLite/Chroma change, sync, or model call was performed.
+
+- Follow-up: defaulted the Filter's OpenWebUI internal API base to `http://localhost:8080`, which is the normal backend address from inside the OpenWebUI container; native/reverse-proxy installs can override `OPENWEBUI_BASE_URL`.
+- Follow-up: the Filter now explicitly clears OpenWebUI attachment reference fields after capture, preventing a second built-in RAG injection on versions that do not fully honor `file_handler = True`.
+
+## 2026-08-11 - Add reviewed-document commands for OpenWebUI
+
+- Purpose: complete the small reviewed-document loop without requiring manual curl handoffs.
+- Added: authenticated `GET /v1/starfur/documents/review?review_id=DR-...` returns bounded, server-held candidate metadata and ephemeral status; the OpenWebUI Filter recognizes exact `document review`, `document approve`, and `document reject` controls and forwards a structured Core-owned API extension.
+- Behavior: review display and document approve/reject commands bypass the language model. Approve explicitly creates only ordinary pending proposals via the existing idempotent writer; reject is an ephemeral review dismissal that writes neither a proposal nor a memory. Candidate status is `pending`, `handed_off`, or `rejected`, expires with the in-memory review, and never changes canonical memory history.
+- Files modified: `pipeline/document_review.py`, `pipeline/api.py`, `integrations/openwebui/starfur_document_filter.py`, `integrations/openwebui/README.md`, `tests/test_document_review.py`, `tests/test_openwebui_document_filter.py`, `tests/test_api.py`, `AGENTS.md`, `ROADMAP.md`, `docs/COMMANDS.md`, and `CHANGELOG.md`.
+- Verification: focused document review, OpenWebUI Filter, and API tests pass on the desktop workspace. No SQLite/Chroma runtime mutation, sync, model call, or automatic approval occurred.

@@ -35,6 +35,7 @@ class DocumentReviewSession:
     domain: str
     created_at: datetime
     expires_at: datetime
+    document: PreparedDocument
     candidates: tuple[DocumentMemoryCandidate, ...]
 
 
@@ -56,6 +57,10 @@ class DocumentReviewStore:
         self._max_sessions = max_sessions
         self._clock = clock or (lambda: datetime.now(UTC))
         self._sessions: dict[str, DocumentReviewSession] = {}
+        # Candidate decisions are deliberately ephemeral just like the review
+        # itself.  They make an OpenWebUI review readable without creating a
+        # second durable proposal lifecycle.
+        self._candidate_statuses: dict[str, dict[str, str]] = {}
         self._lock = threading.RLock()
 
     def _now(self) -> datetime:
@@ -68,11 +73,13 @@ class DocumentReviewStore:
         expired = [review_id for review_id, session in self._sessions.items() if session.expires_at <= now]
         for review_id in expired:
             del self._sessions[review_id]
+            self._candidate_statuses.pop(review_id, None)
         overflow = len(self._sessions) - self._max_sessions
         if overflow > 0:
             oldest = sorted(self._sessions.values(), key=lambda session: (session.created_at, session.review_id))
             for session in oldest[:overflow]:
                 del self._sessions[session.review_id]
+                self._candidate_statuses.pop(session.review_id, None)
 
     def create(
         self,
@@ -95,13 +102,58 @@ class DocumentReviewStore:
             domain=document.domain,
             created_at=now,
             expires_at=now + self._ttl,
+            document=document,
             candidates=candidates,
         )
         with self._lock:
             self._prune(now)
             self._sessions[session.review_id] = session
+            self._candidate_statuses[session.review_id] = {
+                candidate_public_id(index): "pending"
+                for index in range(len(session.candidates))
+            }
             self._prune(now)
         return session
+
+    def get_review(self, review_id: object) -> tuple[DocumentReviewSession, tuple[tuple[str, str, DocumentMemoryCandidate], ...]]:
+        """Return bounded candidate display data, never raw source text."""
+        now = self._now()
+        with self._lock:
+            self._prune(now)
+            normalized_review_id = review_id.strip() if isinstance(review_id, str) else ""
+            session = self._sessions.get(normalized_review_id)
+            if session is None:
+                raise DocumentReviewError("Document review not found or expired.")
+            statuses = self._candidate_statuses.get(session.review_id, {})
+            candidates = tuple(
+                (candidate_public_id(index), statuses.get(candidate_public_id(index), "pending"), candidate)
+                for index, candidate in enumerate(session.candidates)
+            )
+            return session, candidates
+
+    def mark_handed_off(self, review_id: object, candidate_ids: object) -> None:
+        """Record that selected candidates entered the pending-proposal flow."""
+        selected = self.get_candidates(review_id, candidate_ids)
+        normalized_review_id = review_id.strip()
+        with self._lock:
+            statuses = self._candidate_statuses[normalized_review_id]
+            for candidate_id, _ in selected:
+                statuses[candidate_id] = "handed_off"
+
+    def reject_candidates(self, review_id: object, candidate_ids: object) -> tuple[str, ...]:
+        """Dismiss selected review candidates without writing a proposal.
+
+        Rejection is a short-lived review decision, not a deletion of any
+        canonical memory or durable proposal.  The original review still
+        expires normally and is never persisted.
+        """
+        selected = self.get_candidates(review_id, candidate_ids)
+        normalized_review_id = review_id.strip()
+        with self._lock:
+            statuses = self._candidate_statuses[normalized_review_id]
+            for candidate_id, _ in selected:
+                statuses[candidate_id] = "rejected"
+        return tuple(candidate_id for candidate_id, _ in selected)
 
     def get_candidate(self, review_id: object, candidate_id: object) -> DocumentMemoryCandidate:
         if not isinstance(review_id, str) or not review_id.strip():
@@ -120,7 +172,24 @@ class DocumentReviewStore:
                 raise DocumentReviewError("Document review not found or expired.")
             if index < 0 or index >= len(session.candidates):
                 raise DocumentReviewError("Document review candidate not found.")
+            if self._candidate_statuses.get(session.review_id, {}).get(normalized_candidate_id) == "rejected":
+                raise DocumentReviewError("Document review candidate was dismissed.")
             return session.candidates[index]
+
+    def get_document(self, review_id: object) -> PreparedDocument:
+        """Return the original bounded source only while its review is alive.
+
+        The source is intentionally server-side and is not included in normal
+        review metadata.  A later source-context request explicitly selects
+        small relevant chunks from this object.
+        """
+        now = self._now()
+        with self._lock:
+            self._prune(now)
+            session = self._sessions.get(review_id.strip() if isinstance(review_id, str) else "")
+            if session is None:
+                raise DocumentReviewError("Document review not found or expired.")
+            return session.document
 
     def get_candidates(
         self,
@@ -155,10 +224,13 @@ class DocumentReviewStore:
             if session is None:
                 raise DocumentReviewError("Document review not found or expired.")
             selected: list[tuple[str, DocumentMemoryCandidate]] = []
+            statuses = self._candidate_statuses.get(session.review_id, {})
             for candidate_id in normalized_ids:
                 index = int(candidate_id[2:]) - 1
                 if index < 0 or index >= len(session.candidates):
                     raise DocumentReviewError("Document review candidate not found.")
+                if statuses.get(candidate_id) == "rejected":
+                    raise DocumentReviewError("Document review candidate was dismissed.")
                 selected.append((candidate_id, session.candidates[index]))
             return tuple(selected)
 
@@ -179,6 +251,24 @@ def review_public_payload(session: DocumentReviewSession) -> dict[str, object]:
     }
 
 
+def review_candidate_public_payload(candidate_id: str, status: str, candidate: DocumentMemoryCandidate) -> dict[str, object]:
+    """Return reviewable candidate facts without raw source observation text."""
+    proposal = dict(candidate.proposal)
+    return {
+        "id": candidate_id,
+        "status": status,
+        "identity": candidate.source_reference.rsplit(":candidate:", 1)[-1],
+        "proposal": proposal,
+        "provenance": {
+            "source": proposal["source"],
+            "source_id": candidate.source_id,
+            "source_reference": candidate.source_reference,
+            "chunk_id": candidate.chunk_id,
+            "observation_characters": len(candidate.observation_text),
+        },
+    }
+
+
 __all__ = [
     "DEFAULT_MAX_REVIEW_SESSIONS",
     "DEFAULT_REVIEW_TTL_SECONDS",
@@ -186,5 +276,6 @@ __all__ = [
     "DocumentReviewSession",
     "DocumentReviewStore",
     "candidate_public_id",
+    "review_candidate_public_payload",
     "review_public_payload",
 ]

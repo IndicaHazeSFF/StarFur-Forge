@@ -11,11 +11,12 @@ sys.modules.setdefault("ollama", types.ModuleType("ollama"))
 
 from pipeline.application import AssistantApplication
 
-from pipeline.api import API_MODEL_ID, CONVERSATION_HEADER, DOCUMENT_ANNOTATE_PATH, DOCUMENT_PREPARE_PATH, DOCUMENT_REVIEW_PATH, StarFurAPI, StarFurHTTPServer
+from pipeline.api import API_MODEL_ID, CONVERSATION_HEADER, DOCUMENT_ANNOTATE_PATH, DOCUMENT_CONTEXT_PATH, DOCUMENT_PREPARE_PATH, DOCUMENT_REVIEW_PATH, StarFurAPI, StarFurHTTPServer
 
 
 class FakeConfig:
     chat_model = "qwen3:8b"
+    domain = "personal"
 
 
 class FakeSession:
@@ -28,9 +29,11 @@ class FakeSession:
         self.messages = []
         self.last_memory_ids = []
         self.pending_bulk_approval = None
+        self.document_contexts = []
 
-    def respond(self, text):
+    def respond(self, text, *, external_document_context=None):
         self.calls.append(text)
+        self.document_contexts.append(external_document_context)
         self.messages.append({"role": "user", "content": text})
         if self.stream and self.stream_writer:
             self.stream_writer("streamed answer")
@@ -276,6 +279,136 @@ class APITests(unittest.TestCase):
         )
         self.assertEqual(self.proposal_writes[0]["observation_text"], self.annotation_chunks[0].text)
         self.assertEqual(self.session.calls, [])
+
+    def test_document_review_can_be_inspected_and_driven_by_controlled_chat_extension(self):
+        status, raw = self.request("POST", DOCUMENT_ANNOTATE_PATH, {
+            "filename": "notes.md", "content": "Roger is testing document intake.",
+        })
+        annotation = json.loads(raw)
+        review_id = annotation["review"]["id"]
+        candidate_id = annotation["candidates"][0]["id"]
+
+        status, raw = self.request("GET", f"{DOCUMENT_REVIEW_PATH}?review_id={review_id}")
+        review = json.loads(raw)
+        self.assertEqual(status, 200)
+        self.assertEqual(review["object"], "starfur.document.review")
+        self.assertEqual(review["candidates"][0]["status"], "pending")
+        self.assertNotIn("observation_text", str(review))
+
+        status, raw = self.request("POST", "/v1/chat/completions", {
+            "model": API_MODEL_ID,
+            "messages": [{"role": "user", "content": f"document review {review_id}"}],
+            "starfur_document_review": {"action": "show", "review_id": review_id},
+        })
+        payload = json.loads(raw)
+        self.assertEqual(status, 200)
+        self.assertIn(candidate_id, payload["choices"][0]["message"]["content"])
+        self.assertEqual(self.session.calls, [])
+
+        status, raw = self.request("POST", "/v1/chat/completions", {
+            "model": API_MODEL_ID,
+            "messages": [{"role": "user", "content": f"document approve {review_id} {candidate_id}"}],
+            "starfur_document_review": {
+                "action": "approve", "review_id": review_id, "candidate_ids": [candidate_id],
+                "confirm": "create pending proposals",
+            },
+        })
+        payload = json.loads(raw)
+        self.assertEqual(status, 200)
+        self.assertIn("P-077", payload["choices"][0]["message"]["content"])
+        self.assertEqual(len(self.proposal_writes), 1)
+        self.assertEqual(self.session.calls, [])
+
+        status, raw = self.request("GET", f"{DOCUMENT_REVIEW_PATH}?review_id={review_id}")
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(raw)["candidates"][0]["status"], "handed_off")
+
+    def test_document_review_rejection_is_ephemeral_and_never_writes_a_proposal(self):
+        status, raw = self.request("POST", DOCUMENT_ANNOTATE_PATH, {
+            "filename": "notes.md", "content": "Roger is testing document intake.",
+        })
+        annotation = json.loads(raw)
+        review_id = annotation["review"]["id"]
+        candidate_id = annotation["candidates"][0]["id"]
+        status, raw = self.request("POST", "/v1/chat/completions", {
+            "model": API_MODEL_ID,
+            "messages": [{"role": "user", "content": f"document reject {review_id} {candidate_id}"}],
+            "starfur_document_review": {
+                "action": "reject", "review_id": review_id, "candidate_ids": [candidate_id],
+                "confirm": "reject document candidates",
+            },
+        })
+        self.assertEqual(status, 200)
+        self.assertIn("No proposals or memories", json.loads(raw)["choices"][0]["message"]["content"])
+        self.assertEqual(self.proposal_writes, [])
+
+        status, raw = self.request("POST", DOCUMENT_REVIEW_PATH, {
+            "review_id": review_id, "candidate_id": candidate_id,
+            "confirm": "create pending proposal",
+        })
+        self.assertEqual(status, 404)
+        self.assertIn("dismissed", json.loads(raw)["error"]["message"])
+
+    def test_document_context_is_source_scoped_read_only_and_does_not_call_chat(self):
+        status, raw = self.request("POST", DOCUMENT_ANNOTATE_PATH, {
+            "filename": "notes.md",
+            "content": "# Hardware\n\nThe desktop has an RTX 4070 graphics card.\n\n# Food\n\nRoger prefers jasmine rice.",
+        })
+        annotation = json.loads(raw)
+        self.assertEqual(status, 200)
+
+        status, raw = self.request("POST", DOCUMENT_CONTEXT_PATH, {
+            "review_id": annotation["review"]["id"],
+            "query": "Which graphics card is in the desktop?",
+            "limit": 1,
+        })
+        payload = json.loads(raw)
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["object"], "starfur.document.context")
+        self.assertEqual(payload["source"]["id"], annotation["source"]["id"])
+        self.assertEqual(len(payload["chunks"]), 1)
+        self.assertIn("RTX 4070", payload["chunks"][0]["text"])
+        self.assertEqual(self.session.calls, [])
+        self.assertEqual(self.proposal_writes, [])
+
+        status, raw = self.request("POST", DOCUMENT_CONTEXT_PATH, {
+            "review_id": annotation["review"]["id"], "query": "the and of",
+        })
+        self.assertEqual(status, 400)
+        self.assertIn("meaningful", json.loads(raw)["error"]["message"])
+
+    def test_chat_can_attach_only_server_reviewed_document_context(self):
+        status, raw = self.request("POST", DOCUMENT_ANNOTATE_PATH, {
+            "filename": "notes.md",
+            "content": "The desktop has an RTX 4070 graphics card.",
+            "domain": "personal",
+        })
+        annotation = json.loads(raw)
+        self.assertEqual(status, 200)
+
+        status, raw = self.request("POST", "/v1/chat/completions", {
+            "model": API_MODEL_ID,
+            "messages": [{"role": "user", "content": "What GPU is in the desktop?"}],
+            "starfur_document_context": {"review_id": annotation["review"]["id"], "limit": 1},
+        })
+        self.assertEqual(status, 200)
+        packet = self.session.document_contexts[-1]
+        self.assertEqual(packet.source_id, annotation["source"]["id"])
+        self.assertEqual(packet.query, "What GPU is in the desktop?")
+        self.assertEqual(len(packet.chunks), 1)
+        self.assertIn("RTX 4070", packet.chunks[0].chunk.text)
+        self.assertEqual(self.proposal_writes, [])
+
+        status, raw = self.request("POST", "/v1/chat/completions", {
+            "model": API_MODEL_ID,
+            "messages": [{"role": "user", "content": "What GPU is in the desktop?"}],
+            "starfur_document_context": {
+                "review_id": annotation["review"]["id"],
+                "query": "client supplied alternate query",
+            },
+        })
+        self.assertEqual(status, 400)
+        self.assertIn("Unknown starfur_document_context", json.loads(raw)["error"]["message"])
 
     def test_document_candidate_batch_handoff_requires_plural_confirmation_and_preserves_order(self):
         self.api.document_annotator = lambda _chunk: {"proposals": [

@@ -20,6 +20,7 @@ from pipeline.db import upsert_assistant_memory_proposal
 from pipeline.document_annotation import DocumentProposalAnnotator
 from pipeline.document_intake import PreparedDocument, extract_document_memory_candidates_resilient
 from pipeline.retrieval import DeterministicMemoryRetriever, MemoryRetriever
+from pipeline.task_profiles import TASK_DOCUMENT_ANNOTATION, TaskProfiles, provider_matches
 
 
 DEFAULT_CONVERSATION_ID = "default"
@@ -144,12 +145,26 @@ class AssistantApplication:
             session.stream = old_stream
             session.stream_writer = old_writer
 
-    def respond(self, user_text: str, *, stream_writer: Callable[[str], None] | None = None, conversation_id=None):
+    def respond(
+        self,
+        user_text: str,
+        *,
+        stream_writer: Callable[[str], None] | None = None,
+        conversation_id=None,
+        external_document_context=None,
+    ):
         """Run one chat/command request through its bounded isolated session."""
         with self._lock:
             session = self._session_for(conversation_id)
             with self._streaming(session, stream_writer):
-                return session.respond(user_text)
+                if external_document_context is None:
+                    return session.respond(user_text)
+                return session.respond(user_text, external_document_context=external_document_context)
+
+    def domain_for(self, conversation_id=None) -> str:
+        """Return the selected session domain without treating it as client input."""
+        with self._lock:
+            return self._session_for(conversation_id).config.domain
 
     def context_stats(self, *, conversation_id=None):
         """Expose the session's bounded, read-only latest-turn diagnostics."""
@@ -169,10 +184,26 @@ class AssistantApplication:
                 provider = getattr(session, "provider", None)
                 if provider is None:
                     raise RuntimeError("Document annotation provider is unavailable.")
-                annotator = DocumentProposalAnnotator(provider, self._active_model_for_session(session))
+                profiles = getattr(session.config, "task_profiles", TaskProfiles())
+                profile = profiles.resolve(
+                    TASK_DOCUMENT_ANNOTATION,
+                    default_model=self._active_model_for_session(session),
+                    base_options={},
+                )
+                if not provider_matches(profile.provider, getattr(provider, "name", None)):
+                    raise RuntimeError(
+                        f"Task profile {TASK_DOCUMENT_ANNOTATION!r} requires provider {profile.provider!r}; "
+                        f"active provider is {getattr(provider, 'name', 'unknown')!r}."
+                    )
+                annotator = DocumentProposalAnnotator(
+                    provider,
+                    profile.model,
+                    options=profile.options,
+                    max_output_tokens=profile.options.get("num_predict", 1024),
+                )
             lifecycle = getattr(session, "provider_lifecycle", None)
             if lifecycle is not None:
-                lifecycle.begin_generation(stream=False, model=self._active_model_for_session(session))
+                lifecycle.begin_generation(stream=False, model=getattr(annotator, "model", self._active_model_for_session(session)))
             try:
                 result = extract_document_memory_candidates_resilient(document, annotator)
             except Exception as error:

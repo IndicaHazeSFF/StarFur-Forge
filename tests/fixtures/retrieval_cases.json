@@ -9,7 +9,8 @@
       "personal.work_schedule"
     ],
     "domain": "personal",
-    "limit": 3
+    "limit": 3,
+    "expectation": "lexical"
   },
   {
     "name": "gpu recall",
@@ -21,7 +22,8 @@
       "personal.work_schedule"
     ],
     "domain": "personal",
-    "limit": 3
+    "limit": 3,
+    "expectation": "lexical"
   },
   {
     "name": "case-1",
@@ -33,7 +35,8 @@
       "personal.work_schedule"
     ],
     "domain": "personal",
-    "limit": 3
+    "limit": 3,
+    "expectation": "semantic"
   },
   {
     "name": "case-2",
@@ -45,7 +48,8 @@
       "personal.work_schedule"
     ],
     "domain": "personal",
-    "limit": 3
+    "limit": 3,
+    "expectation": "semantic"
   },
   {
     "name": "case-3",
@@ -57,7 +61,8 @@
       "personal.gpu"
     ],
     "domain": "personal",
-    "limit": 3
+    "limit": 3,
+    "expectation": "lexical"
   },
   {
     "name": "case-4",
@@ -69,7 +74,8 @@
       "personal.gpu"
     ],
     "domain": "personal",
-    "limit": 3
+    "limit": 3,
+    "expectation": "lexical"
   },
   {
     "name": "case-5",
@@ -81,7 +87,8 @@
       "personal.work_schedule"
     ],
     "domain": "personal",
-    "limit": 3
+    "limit": 3,
+    "expectation": "semantic"
   },
   {
     "name": "case-6",
@@ -93,7 +100,8 @@
       "personal.work_schedule"
     ],
     "domain": "personal",
-    "limit": 3
+    "limit": 3,
+    "expectation": "semantic"
   },
   {
     "name": "case-7",
@@ -103,7 +111,8 @@
       "personal.work_schedule"
     ],
     "domain": "personal",
-    "limit": 3
+    "limit": 3,
+    "expectation": "no_match"
   },
   {
     "name": "case-8",
@@ -113,7 +122,8 @@
       "personal.work_schedule"
     ],
     "domain": "personal",
-    "limit": 3
+    "limit": 3,
+    "expectation": "no_match"
   },
   {
     "name": "case-9",
@@ -125,7 +135,8 @@
       "personal.work_schedule"
     ],
     "domain": "personal",
-    "limit": 3
+    "limit": 3,
+    "expectation": "lexical"
   },
   {
     "name": "case-10",
@@ -137,7 +148,8 @@
       "personal.work_schedule"
     ],
     "domain": "personal",
-    "limit": 3
+    "limit": 3,
+    "expectation": "semantic"
   },
   {
     "name": "case-11",
@@ -147,7 +159,8 @@
       "personal.work_schedule"
     ],
     "domain": "personal",
-    "limit": 3
+    "limit": 3,
+    "expectation": "no_match"
   },
   {
     "name": "case-12",
@@ -157,7 +170,8 @@
       "personal.work_schedule"
     ],
     "domain": "personal",
-    "limit": 3
+    "limit": 3,
+    "expectation": "no_match"
   },
   {
     "name": "case-13",
@@ -169,6 +183,7 @@
       "personal.work_schedule"
     ],
     "domain": "personal",
-    "limit": 3
+    "limit": 3,
+    "expectation": "semantic"
   }
 ]

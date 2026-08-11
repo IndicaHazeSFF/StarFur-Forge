@@ -91,9 +91,29 @@ def _retrieval_query_text(value):
     return text
 
 
+def _retrieval_token_stem(token):
+    """Apply only conservative English inflection normalization.
+
+    This is intentionally lexical normalization, not a synonym or semantic
+    expansion: ``works`` and ``working`` can meet ``work``, while unrelated
+    concepts such as ``GPU`` and ``graphics hardware`` still cannot collide.
+    """
+    if len(token) > 4 and token.endswith("ies"):
+        return token[:-3] + "y"
+    if len(token) > 5 and token.endswith("ing"):
+        stem = token[:-3]
+        return stem[:-1] if len(stem) > 2 and stem[-1:] == stem[-2:-1] else stem
+    if len(token) > 4 and token.endswith("ed"):
+        return token[:-2]
+    if len(token) > 3 and token.endswith("s") and not token.endswith("ss"):
+        return token[:-1]
+    return token
+
+
 def _retrieval_tokens(value):
     return {
-        token for token in re.findall(r"[\w']+", normalize_proposal_text(value))
+        _retrieval_token_stem(token)
+        for token in re.findall(r"[\w']+", normalize_proposal_text(value))
         if len(token) > 1 and token not in RETRIEVAL_STOP_WORDS
     }
 
