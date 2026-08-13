@@ -94,6 +94,30 @@ class AssistantTests(unittest.TestCase):
             self.assertIn("Forgotten", session.respond("forget this: foxes"))
         self.assertEqual(updated[0][1]["status"], "forgotten")
 
+    def test_explicit_forget_accepts_compact_memory_reference(self):
+        updated = []
+        config = type("Config", (), {"chat_model": "test", "domain": "personal", "max_session_messages": 4, "max_memories": 2, "memory_policy": "off"})()
+        session = AssistantSession(
+            config, "Persona", chat=lambda **kwargs: {"message": {"content": "unused"}},
+            memory_searcher=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("ID forget must not text-search")),
+            memory_updater=lambda *args, **kwargs: updated.append((args, kwargs)),
+        )
+        with patch("pipeline.assistant.resolve_assistant_id", return_value=31) as resolver, \
+             patch("pipeline.assistant.get_assistant_memory", return_value={"id": 31, "status": "active"}), \
+             patch("pipeline.assistant.assistant_public_id", return_value="M-031"):
+            self.assertEqual(session.respond("forget this: M-031"), "Forgotten memory M-031.")
+        resolver.assert_called_once_with("M-031", "memory", "personal")
+        self.assertEqual(updated, [((31,), {"domain": "personal", "status": "forgotten"})])
+
+    def test_explicit_forget_rejects_forgotten_compact_memory_reference(self):
+        config = type("Config", (), {"chat_model": "test", "domain": "personal", "max_session_messages": 4, "max_memories": 2, "memory_policy": "off"})()
+        updates = []
+        session = AssistantSession(config, "Persona", chat=lambda **kwargs: {"message": {"content": "unused"}}, memory_updater=lambda *args, **kwargs: updates.append((args, kwargs)))
+        with patch("pipeline.assistant.resolve_assistant_id", return_value=31), \
+             patch("pipeline.assistant.get_assistant_memory", return_value={"id": 31, "status": "forgotten"}):
+            self.assertEqual(session.respond("forget this: M-031"), "No active matching memory found.")
+        self.assertEqual(updates, [])
+
     def test_proposals_are_validated_and_not_persisted(self):
         calls = []
         config = type("Config", (), {"chat_model": "test", "domain": "personal", "max_session_messages": 4, "max_memories": 0, "memory_policy": "conservative", "debug_level": "verbose"})()

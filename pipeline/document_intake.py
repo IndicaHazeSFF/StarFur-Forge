@@ -113,17 +113,17 @@ def document_candidate_identity(
     persistence therefore cannot use an extraction ordinal as the source
     reference.  This fingerprint scopes the normalized asserted content to the
     already content-addressed document and chunk while deliberately excluding
-    confidence/importance, which may vary between equivalent extractions.
+    presentation labels and scores that may vary between equivalent
+    extractions. ``memory_type`` plus the normalized summary distinguish
+    separate facts from one source chunk without treating a changed subject
+    label or details wording as a new fact.
     """
     identity_payload = {
         "source_id": document.source_id,
         "chunk_id": chunk.chunk_id,
         "domain": proposal["domain"],
-        "subject": _normalized_candidate_identity_text(proposal["subject"]),
         "memory_type": proposal["memory_type"],
         "summary": _normalized_candidate_identity_text(proposal["summary"]),
-        "details": _normalized_candidate_identity_text(proposal.get("details")),
-        "retention": proposal["retention"],
     }
     serialized = json.dumps(identity_payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return sha256(serialized.encode("utf-8")).hexdigest()

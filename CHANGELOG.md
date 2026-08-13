@@ -738,3 +738,24 @@
 - Behavior: review display and document approve/reject commands bypass the language model. Approve explicitly creates only ordinary pending proposals via the existing idempotent writer; reject is an ephemeral review dismissal that writes neither a proposal nor a memory. Candidate status is `pending`, `handed_off`, or `rejected`, expires with the in-memory review, and never changes canonical memory history.
 - Files modified: `pipeline/document_review.py`, `pipeline/api.py`, `integrations/openwebui/starfur_document_filter.py`, `integrations/openwebui/README.md`, `tests/test_document_review.py`, `tests/test_openwebui_document_filter.py`, `tests/test_api.py`, `AGENTS.md`, `ROADMAP.md`, `docs/COMMANDS.md`, and `CHANGELOG.md`.
 - Verification: focused document review, OpenWebUI Filter, and API tests pass on the desktop workspace. No SQLite/Chroma runtime mutation, sync, model call, or automatic approval occurred.
+
+## 2026-08-11 - Stabilize external-document re-annotation identity
+
+- Purpose: prevent one factual document candidate from becoming duplicate pending proposals solely because the annotation model changes presentation labels between runs.
+- Behavior: external candidate provenance now fingerprints the content-addressed source/chunk plus normalized memory type and summary. Subject labels, details wording, retention, and scores no longer alter this identity; the external persistence path likewise ignores a changing model-supplied subject for proposal-key identity. Distinct same-chunk facts remain separate through their summary/type.
+- Compatibility: existing pending proposals are preserved unchanged and need no migration. When a new stable candidate encounters an older identity variant, StarFur reuses the oldest pending same-type/summary candidate from the same source chunk rather than adding another duplicate; any already-existing duplicate remains available for explicit review/rejection.
+- Files modified: `pipeline/document_intake.py`, `pipeline/db.py`, `tests/test_document_intake.py`, `tests/test_assistant_proposal_idempotency.py`, `AGENTS.md`, and `CHANGELOG.md`.
+- Verification: document intake (10), proposal idempotency (8), document review (6), API (18), and OpenWebUI Filter (9) focused tests passed. No runtime data was modified.
+
+## 2026-08-13 - Accept compact references in explicit forget
+
+- Behavior: `forget this: M-###` now resolves the compact reference in the active domain, verifies that the memory is currently active, then performs the existing soft-forget transition. Title/summary matching remains supported; forgotten, missing, and cross-domain references return the normal no-match response.
+- Files modified: `pipeline/assistant.py`, `tests/test_assistant.py`, `AGENTS.md`, `docs/COMMANDS.md`, and `CHANGELOG.md`.
+- Verification: focused assistant command tests pass. No schema or migration change.
+
+## 2026-08-13 - Narrow API request serialization to each conversation
+
+- Purpose: complete the remaining safe session-state cleanup after bounded API conversation isolation, so an independent OpenWebUI/API chat does not wait behind another chat's generation.
+- Files modified: `pipeline/application.py`, `tests/test_application.py`, `AGENTS.md`, `ROADMAP.md`, `docs/COMMANDS.md`, and `CHANGELOG.md`.
+- Behavior: the application registry now protects only creation, lookup, LRU order, and eviction. Each ephemeral `AssistantSession` has its own request lock; same-conversation calls remain serialized while independent conversations can progress concurrently. Active slots are pinned until completion, and LRU eviction is deferred if every non-default session is busy. No canonical-memory, retrieval, proposal, provider configuration, or API contract changed.
+- Verification: `python tests/test_application.py -q` (14), `python tests/test_api.py -q` (18), and `python tests/test_document_review.py -q` (6) passed locally. No Ollama request, production SQLite/Chroma mutation, schema migration, or reset/restore operation was performed.

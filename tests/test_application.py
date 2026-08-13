@@ -1,4 +1,5 @@
 import sys
+import threading
 import types
 import unittest
 from pathlib import Path
@@ -43,6 +44,39 @@ class FailingSession(FakeSession):
     def respond(self, text):
         self.calls.append((text, self.stream))
         raise RuntimeError("expected failure")
+
+
+class BlockingSession(FakeSession):
+    def __init__(self, started, release, config=None):
+        super().__init__(config=config)
+        self.started = started
+        self.release = release
+
+    def respond(self, text):
+        self.calls.append((text, self.stream))
+        self.started.set()
+        if not self.release.wait(2):
+            raise RuntimeError("test response was not released")
+        self.messages.append({"role": "user", "content": text})
+        return "answer"
+
+
+class SequentialBlockingSession(FakeSession):
+    def __init__(self, started_events, release_events, config=None):
+        super().__init__(config=config)
+        self.started_events = started_events
+        self.release_events = release_events
+        self._call_lock = threading.Lock()
+
+    def respond(self, text):
+        with self._call_lock:
+            index = len(self.calls)
+            self.calls.append((text, self.stream))
+        self.started_events[index].set()
+        if not self.release_events[index].wait(2):
+            raise RuntimeError("test response was not released")
+        self.messages.append({"role": "user", "content": text})
+        return "answer"
 
 
 class AssistantApplicationTests(unittest.TestCase):
@@ -127,6 +161,61 @@ class AssistantApplicationTests(unittest.TestCase):
         self.assertEqual(len(created), 3)
         self.assertEqual(default.calls, [])
         self.assertEqual([call[0] for call in created[-1].calls], ["one again"])
+
+    def test_independent_conversations_do_not_wait_on_each_others_response(self):
+        starts = [threading.Event(), threading.Event()]
+        releases = [threading.Event(), threading.Event()]
+        created = []
+
+        def make_session():
+            session = BlockingSession(starts[len(created)], releases[len(created)])
+            created.append(session)
+            return session
+
+        app = AssistantApplication(FakeSession(), session_factory=make_session)
+        first = threading.Thread(target=app.respond, args=("first",), kwargs={"conversation_id": "chat-a"})
+        second = threading.Thread(target=app.respond, args=("second",), kwargs={"conversation_id": "chat-b"})
+        first.start()
+        self.assertTrue(starts[0].wait(0.5))
+        second.start()
+        try:
+            self.assertTrue(starts[1].wait(0.5))
+        finally:
+            for release in releases:
+                release.set()
+            first.join(2)
+            second.join(2)
+        self.assertFalse(first.is_alive())
+        self.assertFalse(second.is_alive())
+
+    def test_same_conversation_remains_serialized_while_response_is_active(self):
+        started = [threading.Event(), threading.Event()]
+        releases = [threading.Event(), threading.Event()]
+        created = []
+
+        def make_session():
+            session = SequentialBlockingSession(started, releases)
+            created.append(session)
+            return session
+
+        app = AssistantApplication(FakeSession(), session_factory=make_session)
+        first = threading.Thread(target=app.respond, args=("first",), kwargs={"conversation_id": "chat-a"})
+        second = threading.Thread(target=app.respond, args=("second",), kwargs={"conversation_id": "chat-a"})
+        first.start()
+        self.assertTrue(started[0].wait(0.5))
+        second.start()
+        try:
+            self.assertFalse(started[1].wait(0.15))
+            releases[0].set()
+            self.assertTrue(started[1].wait(0.5))
+        finally:
+            for release in releases:
+                release.set()
+            first.join(2)
+            second.join(2)
+        self.assertFalse(first.is_alive())
+        self.assertFalse(second.is_alive())
+        self.assertEqual([call[0] for call in created[0].calls], ["first", "second"])
 
     def test_application_rejects_invalid_conversation_identifiers(self):
         app = AssistantApplication(FakeSession(), session_factory=FakeSession)

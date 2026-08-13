@@ -54,6 +54,34 @@ class AssistantProposalIdempotencyTests(unittest.TestCase):
         self.assertNotEqual(first["proposal_id"], second["proposal_id"])
         self.assertEqual(repeated["proposal_id"], first["proposal_id"])
         self.assertEqual(repeated["action"], "duplicate_evidence")
+
+    def test_document_reannotation_subject_drift_keeps_one_pending_proposal(self):
+        observation = "Roger prefers jasmine rice mixed with basmati rice."
+        first = db.upsert_assistant_memory_proposal(
+            {"subject":"diet", "memory_type":"preference", "summary":"Rice preference", "details":"Prefer jasmine rice mixed with basmati rice.", "importance":0.8, "confidence":0.9, "retention":"long_term", "source":"external_document_annotation"},
+            source_reference="external:hash:chunk:0:candidate:stable", observation_text=observation,
+        )
+        repeated = db.upsert_assistant_memory_proposal(
+            {"subject":"preference", "memory_type":"preference", "summary":"Rice preference", "details":"Preference for jasmine rice mixed with basmati rice.", "importance":0.8, "confidence":0.9, "retention":"long_term", "source":"external_document_annotation"},
+            source_reference="external:hash:chunk:0:candidate:stable", observation_text=observation,
+        )
+        self.assertEqual(repeated["proposal_id"], first["proposal_id"])
+        self.assertEqual(repeated["action"], "duplicate_evidence")
+        self.assertEqual(len(db.list_assistant_memory_proposals()), 1)
+
+    def test_document_reannotation_reuses_matching_legacy_candidate_identity(self):
+        observation = "Roger prefers jasmine rice mixed with basmati rice."
+        legacy = db.upsert_assistant_memory_proposal(
+            {"subject":"diet", "memory_type":"preference", "summary":"Rice preference", "details":"Old wording.", "importance":0.8, "confidence":0.9, "retention":"long_term", "source":"external_document_annotation"},
+            source_reference="external:hash:scene:0:chunk:0:candidate:old-identity", observation_text=observation,
+        )
+        current = db.upsert_assistant_memory_proposal(
+            {"subject":"preference", "memory_type":"preference", "summary":"Rice preference", "details":"New wording.", "importance":0.8, "confidence":0.9, "retention":"long_term", "source":"external_document_annotation"},
+            source_reference="external:hash:scene:0:chunk:0:candidate:new-identity", observation_text=observation,
+        )
+        self.assertEqual(current["proposal_id"], legacy["proposal_id"])
+        self.assertEqual(current["action"], "duplicate_evidence")
+        self.assertEqual(len(db.list_assistant_memory_proposals()), 1)
     def test_different_observations_remain_separate(self):
         base = {"subject":"Roger","memory_type":"preference","summary":"Likes cats","details":"","importance":0.5,"confidence":0.5,"retention":"long_term"}
         a = db.upsert_assistant_memory_proposal(base, observation_text="I like cats")

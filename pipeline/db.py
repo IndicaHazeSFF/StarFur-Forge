@@ -1196,15 +1196,45 @@ def upsert_assistant_memory_proposal(proposal, domain="personal", source_referen
     observation_identity = observation_text
     # External documents can yield several distinct candidates from one source
     # chunk. Stable candidate provenance distinguishes them without changing
-    # the retained evidence excerpt.
+    # the retained evidence excerpt.  Candidate provenance already contains
+    # the document/chunk/type/summary identity, so a model's inconsistent
+    # subject label must not split one re-annotation into duplicate proposals.
+    identity_subject = proposal["subject"]
     if observation_identity is not None and source == "external_document_annotation" and source_reference:
         observation_identity = f"{observation_identity}\n[source_reference:{source_reference}]"
-    key = assistant_observation_key(domain, proposal["subject"], proposal["memory_type"], observation_identity) if observation_identity is not None else assistant_proposal_key(domain, proposal["subject"], proposal["memory_type"], proposal["summary"])
+        identity_subject = "external_document_candidate"
+    key = assistant_observation_key(domain, identity_subject, proposal["memory_type"], observation_identity) if observation_identity is not None else assistant_proposal_key(domain, proposal["subject"], proposal["memory_type"], proposal["summary"])
     evidence_text = observation_text if observation_text is not None else (source_reference or proposal["summary"])
     evidence_hash = hashlib.sha256((source + "|" + normalize_proposal_text(evidence_text)).encode("utf-8")).hexdigest()
     with connect() as connection:
         connection.execute("BEGIN")
         row = connection.execute("SELECT * FROM assistant_memory_proposals WHERE domain = ? AND proposal_key = ? AND status = 'pending'", (domain, key)).fetchone()
+        if row is None and source == "external_document_annotation" and source_reference:
+            # Compatibility for candidates created before external identity
+            # stopped including model presentation fields.  Preserve history
+            # and never rewrite old keys; simply reuse the oldest exact
+            # same-type/summary proposal from this source chunk so the first
+            # post-upgrade annotation does not add a third duplicate.
+            source_chunk = source_reference.rsplit(":candidate:", 1)[0]
+            legacy_rows = connection.execute(
+                """SELECT DISTINCT proposal.*
+                   FROM assistant_memory_proposals AS proposal
+                   JOIN assistant_memory_proposal_evidence AS evidence
+                     ON evidence.proposal_id = proposal.id
+                   WHERE proposal.domain = ?
+                     AND proposal.status = 'pending'
+                     AND proposal.source = 'external_document_annotation'
+                     AND proposal.memory_type = ?
+                     AND evidence.source_reference LIKE ?
+                   ORDER BY proposal.created_at, proposal.id""",
+                (domain, proposal["memory_type"], f"{source_chunk}:candidate:%"),
+            ).fetchall()
+            expected_summary = normalize_proposal_text(proposal["summary"])
+            row = next(
+                (candidate for candidate in legacy_rows
+                 if normalize_proposal_text(candidate["summary"]) == expected_summary),
+                None,
+            )
         if row:
             evidence = connection.execute("SELECT 1 FROM assistant_memory_proposal_evidence WHERE proposal_id = ? AND evidence_hash = ?", (row["id"], evidence_hash)).fetchone()
             if evidence and observation_text is not None:

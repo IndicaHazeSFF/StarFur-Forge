@@ -141,6 +141,7 @@ Endpoints:
     POST /v1/chat/completions
     POST /v1/starfur/documents/prepare
     POST /v1/starfur/documents/annotate
+    GET  /v1/starfur/documents/review?review_id=DR-...
     POST /v1/starfur/documents/review
     POST /v1/starfur/documents/context
 
@@ -155,6 +156,16 @@ To deliberately add one reviewed candidate to the existing pending-proposal work
 To hand off several already-reviewed candidates at once, send only their returned IDs and the plural exact confirmation. The server validates the entire batch before it writes any candidate, then reports each normal idempotent pending-proposal result in request order:
 
     {"review_id":"DR-...","candidate_ids":["C-001","C-002"],"confirm":"create pending proposals"}
+
+To inspect an active review without re-annotation, call:
+
+    GET /v1/starfur/documents/review?review_id=DR-...
+
+It returns bounded candidate fields and ephemeral candidate status (`pending`,
+`handed_off`, or `rejected`), never raw source chunks. A rejection is only a
+short-lived review decision; it creates no proposal or memory:
+
+    {"review_id":"DR-...","candidate_ids":["C-001"],"confirm":"reject document candidates"}
 
 The server uses its in-memory validated candidate—not client-supplied proposal fields—then calls the normal idempotent pending-proposal writer with original chunk evidence. The result is still pending and must be approved/rejected through the existing proposal controls. Review sessions expire after 15 minutes and disappear on server restart.
 
@@ -184,9 +195,11 @@ Function** and attach it only to `starfur-assistant`. Configure its Valves:
     STARFUR_API_KEY=starfur-local
     DOMAIN=personal
     DOCUMENT_CONTEXT_LIMIT=3
+    OPENWEBUI_BASE_URL=http://localhost:8080
 
 The Filter declares module-level `file_handler = True`, so OpenWebUI skips its
-built-in RAG for that model. It accepts exactly one UTF-8 `.md`, `.markdown`,
+built-in RAG for that model. It also clears attachment reference fields as a
+defense against builds that do not fully honor that switch. It accepts exactly one UTF-8 `.md`, `.markdown`,
 or `.txt` attachment per turn, downloads it from the authenticated OpenWebUI
 file API, invokes StarFur `/documents/annotate`, then forwards only the
 short-lived `review_id` and bounded context limit in `starfur_document_context`.
@@ -194,9 +207,18 @@ StarFur derives source retrieval from the user's actual latest message. Raw
 document text is never appended to the user message or conversation history.
 
 Annotation candidates are not persisted by the Filter. Its status message
-includes the short-lived `DR-...` review ID and candidate count; continue to
-use the document review API above to make selected candidates pending
-proposals. The Filter's process-local review cache lasts at most 14 minutes;
+includes the short-lived `DR-...` review ID and candidate count. In the same
+OpenWebUI model chat, use these exact controls (with the reported ID):
+
+    document review DR-...
+    document approve DR-... C-001 [C-002 ...]
+    document reject DR-... C-001 [C-002 ...]
+
+`document review` displays bounded candidate metadata without calling the
+model. `document approve` creates only normal pending proposals; use the
+existing `proposal approve <id>` command for final assistant-memory approval.
+`document reject` dismisses only the ephemeral reviewed candidate and writes no
+proposal/memory. The Filter's process-local review cache lasts at most 14 minutes;
 restart/expiry safely requires re-annotation. Unsupported, multiple, or failed
 attachments produce a status notice and no source context—there is no hidden
 fallback to OpenWebUI RAG. See `integrations/openwebui/README.md` for full
@@ -207,7 +229,9 @@ setup and the smoke test.
 StarFur keeps **ephemeral** chat state separate only when a client supplies a
 stable conversation identifier. This isolates recent conversation context,
 active model selection, last-selected memory references, and pending command
-confirmations. Canonical SQLite/Chroma memory remains shared and domain-scoped.
+confirmations. Requests for the same identifier are serialized; different
+identifiers may run concurrently. An in-flight conversation is never evicted
+mid-request. Canonical SQLite/Chroma memory remains shared and domain-scoped.
 
 For `POST /v1/chat/completions`, StarFur selects the identifier in this order:
 
@@ -297,6 +321,11 @@ List or search active memories in the current domain:
 
     memory list
     memory search <query>
+
+Soft-forget an active memory by title/summary or compact reference:
+
+    forget this: <memory title>
+    forget this: M-###
 
 User-facing references are compact (`M-001` for memories and `P-001` for proposals). Legacy numeric IDs remain accepted for compatibility.
 

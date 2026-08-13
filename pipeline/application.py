@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from contextlib import contextmanager
+from dataclasses import dataclass
 import re
 import threading
 from typing import Callable, Iterator
@@ -26,6 +27,15 @@ from pipeline.task_profiles import TASK_DOCUMENT_ANNOTATION, TaskProfiles, provi
 DEFAULT_CONVERSATION_ID = "default"
 DEFAULT_MAX_CONVERSATIONS = 16
 _CONVERSATION_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}\Z")
+
+
+@dataclass
+class _SessionSlot:
+    """One bounded ephemeral session plus its request-serialization state."""
+
+    session: AssistantSession
+    lock: threading.RLock
+    active_requests: int = 0
 
 
 def normalize_conversation_id(value) -> str:
@@ -67,11 +77,16 @@ class AssistantApplication:
         self.session = session
         self.retriever = retriever or getattr(session, "retriever", None)
         self.capability_manifest = capability_manifest or build_core_capability_registry().build_manifest()
-        self._lock = threading.RLock()
+        # The registry lock protects only lookup, creation, LRU ordering, and
+        # eviction.  Individual conversations retain their own locks so a
+        # streamed request in chat A cannot block independent chat B.
+        self._registry_lock = threading.RLock()
         self._proposal_creator = proposal_creator
         self._session_factory = session_factory
         self._max_conversations = max_conversations
-        self._sessions = OrderedDict([(DEFAULT_CONVERSATION_ID, session)])
+        self._sessions = OrderedDict([
+            (DEFAULT_CONVERSATION_ID, _SessionSlot(session, threading.RLock())),
+        ])
         self._attach_capability_manifest(session)
         self._attach_retriever(session)
 
@@ -90,11 +105,17 @@ class AssistantApplication:
     def _session_for(self, conversation_id=None):
         """Return one ephemeral session, creating/evicting only non-default ones.
 
-        This method is called while ``_lock`` is held. The legacy default
+        This compatibility helper does not hold a request lock; application
+        operations use ``_locked_session_for`` below. The legacy default
         session is retained permanently for CLI and clients that omit a key.
         Additional sessions are least-recently-used and never write session
         state to SQLite or Chroma when evicted.
         """
+        with self._registry_lock:
+            return self._session_slot_for(conversation_id).session
+
+    def _session_slot_for(self, conversation_id=None):
+        """Look up/create a slot while ``_registry_lock`` is held."""
         key = normalize_conversation_id(conversation_id)
         existing = self._sessions.get(key)
         if existing is not None:
@@ -107,15 +128,40 @@ class AssistantApplication:
         session = self._session_factory()
         self._attach_capability_manifest(session)
         self._attach_retriever(session)
-        self._sessions[key] = session
+        self._sessions[key] = _SessionSlot(session, threading.RLock())
         self._evict_sessions_if_needed()
-        return session
+        return self._sessions[key]
 
     def _evict_sessions_if_needed(self):
         """Keep only the configured number of non-default in-memory sessions."""
         while len(self._sessions) - 1 > self._max_conversations:
-            key = next(key for key in self._sessions if key != DEFAULT_CONVERSATION_ID)
-            del self._sessions[key]
+            evictable_key = next(
+                (
+                    key for key, slot in self._sessions.items()
+                    if key != DEFAULT_CONVERSATION_ID and slot.active_requests == 0
+                ),
+                None,
+            )
+            # A request pins its slot until it completes. Temporarily allowing
+            # the bounded registry to exceed its cap is safer than replacing
+            # an active conversation with a new empty session mid-turn.
+            if evictable_key is None:
+                return
+            del self._sessions[evictable_key]
+
+    @contextmanager
+    def _locked_session_for(self, conversation_id=None) -> Iterator[AssistantSession]:
+        """Borrow one session and serialize only that conversation's request."""
+        with self._registry_lock:
+            slot = self._session_slot_for(conversation_id)
+            slot.active_requests += 1
+        try:
+            with slot.lock:
+                yield slot.session
+        finally:
+            with self._registry_lock:
+                slot.active_requests -= 1
+                self._evict_sessions_if_needed()
 
     @staticmethod
     def _active_model_for_session(session):
@@ -126,8 +172,8 @@ class AssistantApplication:
         return self.active_model_for()
 
     def active_model_for(self, conversation_id=None):
-        with self._lock:
-            return self._active_model_for_session(self._session_for(conversation_id))
+        with self._locked_session_for(conversation_id) as session:
+            return self._active_model_for_session(session)
 
     @contextmanager
     def _streaming(self, session, stream_writer: Callable[[str], None] | None) -> Iterator[None]:
@@ -154,8 +200,7 @@ class AssistantApplication:
         external_document_context=None,
     ):
         """Run one chat/command request through its bounded isolated session."""
-        with self._lock:
-            session = self._session_for(conversation_id)
+        with self._locked_session_for(conversation_id) as session:
             with self._streaming(session, stream_writer):
                 if external_document_context is None:
                     return session.respond(user_text)
@@ -163,13 +208,13 @@ class AssistantApplication:
 
     def domain_for(self, conversation_id=None) -> str:
         """Return the selected session domain without treating it as client input."""
-        with self._lock:
-            return self._session_for(conversation_id).config.domain
+        with self._locked_session_for(conversation_id) as session:
+            return session.config.domain
 
     def context_stats(self, *, conversation_id=None):
         """Expose the session's bounded, read-only latest-turn diagnostics."""
-        with self._lock:
-            return self._session_for(conversation_id).context_stats()
+        with self._locked_session_for(conversation_id) as session:
+            return session.context_stats()
 
     def annotate_document(self, document: PreparedDocument, *, annotator=None):
         """Return validated external-document candidates without persistence.
@@ -178,8 +223,7 @@ class AssistantApplication:
         material rather than chat turns, and the result remains review-only.
         ``annotator`` is injectable so presentation/API tests never need Ollama.
         """
-        with self._lock:
-            session = self._session_for()
+        with self._locked_session_for() as session:
             if annotator is None:
                 provider = getattr(session, "provider", None)
                 if provider is None:
@@ -216,14 +260,13 @@ class AssistantApplication:
 
     def create_document_pending_proposal(self, candidate):
         """Explicitly hand one server-reviewed candidate to the normal proposal store."""
-        with self._lock:
-            proposal = candidate.proposal
-            return self._proposal_creator(
-                proposal,
-                domain=proposal["domain"],
-                source_reference=candidate.source_reference,
-                observation_text=candidate.observation_text,
-            )
+        proposal = candidate.proposal
+        return self._proposal_creator(
+            proposal,
+            domain=proposal["domain"],
+            source_reference=candidate.source_reference,
+            observation_text=candidate.observation_text,
+        )
 
     def create_document_pending_proposals(self, candidates):
         """Hand an already validated review batch to the normal proposal writer.
@@ -232,11 +275,10 @@ class AssistantApplication:
         intentionally still uses the ordinary idempotent writer, so a retried
         batch cannot create duplicate evidence or bypass proposal approval.
         """
-        with self._lock:
-            return tuple(
-                self.create_document_pending_proposal(candidate)
-                for candidate in candidates
-            )
+        return tuple(
+            self.create_document_pending_proposal(candidate)
+            for candidate in candidates
+        )
 
     def runtime_diagnostics(self, *, conversation_id=None):
         """Return bounded provider/application diagnostics without probing services.
@@ -245,8 +287,7 @@ class AssistantApplication:
         provider/model and the already-recorded latest turn, but never calls a
         provider, reruns retrieval, or reads a database.
         """
-        with self._lock:
-            session = self._session_for(conversation_id)
+        with self._locked_session_for(conversation_id) as session:
             provider = getattr(session, "provider", None)
             provider_name = getattr(session, "_provider_name", None) or getattr(provider, "name", None)
             snapshot = getattr(session, "last_turn_diagnostics", None) or {}

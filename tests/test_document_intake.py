@@ -148,6 +148,22 @@ Beta paragraph.
             {"store": True, "subject": "StarFur", "memory_type": "project_context", "summary": "First fact.", "details": None, "importance": 0.1, "confidence": 0.9, "retention": "short_term"},
         ]})
         self.assertEqual(set(references), {candidate.source_reference for candidate in reordered})
+
+    def test_reannotation_ignores_subject_and_details_presentation_drift(self):
+        with tempfile.TemporaryDirectory() as directory:
+            document = prepare_document(self._write(directory, "notes.md", "Roger prefers jasmine rice with basmati rice."))
+            first = extract_document_memory_candidates(document, lambda _chunk: {"proposals": [{
+                "store": True, "subject": "diet", "memory_type": "preference",
+                "summary": "Rice preference", "details": "Prefer jasmine rice mixed with basmati rice.",
+                "importance": 0.8, "confidence": 0.9, "retention": "long_term",
+            }]})
+            second = extract_document_memory_candidates(document, lambda _chunk: {"proposals": [{
+                "store": True, "subject": "preference", "memory_type": "preference",
+                "summary": "Rice preference", "details": "Preference for jasmine rice mixed with basmati rice.",
+                "importance": 0.6, "confidence": 0.95, "retention": "short_term",
+            }]})
+
+        self.assertEqual(first[0].source_reference, second[0].source_reference)
     def test_document_candidates_reject_untrusted_fields_and_omit_store_false(self):
         with tempfile.TemporaryDirectory() as directory:
             document = prepare_document(self._write(directory, "notes.md", "An observation."))

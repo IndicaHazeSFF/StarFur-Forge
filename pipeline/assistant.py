@@ -549,7 +549,15 @@ class AssistantSession:
         return f"Remembered (memory {assistant_public_id('memory', memory_id, self.config.domain)})."
 
     def explicit_forget(self, text):
-        matches = self.memory_searcher(text.strip(), domain=self.config.domain, status="active", limit=1)
+        reference = text.strip()
+        memory_id = resolve_assistant_id(reference, "memory", self.config.domain)
+        if memory_id is not None:
+            memory = get_assistant_memory(memory_id, domain=self.config.domain)
+            if memory is None or memory.get("status") != "active":
+                return "No active matching memory found."
+            self.memory_updater(memory["id"], domain=self.config.domain, status="forgotten")
+            return f"Forgotten memory {assistant_public_id('memory', memory['id'], self.config.domain)}."
+        matches = self.memory_searcher(reference, domain=self.config.domain, status="active", limit=1)
         if not matches:
             return "No active matching memory found."
         memory = matches[0]
