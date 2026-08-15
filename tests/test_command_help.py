@@ -17,6 +17,7 @@ class CommandHelpTests(unittest.TestCase):
         self.assertIn("proposal list", rendered)
         self.assertIn("proposal inspect <id>", rendered)
         self.assertIn("proposal approve <id>", rendered)
+        self.assertIn("proposal scope <id> <scope|type-derived>", rendered)
         self.assertIn("proposal reject <id>", rendered)
         self.assertIn("approve all", rendered)
 
@@ -49,6 +50,7 @@ class CommandHelpTests(unittest.TestCase):
         rendered = payload.render()
         self.assertIn("memory search <query>", rendered)
         self.assertIn("memory inspect <id>", rendered)
+        self.assertIn("memory scope <id> <scope|type-derived>", rendered)
 
     def test_natural_memory_help_variants_are_core_owned(self):
         for query in (

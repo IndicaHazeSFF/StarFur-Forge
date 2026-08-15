@@ -6,6 +6,7 @@ import time
 import unicodedata
 
 from pipeline.domains import DEFAULT_PROJECT_DOMAIN, normalize_domain
+from pipeline.persona_visibility import normalize_memory_visibility_scope
 
 
 DB_PATH = Path("data/starfur.db")
@@ -213,6 +214,7 @@ def ensure_assistant_memories_schema(connection):
             retention TEXT NOT NULL DEFAULT 'long_term',
             status TEXT NOT NULL DEFAULT 'active',
             source TEXT,
+            visibility_scope TEXT,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             last_accessed_at TEXT
@@ -222,10 +224,11 @@ def ensure_assistant_memories_schema(connection):
     connection.execute("CREATE INDEX IF NOT EXISTS idx_assistant_memories_status ON assistant_memories(status)")
     columns = {row["name"] for row in connection.execute("PRAGMA table_info(assistant_memories)")}
     if "source_proposal_id" not in columns: connection.execute("ALTER TABLE assistant_memories ADD COLUMN source_proposal_id INTEGER")
+    if "visibility_scope" not in columns: connection.execute("ALTER TABLE assistant_memories ADD COLUMN visibility_scope TEXT")
     connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_assistant_memories_source_proposal ON assistant_memories(source_proposal_id) WHERE source_proposal_id IS NOT NULL")
     connection.execute("CREATE TABLE IF NOT EXISTS assistant_memory_proposals (id INTEGER PRIMARY KEY AUTOINCREMENT, domain TEXT NOT NULL, subject TEXT NOT NULL, memory_type TEXT NOT NULL, summary TEXT NOT NULL, details TEXT, importance REAL NOT NULL, confidence REAL NOT NULL, retention TEXT NOT NULL, source TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, reviewed_at TEXT, reviewed_by TEXT, review_note TEXT, approved_memory_id INTEGER)")
     columns = {row["name"] for row in connection.execute("PRAGMA table_info(assistant_memory_proposals)")}
-    for column, definition in (('proposal_key', 'TEXT'), ('evidence_count', 'INTEGER NOT NULL DEFAULT 1'), ('first_observed_at', 'TEXT'), ('last_observed_at', 'TEXT')):
+    for column, definition in (('proposal_key', 'TEXT'), ('evidence_count', 'INTEGER NOT NULL DEFAULT 1'), ('first_observed_at', 'TEXT'), ('last_observed_at', 'TEXT'), ('visibility_scope', 'TEXT')):
         if column not in columns: connection.execute(f"ALTER TABLE assistant_memory_proposals ADD COLUMN {column} {definition}")
     connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_assistant_proposals_pending_key ON assistant_memory_proposals(domain, proposal_key) WHERE status = 'pending' AND proposal_key IS NOT NULL")
     connection.execute("CREATE TABLE IF NOT EXISTS assistant_memory_proposal_evidence (id INTEGER PRIMARY KEY AUTOINCREMENT, proposal_id INTEGER NOT NULL, source TEXT NOT NULL, source_reference TEXT, evidence_hash TEXT NOT NULL, raw_excerpt TEXT, observed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(proposal_id, evidence_hash))")
@@ -762,18 +765,19 @@ def get_all_entity_facts():
 
     return facts_by_entity
 
-def create_assistant_memory(subject, memory_type, summary, details=None, importance=0.5, confidence=0.5, retention="long_term", source=None, domain="personal"):
+def create_assistant_memory(subject, memory_type, summary, details=None, importance=0.5, confidence=0.5, retention="long_term", source=None, domain="personal", visibility_scope=None):
     domain = normalize_domain(domain)
     memory_type = normalize_memory_type(memory_type)
     retention = normalize_retention(retention)
+    visibility_scope = normalize_memory_visibility_scope(visibility_scope)
     if not 0 <= importance <= 1 or not 0 <= confidence <= 1:
         raise ValueError("importance and confidence must be between 0 and 1")
     with connect() as connection:
         cursor = connection.execute(
             """INSERT INTO assistant_memories
-            (domain, subject, memory_type, summary, details, importance, confidence, retention, source)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (domain, subject, memory_type, summary, details, importance, confidence, retention, source),
+            (domain, subject, memory_type, summary, details, importance, confidence, retention, source, visibility_scope)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (domain, subject, memory_type, summary, details, importance, confidence, retention, source, visibility_scope),
         )
         connection.commit()
         return cursor.lastrowid
@@ -1062,7 +1066,7 @@ def search_assistant_memories(query, domain="personal", status="active", limit=2
 
 
 def update_assistant_memory(memory_id, domain="personal", **changes):
-    allowed = {"subject", "memory_type", "summary", "details", "importance", "confidence", "retention", "status", "source"}
+    allowed = {"subject", "memory_type", "summary", "details", "importance", "confidence", "retention", "status", "source", "visibility_scope"}
     unknown = set(changes) - allowed
     if unknown:
         raise ValueError(f"Unknown memory fields: {sorted(unknown)}")
@@ -1072,6 +1076,8 @@ def update_assistant_memory(memory_id, domain="personal", **changes):
         changes["retention"] = normalize_retention(changes["retention"])
     if "status" in changes:
         changes["status"] = normalize_memory_status(changes["status"])
+    if "visibility_scope" in changes:
+        changes["visibility_scope"] = normalize_memory_visibility_scope(changes["visibility_scope"])
     for field in ("importance", "confidence"):
         if field in changes and not 0 <= changes[field] <= 1:
             raise ValueError(f"{field} must be between 0 and 1")
@@ -1098,10 +1104,11 @@ def create_assistant_memory_proposal(proposal, domain="personal", observation_te
     required = ("subject", "memory_type", "summary", "details", "importance", "confidence", "retention")
     if any(field not in proposal for field in required): raise ValueError("Missing proposal field")
     normalize_memory_type(proposal["memory_type"]); normalize_retention(proposal["retention"])
+    visibility_scope = normalize_memory_visibility_scope(proposal.get("visibility_scope"))
     for field in ("importance", "confidence"):
         if isinstance(proposal[field], bool) or not isinstance(proposal[field], (int, float)) or not 0 <= proposal[field] <= 1: raise ValueError("Invalid proposal score")
     with connect() as connection:
-        cursor = connection.execute("INSERT INTO assistant_memory_proposals (domain, subject, memory_type, summary, details, importance, confidence, retention, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (domain, proposal["subject"], proposal["memory_type"], proposal["summary"], proposal.get("details"), proposal["importance"], proposal["confidence"], proposal["retention"], proposal.get("source", "assistant_turn_proposal")))
+        cursor = connection.execute("INSERT INTO assistant_memory_proposals (domain, subject, memory_type, summary, details, importance, confidence, retention, source, visibility_scope) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (domain, proposal["subject"], proposal["memory_type"], proposal["summary"], proposal.get("details"), proposal["importance"], proposal["confidence"], proposal["retention"], proposal.get("source", "assistant_turn_proposal"), visibility_scope))
         connection.commit()
         return cursor.lastrowid
 
@@ -1151,6 +1158,23 @@ def get_assistant_memory_proposal(proposal_id, domain="personal"):
         row = connection.execute("SELECT * FROM assistant_memory_proposals WHERE id = ? AND domain = ?", (proposal_id, normalize_domain(domain))).fetchone()
     return dict(row) if row else None
 
+
+def update_assistant_memory_proposal_visibility_scope(proposal_id, visibility_scope, domain="personal"):
+    """Set user-controlled scope metadata on one pending proposal only."""
+    scope = normalize_memory_visibility_scope(visibility_scope)
+    domain = normalize_domain(domain)
+    with connect() as connection:
+        cursor = connection.execute(
+            """UPDATE assistant_memory_proposals
+               SET visibility_scope = ?, updated_at = CURRENT_TIMESTAMP
+               WHERE id = ? AND domain = ? AND status = 'pending'""",
+            (scope, proposal_id, domain),
+        )
+        if cursor.rowcount != 1:
+            raise ValueError("Proposal is missing or not pending")
+        connection.commit()
+    return get_assistant_memory_proposal(proposal_id, domain)
+
 def inspect_assistant_memory_proposal(proposal_id, domain="personal"):
     """Return a proposal and oldest-first evidence without changing any state."""
     with connect() as connection:
@@ -1176,7 +1200,7 @@ def approve_assistant_memory_proposal(proposal_id, domain="personal", reviewed_b
         if proposal["status"] == "approved" and proposal["approved_memory_id"]:
             row = connection.execute("SELECT * FROM assistant_memories WHERE id = ? AND domain = ?", (proposal["approved_memory_id"], domain)).fetchone()
             return dict(row) if row else None
-        cursor = connection.execute("INSERT INTO assistant_memories (domain, subject, memory_type, summary, details, importance, confidence, retention, status, source, source_proposal_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)", (domain, proposal["subject"], proposal["memory_type"], proposal["summary"], proposal["details"], proposal["importance"], proposal["confidence"], proposal["retention"], proposal["source"], proposal_id))
+        cursor = connection.execute("INSERT INTO assistant_memories (domain, subject, memory_type, summary, details, importance, confidence, retention, status, source, source_proposal_id, visibility_scope) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)", (domain, proposal["subject"], proposal["memory_type"], proposal["summary"], proposal["details"], proposal["importance"], proposal["confidence"], proposal["retention"], proposal["source"], proposal_id, proposal["visibility_scope"]))
         memory_id = cursor.lastrowid
         connection.execute("UPDATE assistant_memory_proposals SET status = 'approved', approved_memory_id = ?, reviewed_at = CURRENT_TIMESTAMP, reviewed_by = ?, review_note = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending'", (memory_id, reviewed_by, review_note, proposal_id))
         connection.execute("UPDATE assistant_memory_proposal_evidence SET memory_id = ? WHERE proposal_id = ? AND (memory_id IS NULL OR memory_id = ?)", (memory_id, proposal_id, memory_id))
@@ -1192,6 +1216,7 @@ def inspect_assistant_memory(memory_id, domain="personal"):
 
 def upsert_assistant_memory_proposal(proposal, domain="personal", source_reference=None, observation_text=None):
     domain = normalize_domain(domain)
+    visibility_scope = normalize_memory_visibility_scope(proposal.get("visibility_scope"))
     source = proposal.get("source", "assistant_turn_proposal")
     observation_identity = observation_text
     # External documents can yield several distinct candidates from one source
@@ -1244,7 +1269,7 @@ def upsert_assistant_memory_proposal(proposal, domain="personal", source_referen
             connection.execute("INSERT OR IGNORE INTO assistant_memory_proposal_evidence (proposal_id, source, source_reference, evidence_hash, raw_excerpt) VALUES (?, ?, ?, ?, ?)", (row["id"], source, source_reference, evidence_hash, observation_text or proposal.get("summary")) )
             connection.commit()
             return {"proposal_id": row["id"], "action": "reinforced", "previous_evidence_count": row["evidence_count"], "evidence_count": row["evidence_count"] + 1}
-        cursor = connection.execute("INSERT INTO assistant_memory_proposals (domain, subject, memory_type, summary, details, importance, confidence, retention, source, proposal_key, evidence_count, first_observed_at, last_observed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)", (domain, proposal["subject"], proposal["memory_type"], proposal["summary"], proposal.get("details"), proposal["importance"], proposal["confidence"], proposal["retention"], source, key))
+        cursor = connection.execute("INSERT INTO assistant_memory_proposals (domain, subject, memory_type, summary, details, importance, confidence, retention, source, proposal_key, evidence_count, first_observed_at, last_observed_at, visibility_scope) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)", (domain, proposal["subject"], proposal["memory_type"], proposal["summary"], proposal.get("details"), proposal["importance"], proposal["confidence"], proposal["retention"], source, key, visibility_scope))
         proposal_id = cursor.lastrowid
         connection.execute("INSERT INTO assistant_memory_proposal_evidence (proposal_id, source, source_reference, evidence_hash, raw_excerpt) VALUES (?, ?, ?, ?, ?)", (proposal_id, source, source_reference, evidence_hash, observation_text or proposal.get("summary")) )
         connection.commit()

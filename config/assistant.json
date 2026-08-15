@@ -1,6 +1,30 @@
 {
   "chat_model": "qwen3:8b",
   "persona_path": "persona/default.md",
+  "persona_packages": [
+    {
+      "persona_id": "murr",
+      "display_name": "Murr",
+      "persona_path": "persona/default.md",
+      "minimum_shared_memory_confidence": 0.0,
+      "allowed_memory_scopes": null
+    },
+    {
+      "persona_id": "neutral",
+      "display_name": "Neutral",
+      "persona_path": "persona/neutral.md",
+      "minimum_shared_memory_confidence": 0.0,
+      "allowed_memory_scopes": null
+    },
+    {
+      "persona_id": "nova",
+      "display_name": "Nova",
+      "persona_path": "persona/nova.md",
+      "minimum_shared_memory_confidence": 0.0,
+      "allowed_memory_scopes": ["project", "personal"]
+    }
+  ],
+  "active_persona_id": "murr",
   "domain": "personal",
   "max_session_messages": 20,
   "max_memories": 5,

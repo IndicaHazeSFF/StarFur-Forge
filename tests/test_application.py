@@ -79,6 +79,24 @@ class SequentialBlockingSession(FakeSession):
         return "answer"
 
 
+class HealthyProvider:
+    name = "healthy fake"
+
+    def __init__(self):
+        self.probe_calls = 0
+
+    def probe_health(self):
+        self.probe_calls += 1
+        return {"models": [{"name": "one"}, {"name": "two"}]}
+
+
+class UnavailableProvider:
+    name = "unavailable fake"
+
+    def probe_health(self):
+        raise RuntimeError("provider is offline")
+
+
 class AssistantApplicationTests(unittest.TestCase):
     def test_respond_delegates_and_preserves_normal_session_streaming(self):
         session = FakeSession()
@@ -115,6 +133,32 @@ class AssistantApplicationTests(unittest.TestCase):
 
     def test_context_stats_delegates_without_a_turn(self):
         self.assertEqual(AssistantApplication(FakeSession()).context_stats(), "stats")
+
+    def test_persona_runtime_snapshot_is_read_only_and_bounded(self):
+        class Runtime:
+            def public_dict(self):
+                return {"persona_id": "murr", "storage": "restart_ephemeral"}
+
+        session = FakeSession()
+        session.persona_runtime_state = Runtime()
+        app = AssistantApplication(session)
+
+        result = app.persona_runtime_snapshot()
+
+        self.assertEqual(result, {
+            "object": "starfur.persona_runtime",
+            "available": True,
+            "persona": {"persona_id": "murr", "storage": "restart_ephemeral"},
+        })
+        self.assertEqual(session.calls, [])
+
+    def test_persona_runtime_snapshot_is_compatible_with_legacy_sessions(self):
+        session = FakeSession()
+        app = AssistantApplication(session)
+
+        self.assertEqual(app.persona_runtime_snapshot(), {
+            "object": "starfur.persona_runtime", "available": False, "persona": None,
+        })
 
     def test_application_isolates_ephemeral_state_per_conversation(self):
         default = FakeSession()
@@ -313,6 +357,37 @@ class AssistantApplicationTests(unittest.TestCase):
         self.assertIsNone(snapshot["latest_turn"])
         self.assertTrue(snapshot["capabilities"]["ids"])
         self.assertIsNone(snapshot["lifecycle"])
+
+    def test_explicit_provider_probe_records_only_bounded_health_metadata(self):
+        session = FakeSession()
+        provider = HealthyProvider()
+        session.provider = provider
+        app = AssistantApplication(session)
+
+        before = app.runtime_diagnostics()
+        snapshot = app.runtime_diagnostics(probe_provider=True)
+
+        self.assertEqual(provider.probe_calls, 1)
+        self.assertEqual(before["provider"]["health"], "not_probed")
+        self.assertEqual(snapshot["provider"]["name"], "healthy fake")
+        self.assertEqual(snapshot["provider"]["health"], "healthy")
+        self.assertTrue(snapshot["provider"]["probe_performed"])
+        self.assertEqual(snapshot["provider"]["model_count"], 2)
+        self.assertIsNotNone(snapshot["provider"]["checked_at"])
+        self.assertIsNone(snapshot["provider"]["error"])
+        self.assertEqual(session.calls, [])
+
+    def test_explicit_provider_probe_reports_unavailability_without_generating(self):
+        session = FakeSession()
+        session.provider = UnavailableProvider()
+        app = AssistantApplication(session)
+
+        snapshot = app.runtime_diagnostics(probe_provider=True)
+
+        self.assertEqual(snapshot["provider"]["health"], "unavailable")
+        self.assertTrue(snapshot["provider"]["probe_performed"])
+        self.assertEqual(snapshot["provider"]["error"], "provider is offline")
+        self.assertEqual(session.calls, [])
     def test_application_attaches_one_core_manifest_when_session_supports_it(self):
         class ManifestAwareSession(FakeSession):
             def set_capability_manifest(self, manifest):

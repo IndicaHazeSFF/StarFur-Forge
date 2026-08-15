@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import re
 import threading
 from typing import Callable, Iterator
@@ -22,6 +23,8 @@ from pipeline.document_annotation import DocumentProposalAnnotator
 from pipeline.document_intake import PreparedDocument, extract_document_memory_candidates_resilient
 from pipeline.retrieval import DeterministicMemoryRetriever, MemoryRetriever
 from pipeline.task_profiles import TASK_DOCUMENT_ANNOTATION, TaskProfiles, provider_matches
+from pipeline.persona_registry import PersonaRegistry, load_persona_package
+from pipeline.persona_runtime import PersonaRuntimeRegistry
 
 
 DEFAULT_CONVERSATION_ID = "default"
@@ -87,6 +90,7 @@ class AssistantApplication:
         self._sessions = OrderedDict([
             (DEFAULT_CONVERSATION_ID, _SessionSlot(session, threading.RLock())),
         ])
+        self._initialize_provider_health(session)
         self._attach_capability_manifest(session)
         self._attach_retriever(session)
 
@@ -101,6 +105,76 @@ class AssistantApplication:
         setter = getattr(session, "set_retriever", None)
         if callable(setter):
             setter(self.retriever)
+
+    @staticmethod
+    def _initialize_provider_health(session):
+        """Keep a bounded provider-health snapshot with ephemeral session state."""
+        if not hasattr(session, "provider_health_snapshot"):
+            session.provider_health_snapshot = {
+                "status": "not_probed",
+                "probe_performed": False,
+                "checked_at": None,
+                "model_count": None,
+                "error": None,
+            }
+
+    @staticmethod
+    def _provider_health_for_session(session):
+        return dict(getattr(session, "provider_health_snapshot", {
+            "status": "not_probed",
+            "probe_performed": False,
+            "checked_at": None,
+            "model_count": None,
+            "error": None,
+        }))
+
+    @staticmethod
+    def _model_count_from_probe(response):
+        models = response.get("models") if isinstance(response, dict) else getattr(response, "models", None)
+        return len(models) if isinstance(models, (list, tuple)) else None
+
+    def _probe_provider_for_session(self, session):
+        """Run one explicit non-generating provider probe and retain its result."""
+        provider = getattr(session, "provider", None)
+        checked_at = datetime.now(timezone.utc).isoformat()
+        probe = getattr(provider, "probe_health", None)
+        if not callable(probe):
+            snapshot = {
+                "status": "unsupported",
+                "probe_performed": True,
+                "checked_at": checked_at,
+                "model_count": None,
+                "error": "Provider health probing is unavailable.",
+            }
+        else:
+            try:
+                response = probe()
+            except NotImplementedError as error:
+                snapshot = {
+                    "status": "unsupported",
+                    "probe_performed": True,
+                    "checked_at": checked_at,
+                    "model_count": None,
+                    "error": str(error)[:300],
+                }
+            except Exception as error:
+                snapshot = {
+                    "status": "unavailable",
+                    "probe_performed": True,
+                    "checked_at": checked_at,
+                    "model_count": None,
+                    "error": str(error)[:300],
+                }
+            else:
+                snapshot = {
+                    "status": "healthy",
+                    "probe_performed": True,
+                    "checked_at": checked_at,
+                    "model_count": self._model_count_from_probe(response),
+                    "error": None,
+                }
+        session.provider_health_snapshot = snapshot
+        return dict(snapshot)
 
     def _session_for(self, conversation_id=None):
         """Return one ephemeral session, creating/evicting only non-default ones.
@@ -126,6 +200,7 @@ class AssistantApplication:
                 "Conversation isolation requires an application session factory."
             )
         session = self._session_factory()
+        self._initialize_provider_health(session)
         self._attach_capability_manifest(session)
         self._attach_retriever(session)
         self._sessions[key] = _SessionSlot(session, threading.RLock())
@@ -216,6 +291,23 @@ class AssistantApplication:
         with self._locked_session_for(conversation_id) as session:
             return session.context_stats()
 
+    def persona_runtime_snapshot(self, *, conversation_id=None):
+        """Return one bounded persona-runtime view without creating or mutating state."""
+        with self._locked_session_for(conversation_id) as session:
+            runtime = getattr(session, "persona_runtime_state", None)
+            public_dict = getattr(runtime, "public_dict", None)
+            if not callable(public_dict):
+                return {
+                    "object": "starfur.persona_runtime",
+                    "available": False,
+                    "persona": None,
+                }
+            return {
+                "object": "starfur.persona_runtime",
+                "available": True,
+                "persona": public_dict(),
+            }
+
     def annotate_document(self, document: PreparedDocument, *, annotator=None):
         """Return validated external-document candidates without persistence.
 
@@ -280,16 +372,21 @@ class AssistantApplication:
             for candidate in candidates
         )
 
-    def runtime_diagnostics(self, *, conversation_id=None):
+    def runtime_diagnostics(self, *, conversation_id=None, probe_provider=False):
         """Return bounded provider/application diagnostics without probing services.
 
-        This snapshot is intentionally observational: it reports configured
+        This snapshot is passive by default: it reports configured
         provider/model and the already-recorded latest turn, but never calls a
-        provider, reruns retrieval, or reads a database.
+        provider, reruns retrieval, or reads a database. ``probe_provider``
+        is an explicit non-generating availability check through the provider
+        boundary and records only bounded health metadata in session state.
         """
         with self._locked_session_for(conversation_id) as session:
+            if probe_provider:
+                self._probe_provider_for_session(session)
             provider = getattr(session, "provider", None)
             provider_name = getattr(session, "_provider_name", None) or getattr(provider, "name", None)
+            provider_health = self._provider_health_for_session(session)
             snapshot = getattr(session, "last_turn_diagnostics", None) or {}
             phase_timings = dict(snapshot.get("phase_timings") or {})
             latest_turn = None
@@ -311,8 +408,11 @@ class AssistantApplication:
                 "provider": {
                     "name": provider_name or "unknown",
                     "configured": provider is not None,
-                    "health": "not_probed",
-                    "probe_performed": False,
+                    "health": provider_health["status"],
+                    "probe_performed": provider_health["probe_performed"],
+                    "checked_at": provider_health["checked_at"],
+                    "model_count": provider_health["model_count"],
+                    "error": provider_health["error"],
                 },
                 "model": {
                     "active": self._active_model_for_session(session),
@@ -349,16 +449,36 @@ def create_assistant_application(
     registry = capability_registry or build_core_capability_registry()
     manifest = registry.build_manifest()
     shared_retriever = retriever or DeterministicMemoryRetriever()
+    persona_registry = getattr(config, "persona_registry", None)
+    if persona_registry is None:
+        persona_registry = PersonaRegistry((load_persona_package(config.persona_path),))
+    active_persona_id = getattr(config, "active_persona_id", None) or load_persona_package(config.persona_path).persona_id
+    active_persona = persona_registry.get(active_persona_id)
+    if active_persona is None:
+        raise ValueError("Configured active persona package was not found.")
+    # Shared only within this application process, never persisted or mixed
+    # with canonical user memory.  New UI/API sessions can select personas
+    # without accidentally adopting another persona's runtime snapshot.
+    persona_runtime_registry = PersonaRuntimeRegistry()
     def make_session():
-        return session_factory(
-            config,
-            load_persona(config.persona_path),
+        kwargs = dict(
             policy=load_policy(config.policy_path),
             proposal_creator=upsert_assistant_memory_proposal,
             stream=stream,
             stream_writer=stream_writer,
             debug_level=debug_level,
             retriever=shared_retriever,
+        )
+        if getattr(config, "persona_registry", None) is not None:
+            kwargs["persona_registry"] = persona_registry
+            kwargs["persona_runtime_registry"] = persona_runtime_registry
+            persona = active_persona
+        else:
+            persona = load_persona(config.persona_path)
+        return session_factory(
+            config,
+            persona,
+            **kwargs,
         )
 
     return AssistantApplication(

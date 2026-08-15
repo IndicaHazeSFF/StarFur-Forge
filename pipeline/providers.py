@@ -32,6 +32,9 @@ class ChatProvider(Protocol):
     def list_models(self) -> Any:
         """Return the provider's installed/available model response."""
 
+    def probe_health(self) -> Any:
+        """Perform one provider-owned, read-only availability probe."""
+
 
 class OllamaChatProvider:
     """Thin adapter over the supported Ollama Python client API."""
@@ -51,6 +54,10 @@ class OllamaChatProvider:
 
     def list_models(self):
         return self._client.list()
+
+    def probe_health(self):
+        """Use Ollama's supported model-list call as a non-generating probe."""
+        return self.list_models()
 
 
 class CallableChatProvider:
@@ -73,4 +80,10 @@ class CallableChatProvider:
     def list_models(self):
         if self._model_lister is None:
             raise RuntimeError("Model listing is unavailable for this chat provider.")
+        return self._model_lister()
+
+    def probe_health(self):
+        """Compatibility providers can probe only when they expose listing."""
+        if self._model_lister is None:
+            raise NotImplementedError("Health probing is unavailable for this chat provider.")
         return self._model_lister()

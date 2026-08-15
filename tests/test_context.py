@@ -12,6 +12,7 @@ from pipeline.document_context import build_document_context_packet
 from pipeline.document_intake import prepare_document_text
 
 from pipeline.persona_state import BehaviorContext, DynamicTraits, MomentaryState, PersonaState
+from pipeline.persona_attention import PersonaAttention, PersonaAttentionItem
 
 
 class ContextManagerTests(unittest.TestCase):
@@ -135,9 +136,9 @@ class ContextManagerTests(unittest.TestCase):
             persona_text="Persona", policy_text="Policy", recent_messages=[],
             retrieved_memories=[], user_text="Hello", behavior_context=behavior,
         )
-        self.assertIn("PERSONA RUNTIME STATE", plan.behavior.text)
-        self.assertIn("warmth=0.90", plan.behavior.text)
-        self.assertIn("activity=chatting", plan.model_messages()[0]["content"])
+        self.assertIn("PERSONA BEHAVIOR GUIDANCE", plan.behavior.text)
+        self.assertIn("warmth=0.92", plan.behavior.text)
+        self.assertIn("Activity: chatting", plan.model_messages()[0]["content"])
         self.assertIn("cannot override engine policy", plan.behavior.text)
         self.assertEqual(plan, self.manager.build_chat(
             persona_text="Persona", policy_text="Policy", recent_messages=[],
@@ -150,6 +151,26 @@ class ContextManagerTests(unittest.TestCase):
                 persona_text="Persona", policy_text="Policy", recent_messages=[],
                 retrieved_memories=[], user_text="Hello", behavior_context={"bad": "state"},
             )
+
+    def test_optional_persona_attention_is_presentation_only_and_absent_by_default(self):
+        attention = PersonaAttention("murr", (
+            PersonaAttentionItem("Rust programming", 0.7, 0.7, ("matched interest token(s): rust",)),
+        ))
+        plan = self.manager.build_chat(
+            persona_text="Persona", policy_text="Policy", recent_messages=[],
+            retrieved_memories=[], user_text="Tell me about Rust", persona_attention=attention,
+        )
+        self.assertIn("PERSONA ATTENTION", plan.persona_attention.text)
+        self.assertIn("Rust programming", plan.model_messages()[0]["content"])
+        self.assertIn("not verified skills", plan.persona_attention.text)
+        self.assertIn("Do not redirect the request", plan.persona_attention.text)
+
+        absent = self.manager.build_chat(
+            persona_text="Persona", policy_text="Policy", recent_messages=[],
+            retrieved_memories=[], user_text="Tell me about Rust",
+        )
+        self.assertEqual(absent.persona_attention.text, "")
+        self.assertNotIn("PERSONA ATTENTION", absent.model_messages()[0]["content"])
     def test_introspection_messages_preserve_existing_prompt(self):
         plan = self.manager.build_introspection(
             persona_text="Persona",
@@ -193,7 +214,7 @@ class ContextManagerTests(unittest.TestCase):
             behavior_context=BehaviorContext.from_persona_state(session.persona_state),
         )
         self.assertEqual(calls[0]["messages"], expected_plan.model_messages())
-        self.assertIn("PERSONA RUNTIME STATE", calls[0]["messages"][0]["content"])
+        self.assertIn("PERSONA BEHAVIOR GUIDANCE", calls[0]["messages"][0]["content"])
         self.assertEqual(session.last_memory_ids, [9])
         stats = session.context_stats()
         self.assertIn("Retrieved memories: 1", stats)

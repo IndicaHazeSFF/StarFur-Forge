@@ -80,6 +80,46 @@ class AssistantMemoryTests(unittest.TestCase):
         self.assertIn("assistant_memories", tables)
         self.assertEqual(DEFAULT_PROJECT_DOMAIN, "project:crown-of-claws")
 
+    def test_explicit_visibility_scope_is_optional_validated_and_persists(self):
+        legacy_id = db.create_assistant_memory("User", "preference", "Legacy preference")
+        roleplay_id = db.create_assistant_memory(
+            "User", "preference", "Story-only preference", visibility_scope="roleplay",
+        )
+        self.assertIsNone(db.get_assistant_memory(legacy_id)["visibility_scope"])
+        self.assertEqual("roleplay", db.get_assistant_memory(roleplay_id)["visibility_scope"])
+        self.assertEqual("project", db.update_assistant_memory(roleplay_id, visibility_scope="PROJECT")["visibility_scope"])
+        self.assertIsNone(db.update_assistant_memory(roleplay_id, visibility_scope="")["visibility_scope"])
+        with self.assertRaises(ValueError):
+            db.create_assistant_memory("User", "preference", "Bad scope", visibility_scope="sensitive")
+
+    def test_visibility_scope_migrates_additively_from_legacy_assistant_tables(self):
+        legacy_path = Path(self.temp.name) / "legacy.sqlite"
+        with sqlite3.connect(legacy_path) as connection:
+            connection.execute("""CREATE TABLE assistant_memories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, domain TEXT NOT NULL,
+                subject TEXT NOT NULL, memory_type TEXT NOT NULL, summary TEXT NOT NULL,
+                details TEXT, importance REAL NOT NULL DEFAULT 0.5,
+                confidence REAL NOT NULL DEFAULT 0.5, retention TEXT NOT NULL DEFAULT 'long_term',
+                status TEXT NOT NULL DEFAULT 'active', source TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, last_accessed_at TEXT
+            )""")
+            connection.execute("""CREATE TABLE assistant_memory_proposals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, domain TEXT NOT NULL,
+                subject TEXT NOT NULL, memory_type TEXT NOT NULL, summary TEXT NOT NULL,
+                details TEXT, importance REAL NOT NULL, confidence REAL NOT NULL,
+                retention TEXT NOT NULL, source TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, reviewed_at TEXT,
+                reviewed_by TEXT, review_note TEXT, approved_memory_id INTEGER
+            )""")
+        db.DB_PATH = legacy_path
+        with db.connect() as connection:
+            memory_columns = {row["name"] for row in connection.execute("PRAGMA table_info(assistant_memories)")}
+            proposal_columns = {row["name"] for row in connection.execute("PRAGMA table_info(assistant_memory_proposals)")}
+        self.assertIn("visibility_scope", memory_columns)
+        self.assertIn("visibility_scope", proposal_columns)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -72,6 +72,55 @@ Persona files control presentation and style only. Memory retrieval, policy, saf
 commands, proposals, and provenance remain engine responsibilities. If the file is
 missing, unreadable, empty, or invalid, StarFur uses a neutral built-in persona.
 
+The multi-persona foundation uses declarative packages that contain only a persona's
+presentation prompt and immutable initial state. Providers, shared Core memory,
+tools, permissions, and active-session selection remain Core responsibilities.
+Configured persona packages can be inspected and switched for the current session:
+
+    persona list
+    persona current
+    persona use <persona-id>
+    persona inspect
+
+Switching clears only the current session's recent conversation context so one
+persona does not inherit another's in-progress chat. It does not modify shared
+assistant memories, providers, tools, permissions, or the configuration file.
+The stock configuration includes `murr` (the startup persona), `neutral`, and
+`nova`. `persona inspect` is read-only: it displays bounded runtime metadata
+and persona-local development counts, never the full prompt or raw learning
+evidence.
+
+Each package may declare `minimum_shared_memory_confidence` in
+`config/assistant.json`. After deterministic retrieval, the active persona sees
+only same-domain active memories meeting that threshold. The stock packages use
+`0.0`, preserving existing recall. `context stats` reports bounded visible/hidden
+memory IDs plus the threshold and reason; this setting never rewrites memory or
+changes another persona's state.
+
+Packages may also declare `allowed_memory_scopes` as `null` (unrestricted) or a
+subset of `personal`, `preference`, `project`, `relationship`, `routine`, and
+`roleplay`. Existing rows use the conservative type-derived scopes; a newly
+available explicit `visibility_scope` may override that fallback only when a
+trusted/user-controlled workflow assigns it. Nothing infers `roleplay` (or any
+other sensitive category) from memory prose. After ranking, both scope and
+confidence must permit a record before it enters the active persona's context
+or memory introspection. Stock packages remain unrestricted.
+
+To explicitly control scope metadata without asking the model to classify
+content, use either of these exact commands:
+
+    memory scope <M-### or numeric id> <personal|preference|project|relationship|routine|roleplay|type-derived>
+    proposal scope <P-### or numeric id> <personal|preference|project|relationship|routine|roleplay|type-derived>
+
+`proposal scope` works only while the proposal is pending. `type-derived` (also
+accepted as `clear`) removes explicit metadata and restores the legacy
+memory-type fallback. These commands are domain-scoped and do not call a model.
+
+Persona Runtime attention is a bounded internal presentation cue, not a user-memory
+or skill system. When explicitly configured persona-local interests directly match a
+request, StarFur may use up to two as optional examples or follow-up ideas. It never
+claims expertise, redirects the request, or stores an interest from ordinary chat.
+
 ## Retrieval Evaluation
 
 Run the checked-in temporary-SQLite retrieval benchmark:
@@ -138,6 +187,7 @@ Endpoints:
 
     GET  /health
     GET  /v1/models
+    GET  /v1/starfur/persona-runtime
     POST /v1/chat/completions
     POST /v1/starfur/documents/prepare
     POST /v1/starfur/documents/annotate
@@ -303,6 +353,42 @@ Start interactive Assistant Mode:
 
     python starfur.py assistant
 
+### Session roleplay mode
+
+The first roleplay control is deliberately session-local and does not create an
+adventure database, replay history, or persistent story world:
+
+    roleplay begin [optional title]
+    roleplay status
+    roleplay end
+
+You may also use the clear casual phrases `let's roleplay` or `let's go on an
+adventure`. Entering or leaving mode clears recent conversation context. While
+active, Core marks eligible new memory proposals and explicit `remember this:`
+requests with the explicit `roleplay` visibility scope. This is not automatic
+classification: only an explicit active roleplay session can add that scope.
+
+### Future adventure workspace registry
+
+Prepare or inspect isolated CYOA workspace metadata with exact Core commands:
+
+    adventure list
+    adventure create <title>
+    adventure inspect <title>
+    adventure load <title>
+    adventure status
+    adventure unload
+
+`adventure create` writes only a local registry entry and manifest under
+`adventures/<stable-id>/`. `adventure load` attaches that metadata to the
+current conversation and clears its recent chat context. Neither command begins
+or resumes a story, creates an event log/database/index, replays events, starts
+roleplay, invokes a model, or touches assistant memory. A duplicate normalized
+title is rejected; future resume controls will be explicit rather than silently
+creating another world.
+
+`what is loaded?` is a read-only conversational alias for `adventure status`.
+
 When a factual turn produces a proposal, review it in chat:
 
     proposal list
@@ -310,12 +396,14 @@ When a factual turn produces a proposal, review it in chat:
     proposal approve <id>
     proposal reject <id>
     proposal approve all
+    proposal scope <id> <scope|type-derived>
 
 `proposal approve all` previews all pending proposals in the active domain and shows low-confidence warnings. It only proceeds when the next input is exactly `approve all`; any other input cancels the batch. Approval preserves normal provenance and reports individual results.
 
 Inspect approved memories:
 
     memory inspect <M-###>
+    memory scope <M-###> <scope|type-derived>
 
 List or search active memories in the current domain:
 
@@ -597,7 +685,7 @@ Assistant chat now reaches Ollama through a narrow `ChatProvider` adapter. This 
 
     context stats
 
-Interactive assistant command that displays the bounded diagnostics snapshot for the latest completed or interrupted conversational turn: model/provider, persona/runtime-state/policy sizes, prompt and response character counts, estimated token counts, recent-context size, selected memory IDs with deterministic scores/reasons, latency, stream first-token timing, and proposal outcome. It is read-only: it does not invoke a model, query/write memory stores, or retain raw prompts/conversation text.
+Interactive assistant command that displays the bounded diagnostics snapshot for the latest completed or interrupted conversational turn: model/provider, persona/runtime-state/policy sizes, prompt and response character counts, estimated token counts, recent-context size, selected memory IDs with deterministic scores/reasons, per-persona shared-memory visibility decisions, latency, stream first-token timing, and proposal outcome. It is read-only: it does not invoke a model, query/write memory stores, or retain raw prompts/conversation text.
 
 
 Hidden development reset (not shown in normal help):
@@ -616,7 +704,9 @@ Lists timestamped backups, asks for a backup selection, and requires typing `Sta
 
 ### Shared runtime diagnostics
 
-The local API exposes the bounded, read-only diagnostics snapshot at `GET /v1/starfur/diagnostics` (with the same bearer token as the other endpoints). It reports provider configuration and whether health was probed, active/startup model, capability manifest fingerprint and IDs, fallback state, lifecycle readiness, and the latest recorded turn timings. It never probes Ollama or reads/writes memory stores. Terminal `context stats` remains the detailed per-turn diagnostic view.
+The local API exposes the bounded, read-only diagnostics snapshot at `GET /v1/starfur/diagnostics` (with the same bearer token as the other endpoints). It reports provider configuration and whether health was probed, active/startup model, capability manifest fingerprint and IDs, fallback state, lifecycle readiness, and the latest recorded turn timings. Normal diagnostics never call Ollama or read/write memory stores. To explicitly run one non-generating provider availability probe, use `GET /v1/starfur/diagnostics?probe=provider`; it reports only health status, timestamp, model count when available, and a bounded error message.
+
+`GET /v1/starfur/persona-runtime` returns the active conversation's bounded persona-runtime snapshot for future dashboard, TUI, and apartment presentation. It includes public identity/trait/state metadata and local record counts only. It does not call a model, seed a persona state, reveal prompts or raw evidence, modify memory stores, or edit configuration.
 ## Capability-aware assistant explanations
 
 StarFur Core owns a structured capability manifest rather than placing feature knowledge in persona files. During ordinary conversation no capability block is added. Explicit questions such as `What can you do?` receive the current public capability manifest; narrowly named features such as memory proposals or model switching receive only matching capability entries. Persona controls presentation, while Core remains authoritative for what is currently supported. This does not expose private databases, hidden reasoning, or unregistered future features.
@@ -632,7 +722,7 @@ Persona Runtime diagnostics:
 
     persona inspect
 
-This is read-only and shows bounded state metadata without displaying the full persona prompt or changing runtime state. Normal chat receives the same bounded presentation-only trait and momentary-state snapshot; it cannot override engine policy, factual grounding, provenance, commands, or permissions.
+This is read-only and shows bounded state metadata plus derived behavior controls without displaying the full persona prompt or changing runtime state. Normal chat receives the same Core-provided presentation-only behavior guidance; it cannot override engine policy, factual grounding, provenance, commands, or permissions.
 
 ### External document annotation resilience
 

@@ -11,11 +11,12 @@ sys.modules.setdefault("ollama", types.ModuleType("ollama"))
 
 from pipeline.assistant import AssistantSession, load_config, load_persona, load_policy
 from pipeline import assistant as assistant_module
+from pipeline import db
 
 
 class AssistantTests(unittest.TestCase):
     def test_config_and_persona_are_file_backed(self):
-        with tempfile.TemporaryDirectory() as temp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp:
             root = Path(temp)
             persona = root / "persona.md"
             persona.write_text("A test persona.", encoding="utf-8")
@@ -117,6 +118,43 @@ class AssistantTests(unittest.TestCase):
              patch("pipeline.assistant.get_assistant_memory", return_value={"id": 31, "status": "forgotten"}):
             self.assertEqual(session.respond("forget this: M-031"), "No active matching memory found.")
         self.assertEqual(updates, [])
+
+    def test_explicit_visibility_scope_commands_do_not_call_model_or_change_history(self):
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp:
+            previous_path = db.DB_PATH
+            db.DB_PATH = Path(temp) / "assistant.sqlite"
+            try:
+                memory_id = db.create_assistant_memory("User", "preference", "Story preference")
+                proposal_id = db.create_assistant_memory_proposal({
+                    "subject": "Story", "memory_type": "experience", "summary": "Met the captain",
+                    "details": "", "importance": 0.5, "confidence": 0.5, "retention": "long_term",
+                })
+                calls = []
+                config = type("Config", (), {
+                    "chat_model": "test", "domain": "personal", "max_session_messages": 4,
+                    "max_memories": 2, "memory_policy": "off", "debug_level": "off",
+                    "ollama_options": {}, "task_profiles": None,
+                })()
+                session = AssistantSession(
+                    config, "Persona", chat=lambda **kwargs: calls.append(kwargs) or {"message": {"content": "unused"}},
+                )
+                memory_ref = db.assistant_public_id("memory", memory_id)
+                proposal_ref = db.assistant_public_id("proposal", proposal_id)
+                self.assertEqual(
+                    f"Set {memory_ref} visibility scope to: roleplay.",
+                    session.respond(f"memory scope {memory_ref} roleplay"),
+                )
+                self.assertEqual(
+                    f"Set {proposal_ref} visibility scope to: roleplay.",
+                    session.respond(f"proposal scope {proposal_ref} roleplay"),
+                )
+                self.assertEqual("roleplay", db.get_assistant_memory(memory_id)["visibility_scope"])
+                self.assertEqual("roleplay", db.get_assistant_memory_proposal(proposal_id)["visibility_scope"])
+                self.assertIn("Unknown assistant-memory scope", session.respond(f"memory scope {memory_ref} guessed"))
+                self.assertEqual([], calls)
+                self.assertEqual([], session.messages)
+            finally:
+                db.DB_PATH = previous_path
 
     def test_proposals_are_validated_and_not_persisted(self):
         calls = []

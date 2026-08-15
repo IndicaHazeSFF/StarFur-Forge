@@ -759,3 +759,211 @@
 - Files modified: `pipeline/application.py`, `tests/test_application.py`, `AGENTS.md`, `ROADMAP.md`, `docs/COMMANDS.md`, and `CHANGELOG.md`.
 - Behavior: the application registry now protects only creation, lookup, LRU order, and eviction. Each ephemeral `AssistantSession` has its own request lock; same-conversation calls remain serialized while independent conversations can progress concurrently. Active slots are pinned until completion, and LRU eviction is deferred if every non-default session is busy. No canonical-memory, retrieval, proposal, provider configuration, or API contract changed.
 - Verification: `python tests/test_application.py -q` (14), `python tests/test_api.py -q` (18), and `python tests/test_document_review.py -q` (6) passed locally. No Ollama request, production SQLite/Chroma mutation, schema migration, or reset/restore operation was performed.
+
+## 2026-08-14 - Complete bounded provider health diagnostics
+
+- Purpose: finish the Stage 2 provider/runtime observability foundation without turning passive diagnostics into hidden provider work.
+- Files modified: `pipeline/providers.py`, `pipeline/application.py`, `pipeline/api.py`, `tests/test_application.py`, `tests/test_api.py`, `AGENTS.md`, `ROADMAP.md`, `docs/COMMANDS.md`, and `CHANGELOG.md`.
+- Behavior: normal runtime diagnostics remain read-only and non-probing. `GET /v1/starfur/diagnostics?probe=provider` explicitly invokes the provider-owned health probe (Ollama model listing), then retains only bounded per-session status (`healthy`, `unavailable`, or `unsupported`), checked time, model count, and a bounded error message. No prompt, response, installed-model list, memory, proposal, SQLite, or Chroma data is retained or changed. The existing lifecycle state machine remains conservative about backend load/unload states it cannot observe.
+- Verification: `python tests/test_application.py -q` (16), `python tests/test_provider_state.py -q` (3), and `python tests/test_api.py -q` (19) passed locally. No live Ollama request, schema migration, production SQLite/Chroma mutation, reset, or restore was performed.
+
+## 2026-08-14 - Add persona-local interest and skill state foundation
+
+- Purpose: begin Stage 3 with a safe, inspectable model for persona development that remains completely separate from human-controlled assistant memory.
+- Files added: `pipeline/persona_development.py` and `tests/test_persona_development.py`.
+- Files modified: `AGENTS.md`, `ROADMAP.md`, and `CHANGELOG.md`.
+- Behavior: immutable `PersonaDevelopmentState` records interests and explicitly verified skills under a validated persona namespace. Each record has bounded confidence below 1.0, support count, timezone-aware recency, and deterministic half-life decay; independent support can reinforce confidence without reaching certainty. A thread-safe in-memory registry maintains namespace separation but deliberately does not persist across restart. No prompt, model call, proposal, user memory, database, Chroma collection, or autonomous learning behavior changed.
+- Verification: persona-development (5), persona-state (4), persona loading (6), and persona-inspect (1) tests passed locally. No schema migration or production state mutation was performed.
+## 2026-08-14 - Add bounded persona-interest attention
+
+- Purpose: complete the first safe attention-rules slice of the Persona Runtime without turning ordinary chat into autonomous learning.
+- Files modified: `pipeline/persona_attention.py`, `pipeline/context.py`, `pipeline/assistant.py`, `tests/test_persona_attention.py`, `tests/test_context.py`, `AGENTS.md`, `ROADMAP.md`, `docs/COMMANDS.md`, and `CHANGELOG.md`.
+- Behavior: an optional injected `PersonaDevelopmentState` can contribute at most two directly lexically matched interests to a presentation-only context section. Interests can inform an example, analogy, or optional follow-up, while verified skills are deliberately excluded. The section is absent without a match; it cannot create facts/memories, claim expertise, redirect the request, persist data, or change default sessions.
+- Verification: focused deterministic selector, prompt-assembly, assistant-injection, namespace, decay, and existing context-stat regression tests pass locally. No production SQLite, Chroma, persona package, or runtime data was read or changed.
+## 2026-08-14 - Add replayable CYOA adventure workspace architecture
+
+- Purpose: define isolated persistent create-your-own-adventure worlds that can be resumed with continuity while retaining generative prose.
+- Modified: `ROADMAP.md`, `AGENTS.md`, and `CHANGELOG.md`.
+- Design: adventures use lazy `adventure:<id>` namespaces and a metadata registry; an append-only validated event log is authoritative, while derived state and snapshots accelerate loading. Replay preserves key events, discoveries, character knowledge/uncertainty, relationship milestones, promises, conflicts, and unresolved hooks without requiring identical wording. Adventure-scoped relationships and emotional state reuse the shared subsystems but cannot affect real-world persona/user memory. Core-owned story exit commands take precedence, and interrupted turns commit no partial state.
+- Verification: roadmap and architecture guidance only; no runtime, schema, SQLite, Chroma, or production-data behavior changed.
+## 2026-08-14 - Add explicit verified persona learning records
+
+- Purpose: make future persona learning auditable before introducing RSS intake, sandbox execution, or persistence.
+- Files modified: `pipeline/persona_development.py`, `tests/test_persona_development.py`, `AGENTS.md`, `ROADMAP.md`, and `CHANGELOG.md`.
+- Behavior: immutable persona-local learning records now capture a stable ID, source, hypothesis, bounded attempt/result, outcome, verification evidence, timestamp, and optional skill target. Only `apply_verified_learning()` may append a `verified_success` record and reinforce the related skill; failed/inconclusive records remain visible but cannot establish expertise. State is still in-memory only and does not execute work, infer from chat, modify prompts, write user memory, or persist to SQLite/Chroma.
+- Verification: focused persona-development regression tests cover explicit recording, successful verification, bounded confidence, failed-result rejection, namespace separation, and duplicate-record protection. No production data was accessed or changed.
+## 2026-08-14 - Add bounded persona reference-intake foundation
+
+- Purpose: introduce a safe event source for future RSS/reference curiosity without making StarFur an autonomous crawler or allowing a read article to become claimed expertise.
+- Files modified: `pipeline/persona_development.py`, `tests/test_persona_development.py`, `AGENTS.md`, `ROADMAP.md`, and `CHANGELOG.md`.
+- Behavior: immutable `ReferenceIntakeRecord` values contain stable ID, persona namespace, validated source metadata, bounded summary, declared topics, and timestamp. `record_reference_interest()` records one event and can reinforce only one declared interest. It never reinforces skills, fetches network content, executes work, writes user memory, persists data, or changes prompts.
+- Verification: focused persona-development tests cover valid interest raising, namespace separation, undeclared-topic rejection, duplicate prevention, and existing learning/skill constraints. No external feed, provider, SQLite, Chroma, or production data was accessed.
+## 2026-08-14 - Add safe local learning-sandbox foundation
+
+- Purpose: establish a genuine permission/execution boundary before persona learning can attempt code, tests, or other autonomous tasks.
+- Files added/modified: `pipeline/sandbox.py`, `tests/test_sandbox.py`, `AGENTS.md`, `ROADMAP.md`, and `CHANGELOG.md`.
+- Behavior: `SandboxRequest`, `SandboxPolicy`, temporary text-only workspace materialization, injected backend protocol, bounded report, and safe default denial are available. The default never runs a process or network request. The service rejects traversal, backslashes, absolute paths, duplicate files, unsupported network access, excess files/input/output, and backend contract violations. A future container/VM backend must enforce limits independently; this foundation makes no false isolation claim.
+- Verification: focused tests cover policy denial without workspace creation, injected-backend workspace cleanup, bounded report output, path/input validation, and backend failure reporting. No code, provider, network, SQLite, Chroma, or production data was executed or changed.
+
+## 2026-08-14 - Add explainable ephemeral emotion derivation foundation
+
+- Purpose: establish an inspectable, conservative input layer for future behavior controls without converting emotions into permanent facts or per-memory weights.
+- Files added/modified: `pipeline/emotion.py`, `tests/test_emotion.py`, `AGENTS.md`, `ROADMAP.md`, and `CHANGELOG.md`.
+- Behavior: validated explicit signals produce a fresh bounded `MomentaryState` plus deterministic per-signal contributions. Signal ordering is irrelevant, duplicate observations are rejected, state clamps safely, and the supplied baseline remains immutable. The module neither infers chat sentiment nor persists, prompts, retrieves, writes memories, modifies durable traits, or calls a model.
+- Verification: focused tests cover deterministic derivation, baseline preservation, bounds, validation, duplicate rejection, and contribution ordering. No provider, SQLite, Chroma, network, or production data was accessed.
+
+## 2026-08-14 - Add bounded relationship-state derivation foundation
+
+- Purpose: establish real-world familiarity/trust state as explainable runtime data before any behavior mapping or persistence.
+- Files added/modified: `pipeline/relationship.py`, `tests/test_relationship.py`, `session.files.md`, `AGENTS.md`, `ROADMAP.md`, and `CHANGELOG.md`.
+- Behavior: explicit caller-authorized signals derive fresh relationship state for a namespaced persona/subject pair. Familiarity, trust, and confidence are sub-1.0 asymptotic values with deterministic per-signal contributions. The layer never infers from ordinary chat, writes memory, persists data, changes prompts, mutates traits, or mixes adventure relationships with real-world state.
+- Verification: focused tests cover deterministic ordering, immutable baselines, bounded positive/negative transitions, validation, and duplicate rejection. No provider, SQLite, Chroma, network, or production data was accessed.
+
+## 2026-08-14 - Add deterministic behavior mapping
+
+- Purpose: turn bounded Persona Runtime state into one explainable presentation-control surface before wiring emotion or relationship events into chat.
+- Files added/modified: `pipeline/behavior.py`, `pipeline/context.py`, `pipeline/assistant.py`, `tests/test_behavior.py`, `tests/test_context.py`, `tests/test_persona_inspect.py`, `docs/COMMANDS.md`, `session.files.md`, `AGENTS.md`, `ROADMAP.md`, and `CHANGELOG.md`.
+- Behavior: `BehaviorContext` now maps read-only to bounded controls for warmth, directness, humor, initiative, patience, verbosity, clarification threshold, and interruption tolerance. `ContextManager` renders the guidance instead of raw trait/state values, and `persona inspect` shows the same controls. No signal inference, persistence, memory mutation, capability change, or policy override was added.
+- Verification: focused mapper, context, persona-inspection, and assistant regression tests cover deterministic bounded guidance, read-only command behavior, and the changed Core prompt section. No provider, SQLite, Chroma, network, or production data was accessed.
+
+## 2026-08-14 - Add conservative momentary-state transitions
+
+- Purpose: prevent future emotion-derived state from oscillating, snapping, or becoming uninspectable persistent data.
+- Files added/modified: `pipeline/momentary_state.py`, `tests/test_momentary_state.py`, `session.files.md`, `AGENTS.md`, `ROADMAP.md`, and `CHANGELOG.md`.
+- Behavior: supplied prior and candidate `MomentaryState` snapshots transition through deterministic half-life decay toward neutral, hysteresis for tiny changes, and per-field maximum step limits. The result identifies retention and applied/held fields. It has no clock, persistence, ordinary-chat inference, prompt integration, or memory/trait mutation.
+- Verification: focused tests cover half-life decay, deterministic snapshot output, hysteresis, bounded rate limiting, validation, and immutable inputs. No provider, SQLite, Chroma, network, or production data was accessed.
+
+## 2026-08-14 - Add declarative multi-persona package foundation
+
+- Purpose: separate static persona packages from shared Core services before introducing runtime selection or discussion simulations.
+- Files added/modified: `pipeline/persona_registry.py`, `tests/test_persona_registry.py`, `session.files.md`, `AGENTS.md`, `ROADMAP.md`, `docs/COMMANDS.md`, and `CHANGELOG.md`.
+- Behavior: safe fallback-capable persona packages validate that their prompt and immutable initial state agree, while an in-memory registry supplies stable lookup and duplicate prevention. Packages expose only identity metadata and own no providers, memory, tools, permissions, executable behavior, or session switching.
+- Verification: focused tests cover fallback loading, prompt/state validation, deterministic ordering, lookup, and duplicate rejection. No provider, SQLite, Chroma, network, or production data was accessed.
+
+## 2026-08-14 - Add session-scoped persona selection
+
+- Purpose: make the declarative persona registry usable without allowing personas to own Core services or leak conversation state across identities.
+- Files added/modified: `pipeline/persona_registry.py`, `pipeline/assistant.py`, `pipeline/application.py`, `pipeline/capabilities.py`, `pipeline/command_help.py`, `config/assistant.json`, `tests/test_persona_selection.py`, `session.files.md`, `AGENTS.md`, `ROADMAP.md`, `docs/COMMANDS.md`, and `CHANGELOG.md`.
+- Behavior: configured packages can be listed, inspected, and selected through `persona list`, `persona current`, and `persona use <persona-id>`. Selection changes only future prompt/runtime state in one session and clears its recent conversation context. Shared memory, providers, tools, permissions, configuration, and other conversations remain unchanged. The stock configuration also includes a selectable neutral package for safe switching tests while preserving `default` as startup.
+- Verification: focused tests cover stable listing, successful/unknown/repeated selection, prompt replacement, context clearing, no model call for commands, and preservation of memory dependencies. No provider, SQLite, Chroma, network, or production data was accessed.
+
+## 2026-08-14 - Harden persona command precedence
+
+- Purpose: prevent exact persona commands from falling through to the model and producing untrusted narrative/proposals.
+- Files modified: `pipeline/assistant.py`, `tests/test_persona_selection.py`, `session.files.md`, `AGENTS.md`, and `CHANGELOG.md`.
+- Behavior: Core command routing now runs before natural-language help or model-backed introspection. `persona curretn` is a single explicit non-mutating alias for `persona current`; no broad fuzzy matching was introduced.
+- Verification: focused tests cover capitalization, the bounded typo alias, no model call, and no proposal creation for persona-current commands.
+## 2026-08-14 - Namespace persona runtime state
+
+- Purpose: give each configured persona an isolated, typed runtime home before relationship, apartment, or autonomous-learning behavior is introduced.
+- Files modified: `pipeline/persona_runtime.py`, `pipeline/assistant.py`, `pipeline/application.py`, `tests/test_persona_runtime.py`, `tests/test_persona_selection.py`, `AGENTS.md`, `ROADMAP.md`, `CHANGELOG.md`, and `session.files.md`.
+- Behavior: `PersonaRuntimeRegistry` retains dynamic/momentary persona state and existing persona-development state separately per persona for the life of the local application. Persona switching reads the selected namespace; shared assistant memory, providers, policy, tools, configuration, and other identities remain outside it. The registry is in-memory only and accepts no raw relationship/apartment state.
+- Verification: focused runtime-registry, persona-selection, and application tests pass locally. No SQLite, Chroma, runtime data, network, or production model call was used.
+## 2026-08-14 - Add Nova persona package
+
+- Added the optional declarative Nova presentation package and registered it beside StarFur and Neutral.
+- StarFur remains the default active persona. Nova owns no memory, provider, tool, policy, or runtime behavior; it is selectable only through the existing session-scoped persona commands.
+- Verification: persona package selection tests cover the expanded stock registry.
+## 2026-08-14 - Name the stock persona Murr
+
+- Purpose: make the configured runtime identity match the companion rather than exposing the implementation placeholder `default`.
+- Behavior: the existing `persona/default.md` file remains in place, while configuration now registers it as `murr` with display name `Murr` and starts sessions on `murr`. No memory, provider, policy, or database identity changed.
+- Verification: stock persona configuration tests assert the renamed package and startup selection.
+## 2026-08-14 - Extend read-only persona runtime inspection
+
+- Purpose: make persona-local runtime state inspectable before later relationship and apartment state are wired in.
+- Behavior: `persona inspect` now reports counts for local interests, verified skills, learning records, and reference records, plus its restart-ephemeral storage status. It never renders raw evidence, interests, full persona prompt, or any user-memory content.
+- Verification: focused persona-inspection tests cover the bounded counts and confirm no model call or state mutation.
+## 2026-08-14 - Namespace persona-local relationship snapshots
+
+- Purpose: connect the existing explicit-signal relationship model to the persona runtime without enabling chat inference or behavior changes.
+- Behavior: persona runtime snapshots may now contain typed, subject-unique real-world relationship states only for their own persona ID. `persona inspect` reports the bounded count, but never raw relationship values. The state remains restart-ephemeral, is not injected into prompts, and does not alter memory, policy, or adventure relationships.
+- Verification: focused runtime and persona-inspection tests cover replacement, isolation, namespace validation, and read-only output.
+## 2026-08-14 - Add bounded public persona runtime snapshots
+
+- Purpose: give future dashboard, TUI, and apartment surfaces one safe structured view of persona runtime state.
+- Behavior: runtime registries now provide read-only public snapshots with identity/display metadata, public traits/momentary state, local development counts, relationship count, and storage class. Requests never seed a new persona state and omit static prompts, raw learning/reference evidence, relationship subjects, Core memory, and provider internals.
+- Verification: focused persona-runtime tests cover missing snapshots, non-mutating lookup, bounded fields, and sensitive-field exclusion.
+## 2026-08-15 - Expose read-only persona runtime API boundary
+
+- Purpose: prepare a safe shared data source for future dashboard, TUI, and apartment presentation without implementing a UI or configuration editor.
+- Behavior: authenticated `GET /v1/starfur/persona-runtime` returns the selected conversation's bounded public persona-runtime snapshot. It is compatible with legacy/custom sessions that have no runtime state, returning an explicit unavailable response. It never calls a provider/model, seeds state, changes configuration, or accesses SQLite/Chroma.
+- Verification: application and API tests cover bounded output, conversation-compatible routing, legacy compatibility, and no chat call.
+## 2026-08-15 - Add per-persona shared-memory visibility enforcement
+
+- Purpose: allow an active persona to know only shared memories that satisfy its declared confidence policy while keeping the shared database canonical.
+- Files added/modified: `pipeline/persona_visibility.py`, `pipeline/persona_registry.py`, `pipeline/assistant.py`, `config/assistant.json`, and `tests/test_persona_visibility.py`.
+- Behavior: after injected retrieval ranks active same-domain memories, `AssistantSession` filters them against the active package policy without changing the order or score of visible records. `context stats` reports bounded per-record decisions. Stock packages remain at `0.0`, so normal current recall is unchanged.
+- Verification: focused policy/persona suites cover defaults, validation, threshold filtering, prompt exclusion, selected IDs, and bounded diagnostics. No schema, SQLite writes, Chroma changes, provider behavior, or production data migration.
+
+## 2026-08-15 - Add conservative persona memory-scope foundation
+
+- Purpose: make future persona-specific memory scopes configurable without guessing sensitive categories from existing memory text.
+- Files modified: `pipeline/persona_visibility.py`, `pipeline/persona_registry.py`, `config/assistant.json`, `tests/test_persona_visibility.py`, `AGENTS.md`, `ROADMAP.md`, and `CHANGELOG.md`.
+- Behavior: packages may declare `allowed_memory_scopes` as unrestricted (`null`) or a validated subset of type-derived `personal`, `preference`, `project`, `relationship`, and `routine` scopes. After ranking, Core requires both confidence and scope approval before a record reaches an active persona's prompt or introspection payload. Unknown types fail closed when a scope allowlist is configured. Stock personas remain unrestricted.
+- Verification: focused policy, registry, selection, and context diagnostics tests cover mapping, validation, default behavior, prompt exclusion, introspection exclusion, and existing package compatibility.
+
+## 2026-08-15 - Add explicit assistant-memory visibility-scope metadata
+
+- Purpose: create a safe storage path for future persona-specific story/roleplay access without classifying existing memories from their wording.
+- Behavior: assistant memories and proposals now have a nullable `visibility_scope`. When explicit, it overrides the type-derived fallback for persona visibility and survives normal proposal approval. Existing rows remain `NULL` and preserve their existing behavior. `roleplay` is a valid explicit-only scope; no automatic proposal/document/chat extraction can assign it.
+- Verification: focused SQLite tests cover validation, legacy `NULL` fallback, update, proposal-to-memory preservation, and the visibility layer's explicit-over-fallback rule.
+
+## 2026-08-15 - Add explicit visibility-scope editing commands
+
+- Behavior: `memory scope <id> <scope|type-derived>` edits canonical memory metadata and `proposal scope <id> <scope|type-derived>` edits pending proposals before approval. Both are exact Core commands, domain-scoped, validated, and model-free. Clearing a scope restores the existing type-derived fallback; approved proposals cannot be edited retrospectively.
+- Verification: focused proposal storage tests cover pending edit, approval preservation, and rejection of post-approval edits. Command-help tests cover exact syntax.
+
+## 2026-08-15 - Roadmap adventure resume and natural-language entry
+
+- Design note: future CYOA controls will support explicit natural-language start and resume/load phrases, title resolution through the adventure registry, clarification for ambiguous titles, and a hard distinction between resuming an existing world and creating a fresh one. Restored event spines and adventure state remain isolated from ordinary conversation and shared memory.
+
+## 2026-08-15 - Add bounded session roleplay mode
+
+- Behavior: exact `roleplay begin [title]`, `roleplay status`, and `roleplay end` commands, plus a small conservative set of casual start phrases, manage one session-ephemeral fictional-mode state. Mode transitions clear recent conversation context. Core injects a bounded fictional-context marker and labels otherwise eligible user-memory proposals/explicit remembers with explicit `roleplay` scope while active.
+- Constraints: no adventure workspace, title registry, persistent story state, event log, replay, roleplay auto-detection beyond explicit phrases, or model-selected scope was added.
+- Verification: roleplay tests cover state validation, conservative phrase detection, command isolation, proposal inheritance, prompt injection only while active, explicit remembers, and clean end transitions.
+
+## 2026-08-15 - Roadmap persona-memory onboarding UX requirement
+
+- Design note: future persona setup must let users choose between a restricted new-persona memory profile and explicit drop-in inheritance of an established persona's visibility behavior.
+- The future UX must keep confidence thresholds, persona familiarity, memory scopes, and explicit disclosure permission as separate controls. This is roadmap-only; no runtime or configuration behavior changed.
+
+## 2026-08-15 - Roadmap stat-evolution profile requirement
+
+- Design note: future personality, relationship, and momentary-state changes will use validated, versioned, inspectable formulas rather than language-model-generated state changes. Profiles define eligible signals, baselines, bounded gain/loss, decay/asymptotes, hysteresis, and rate limits.
+- This is roadmap-only; no runtime, state, memory, or configuration behavior changed.
+
+## 2026-08-15 - Add isolated adventure registry foundation
+
+- Behavior: `pipeline.adventure_registry` now creates validated, exact-title registry metadata and one manifest-only workspace per future adventure. Duplicate names fail closed and must later be resumed explicitly.
+- Constraints: no session mounting, event log, adventure database, semantic index, replay state, model call, shared-memory access, or user-facing command was added.
+- Verification: focused registry tests cover deterministic creation, exact resolution, duplicate prevention, and invalid-title no-write behavior.
+
+## 2026-08-15 - Add Core adventure-registry commands
+
+- Behavior: `adventure list`, `adventure create <title>`, and `adventure inspect <title>` expose the manifest-only registry through exact Core command routing and capability/help metadata.
+- Constraints: commands do not invoke a model, create assistant memory/proposals, alter conversation context, mount an adventure, or create story data. A title collision fails closed instead of creating another workspace.
+- Verification: focused command tests cover creation/listing/inspection, duplicate and missing behavior, command isolation, and Core-owned help.
+
+## 2026-08-15 - Add session-local adventure workspace mounting
+
+- Behavior: `adventure load <title>`, `adventure status`, and `adventure unload` attach or remove only validated registry metadata for the current conversation. Mount transitions clear recent chat context and the model receives an explicit no-history boundary.
+- Constraints: mounting does not start roleplay, create events, establish characters/relationships, write workspace data, invoke a model, or transfer anything into assistant memory.
+- Verification: focused tests cover session-local mounting, metadata-only prompt injection, command isolation, clean unmounting, and roleplay separation.
+
+## 2026-08-15 - Add bounded loaded-workspace status alias
+
+- Behavior: the exact read-only phrase `what is loaded?` now routes to the same Core-owned `adventure status` result instead of relying on model interpretation.
+- Constraints: no model call, workspace write, memory/proposal action, or diagnostics turn is created.
+
+## 2026-08-15 - Roadmap persistent adventure simulation architecture
+
+- Design: future adventures may advance bounded activities and elapsed-time consequences deterministically while the user is away; provider/model calls remain reserved for meaningful decisions, novel events, reflection, relationships, and narration.
+- Invariants: transcript, append-only canonical event log, authoritative current state, derived memory, and optional rebuildable snapshots remain separate. Volatile values such as inventory, money, health, location, and resources are never reconstructed from semantic memory retrieval.
+- Boundaries: simulation is namespaced to `adventure:<id>`, permissioned, reproducible, recoverable, and transaction-safe. It cannot silently write real-world user memory or persona claims. This is roadmap design only; no simulator or background task was implemented.
+
+## 2026-08-15 - Roadmap idle adventure scenes and procedural worlds
+
+- Design: future apartment presentation may show a cached illustrative adventure scene after permissioned user inactivity, using structured adventure state, stable asset/style references, debounce/resource limits, and immediate return on user activity.
+- Future research: procedural generated adventures may combine deterministic world/state simulation, persona-driven meaningful decisions, replayable event history, and generated/composited visuals. Authoritative state and replay must precede this feature; idle images are never canonical events.

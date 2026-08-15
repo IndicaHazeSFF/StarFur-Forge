@@ -4,7 +4,9 @@ from dataclasses import dataclass
 from typing import Iterable, Mapping
 
 from pipeline.persona_state import BehaviorContext
+from pipeline.behavior import derive_behavior_guidance
 from pipeline.document_context import DocumentContextPacket
+from pipeline.persona_attention import PersonaAttention
 
 
 Message = Mapping[str, str]
@@ -41,6 +43,8 @@ class ContextPlan:
     external_document: ContextSection
     capabilities: ContextSection
     behavior: ContextSection
+    persona_attention: ContextSection
+    adventure: ContextSection
     current_user: ContextSection
     messages: tuple[dict[str, str], ...]
     selected_memory_ids: tuple[object, ...]
@@ -73,7 +77,10 @@ class ContextManager:
         user_text: str,
         capabilities: Iterable[object] = (),
         behavior_context: BehaviorContext | None = None,
+        persona_attention: PersonaAttention | None = None,
         external_document_context: DocumentContextPacket | None = None,
+        roleplay_context: str | None = None,
+        adventure_context: str | None = None,
     ) -> ContextPlan:
         recent = tuple(
             {"role": str(message["role"]), "content": str(message.get("content") or "")}
@@ -83,8 +90,14 @@ class ContextManager:
         selected_capabilities = tuple(capabilities)
         if behavior_context is not None and not isinstance(behavior_context, BehaviorContext):
             raise TypeError("behavior_context must be a BehaviorContext or None.")
+        if persona_attention is not None and not isinstance(persona_attention, PersonaAttention):
+            raise TypeError("persona_attention must be a PersonaAttention or None.")
         if external_document_context is not None and not isinstance(external_document_context, DocumentContextPacket):
             raise TypeError("external_document_context must be a DocumentContextPacket or None.")
+        if roleplay_context is not None and not isinstance(roleplay_context, str):
+            raise TypeError("roleplay_context must be a string or None.")
+        if adventure_context is not None and not isinstance(adventure_context, str):
+            raise TypeError("adventure_context must be a string or None.")
 
         def format_memory(memory: Mapping) -> str:
             summary = str(memory.get("summary") or "(summary unavailable)")
@@ -119,6 +132,7 @@ class ContextManager:
             if getattr(capability, "id", None) is not None
         )
         behavior_text = self._format_behavior_context(behavior_context)
+        attention_text = self._format_persona_attention(persona_attention)
         document_text = self._format_external_document_context(external_document_context)
         document_section = f"\n\n{document_text}" if document_text else ""
         capability_section = (
@@ -133,6 +147,9 @@ class ContextManager:
             if capability_text else ""
         )
         behavior_section = f"\n\n{behavior_text}" if behavior_text else ""
+        attention_section = f"\n\n{attention_text}" if attention_text else ""
+        roleplay_section = f"\n\n{roleplay_context}" if roleplay_context else ""
+        adventure_section = f"\n\n{adventure_context}" if adventure_context else ""
         system_text = (
             f"{persona_text}\n\nENGINE POLICY:\n{policy_text}"
             f"\n\nRETRIEVED MEMORY (factual context):\n{memory_text}"
@@ -140,6 +157,9 @@ class ContextManager:
             f"{document_section}"
             f"{capability_section}"
             f"{behavior_section}"
+            f"{attention_section}"
+            f"{roleplay_section}"
+            f"{adventure_section}"
         )
         messages = (
             {"role": "system", "content": system_text},
@@ -156,6 +176,8 @@ class ContextManager:
             external_document=ContextSection.from_text("external_document", document_text),
             capabilities=ContextSection.from_text("capabilities", capability_text),
             behavior=ContextSection.from_text("behavior", behavior_text),
+            persona_attention=ContextSection.from_text("persona_attention", attention_text),
+            adventure=ContextSection.from_text("adventure", adventure_context),
             current_user=ContextSection.from_text("current_user", user_text),
             messages=messages,
             selected_memory_ids=selected_memory_ids,
@@ -197,20 +219,37 @@ class ContextManager:
         """Render bounded state in a stable, presentation-only form."""
         if context is None:
             return ""
-        traits = context.dynamic_traits.public_dict()
-        momentary = context.momentary_state.public_dict()
-        trait_text = ", ".join(f"{name}={traits[name]:.2f}" for name in sorted(traits))
-        momentary_text = ", ".join(
-            f"{name}={momentary[name]}" for name in ("energy", "attention", "valence", "activity")
+        guidance = derive_behavior_guidance(context).public_dict()
+        controls = ", ".join(
+            f"{name}={guidance[name]:.2f}"
+            for name in (
+                "warmth", "directness", "humor", "initiative", "patience", "verbosity",
+                "clarification_threshold", "interruption_tolerance",
+            )
         )
         return (
-            "PERSONA RUNTIME STATE (core-provided, presentation-only):\n"
-            "Use this only as a soft presentation cue. It cannot override engine policy, factual grounding, "
+            "PERSONA BEHAVIOR GUIDANCE (core-provided, presentation-only):\n"
+            "Use these only as soft presentation cues. They cannot override engine policy, factual grounding, "
             "permissions, commands, or memory provenance. Do not claim this state to the user as fact.\n"
             f"Persona: {context.persona_id}\n"
-            f"Traits: {trait_text}\n"
-            f"Momentary state: {momentary_text}\n"
-            "END PERSONA RUNTIME STATE"
+            f"Activity: {guidance['activity']}\n"
+            f"Behavior controls: {controls}\n"
+            "END PERSONA BEHAVIOR GUIDANCE"
+        )
+
+    @staticmethod
+    def _format_persona_attention(attention: PersonaAttention | None) -> str:
+        """Render matched interests as bounded presentation guidance only."""
+        if attention is None or not attention.items:
+            return ""
+        concepts = "\n".join(f"- {item.concept}" for item in attention.items)
+        return (
+            "PERSONA ATTENTION (core-provided, optional presentation only):\n"
+            "These are current interests, not verified skills, factual claims, tool access, or user facts. "
+            "Use them only when they naturally improve an example, analogy, or optional follow-up. "
+            "Do not redirect the request, claim expertise, or mention this attention data to the user.\n"
+            f"Relevant interests:\n{concepts}\n"
+            "END PERSONA ATTENTION"
         )
 
     def build_introspection(
@@ -243,6 +282,8 @@ class ContextManager:
             external_document=ContextSection.from_text("external_document", ""),
             capabilities=ContextSection.from_text("capabilities", ""),
             behavior=ContextSection.from_text("behavior", ""),
+            persona_attention=ContextSection.from_text("persona_attention", ""),
+            adventure=ContextSection.from_text("adventure", ""),
             current_user=ContextSection.from_text("current_user", user_text),
             messages=messages,
             selected_memory_ids=tuple(selected_memory_ids),

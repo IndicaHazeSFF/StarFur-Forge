@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 import json
 import re
 import time
@@ -14,9 +15,11 @@ from pipeline.db import (
     inspect_assistant_memory_proposal, inspect_assistant_memory,
     assistant_public_id, resolve_assistant_id,
     get_assistant_memory,
+    get_assistant_memory_proposal,
     list_assistant_memories,
     search_assistant_memories,
     update_assistant_memory,
+    update_assistant_memory_proposal_visibility_scope,
     assistant_memory_type_prompt,
 )
 from pipeline.domains import normalize_domain
@@ -25,6 +28,19 @@ from pipeline.retrieval_debug import RetrievalTrace, normalize_debug_level
 from pipeline.persona import Persona, load_persona, load_persona_state
 from pipeline.context import ContextManager, ContextPlan, estimate_tokens
 from pipeline.persona_state import BehaviorContext
+from pipeline.persona_registry import PersonaPackage, PersonaRegistry
+from pipeline.behavior import derive_behavior_guidance
+from pipeline.persona_development import PersonaDevelopmentState
+from pipeline.persona_attention import select_persona_attention
+from pipeline.persona_runtime import PersonaRuntimeRegistry, PersonaRuntimeState
+from pipeline.persona_visibility import (
+    SharedMemoryVisibilityPolicy,
+    evaluate_shared_memory_scope_visibility,
+    evaluate_shared_memory_visibility,
+)
+from pipeline.roleplay import RoleplaySessionState, detect_casual_roleplay_start
+from pipeline.adventure_registry import AdventureNotFoundError, AdventureRegistry, AdventureRegistryError
+from pipeline.adventure_session import AdventureSessionState
 
 from pipeline.capabilities import CapabilityManifest
 from pipeline.command_help import detect_command_help
@@ -52,6 +68,9 @@ class AssistantConfig:
     debug_level: str
     ollama_options: dict[str, int | float] = field(default_factory=dict)
     task_profiles: TaskProfiles = field(default_factory=TaskProfiles)
+    persona_registry: PersonaRegistry | None = None
+    active_persona_id: str | None = None
+    adventure_root: Path = PROJECT_ROOT / "adventures"
 
 
 def validate_ollama_options(value):
@@ -69,12 +88,39 @@ def load_config(path=DEFAULT_CONFIG_PATH):
     persona_path = Path(data.get("persona_path", "persona/default.md"))
     if not persona_path.is_absolute():
         persona_path = PROJECT_ROOT / persona_path
+    raw_persona_packages = data.get("persona_packages")
+    if raw_persona_packages is not None:
+        if not isinstance(raw_persona_packages, list):
+            raise ValueError("persona_packages must be a list when configured.")
+        resolved_packages = []
+        for item in raw_persona_packages:
+            if not isinstance(item, dict):
+                raise ValueError("persona_packages entries must be objects.")
+            resolved = dict(item)
+            package_path = resolved.get("persona_path")
+            if isinstance(package_path, str):
+                candidate = Path(package_path)
+                resolved["persona_path"] = candidate if candidate.is_absolute() else PROJECT_ROOT / candidate
+            resolved_packages.append(resolved)
+    else:
+        resolved_packages = None
+    from pipeline.persona_registry import load_persona_packages
+    persona_registry = load_persona_packages(persona_path, resolved_packages)
+    requested_persona_id = data.get("active_persona_id")
+    if requested_persona_id is not None and not isinstance(requested_persona_id, str):
+        raise ValueError("active_persona_id must be a string when configured.")
+    active_persona_id = requested_persona_id or load_persona_state(persona_path).persona_id
+    if persona_registry.get(active_persona_id) is None:
+        raise ValueError("active_persona_id must name a configured persona package.")
     policy_path = Path(data.get("policy_path", "config/assistant_policy.md"))
     if not policy_path.is_absolute():
         policy_path = PROJECT_ROOT / policy_path
     policy = data.get("memory_policy", "conservative")
     if policy not in MEMORY_POLICIES:
         raise ValueError(f"Invalid memory_policy: {policy!r}")
+    adventure_root = Path(data.get("adventure_root", "adventures"))
+    if not adventure_root.is_absolute():
+        adventure_root = PROJECT_ROOT / adventure_root
     return AssistantConfig(
         # A chat profile model is the declarative startup default. Later
         # ``model use`` selections remain per-session runtime state.
@@ -88,6 +134,9 @@ def load_config(path=DEFAULT_CONFIG_PATH):
         debug_level=normalize_debug_level(data.get("debug_level", "off")),
         ollama_options=validate_ollama_options(data.get("ollama_options")),
         task_profiles=task_profiles,
+        persona_registry=persona_registry,
+        active_persona_id=active_persona_id,
+        adventure_root=adventure_root,
     )
 
 
@@ -127,14 +176,36 @@ class AssistantSession:
                  memory_creator=create_assistant_memory, memory_searcher=search_assistant_memories,
                  memory_updater=update_assistant_memory, debug_level=None, policy=None, proposal_creator=None,
                  stream=False, stream_writer=None, model_lister=None, provider: ChatProvider | None = None,
-                 capability_manifest: CapabilityManifest | None = None, retriever: MemoryRetriever | None = None):
+                 capability_manifest: CapabilityManifest | None = None, retriever: MemoryRetriever | None = None,
+                 persona_development_state: PersonaDevelopmentState | None = None,
+                 persona_registry: PersonaRegistry | None = None,
+                 persona_runtime_registry: PersonaRuntimeRegistry | None = None,
+                 adventure_registry: AdventureRegistry | None = None):
         if config.max_session_messages <= 0:
             raise ValueError("max_session_messages must be positive")
         if provider is not None and chat is not None:
             raise ValueError("Provide either provider or legacy chat, not both.")
         self.config = config
-        self.persona = persona if hasattr(persona, "render_prompt") else Persona(str(persona))
-        self.persona_state = load_persona_state(getattr(config, "persona_path", None))
+        if persona_registry is not None and not isinstance(persona_registry, PersonaRegistry):
+            raise TypeError("persona_registry must be a PersonaRegistry or None.")
+        package = persona if isinstance(persona, PersonaPackage) else None
+        self.persona_registry = persona_registry or (PersonaRegistry((package,)) if package is not None else None)
+        self.persona = package.persona if package is not None else (persona if hasattr(persona, "render_prompt") else Persona(str(persona)))
+        initial_persona_state = package.initial_state if package is not None else load_persona_state(getattr(config, "persona_path", None))
+        if persona_runtime_registry is not None and not isinstance(persona_runtime_registry, PersonaRuntimeRegistry):
+            raise TypeError("persona_runtime_registry must be a PersonaRuntimeRegistry or None.")
+        if self.persona_registry is not None and self.persona_registry.get(initial_persona_state.persona_id) is None:
+            raise ValueError("active persona must be registered in persona_registry.")
+        requested_development_state = persona_development_state or PersonaDevelopmentState.empty(
+            initial_persona_state.persona_id
+        )
+        if requested_development_state.persona_id != initial_persona_state.persona_id:
+            raise ValueError("persona_development_state persona_id must match the active persona.")
+        self.persona_runtime_registry = persona_runtime_registry or PersonaRuntimeRegistry()
+        runtime = self.persona_runtime_registry.ensure(initial_persona_state, requested_development_state)
+        self.persona_runtime_state = runtime
+        self.persona_state = runtime.persona_state
+        self.persona_development_state = runtime.development_state
         self.policy = policy or load_policy()
         self.context_manager = ContextManager()
         self.capability_manifest = capability_manifest
@@ -166,6 +237,11 @@ class AssistantSession:
         self.stream = stream
         self.stream_writer = stream_writer
         self.messages = []
+        self.roleplay_state = RoleplaySessionState.inactive()
+        self.adventure_registry = adventure_registry or AdventureRegistry(
+            getattr(config, "adventure_root", PROJECT_ROOT / "adventures")
+        )
+        self.adventure_session = AdventureSessionState.unmounted()
         self.proposals = []
         self.last_memory_ids = []
         self._pending_bulk_proposal_ids = None
@@ -202,7 +278,67 @@ class AssistantSession:
             return assistant_public_id("memory", memory_id, self.config.domain)
         return f"M-{int(memory_id):03d}"
 
-    def _begin_turn_diagnostics(self, plan: ContextPlan, retrieved, phase_timings=None):
+    def _shared_memory_visibility_policy(self) -> SharedMemoryVisibilityPolicy:
+        package = (
+            self.persona_registry.get(self.persona_state.persona_id)
+            if self.persona_registry is not None else None
+        )
+        if package is not None:
+            return package.shared_memory_visibility_policy
+        return SharedMemoryVisibilityPolicy(self.persona_state.persona_id)
+
+    def _apply_shared_memory_visibility(self, retrieved):
+        """Filter already-ranked records without changing their ordering or scores."""
+        policy = self._shared_memory_visibility_policy()
+        visible = []
+        decisions = []
+        for item in retrieved:
+            memory = item.get("memory", {})
+            confidence = memory.get("confidence")
+            if confidence is None:
+                allowed = policy.minimum_shared_memory_confidence == 0.0
+                decision = {
+                    "persona_id": policy.persona_id,
+                    "source_confidence": None,
+                    "minimum_shared_memory_confidence": policy.minimum_shared_memory_confidence,
+                    "visible": allowed,
+                    "knowledge_confidence": None,
+                    "reason": (
+                        "memory confidence unavailable; retained by backward-compatible zero threshold"
+                        if allowed else "memory confidence unavailable; cannot satisfy persona threshold"
+                    ),
+                }
+            else:
+                decision = evaluate_shared_memory_visibility(policy, confidence).public_dict()
+                allowed = decision["visible"]
+            confidence_visible = allowed
+            confidence_reason = decision["reason"]
+            scope_decision = evaluate_shared_memory_scope_visibility(
+                policy,
+                memory.get("memory_type"),
+                memory.get("visibility_scope"),
+            ).public_dict()
+            scope_visible = scope_decision["visible"]
+            allowed = confidence_visible and scope_visible
+            decision.update({
+                "memory_type": scope_decision["memory_type"],
+                "memory_scope": scope_decision["memory_scope"],
+                "explicit_visibility_scope": memory.get("visibility_scope"),
+                "allowed_memory_scopes": scope_decision["allowed_memory_scopes"],
+                "confidence_visible": confidence_visible,
+                "confidence_reason": confidence_reason,
+                "scope_visible": scope_visible,
+                "scope_reason": scope_decision["reason"],
+                "visible": allowed,
+                "reason": f"confidence: {confidence_reason}; scope: {scope_decision['reason']}",
+            })
+            decision["public_id"] = self._display_memory_id(memory)
+            decisions.append(decision)
+            if allowed:
+                visible.append(item)
+        return visible, decisions
+
+    def _begin_turn_diagnostics(self, plan: ContextPlan, retrieved, phase_timings=None, visibility_decisions=()):
         selected = []
         for item in retrieved:
             memory = item.get("memory", {})
@@ -218,11 +354,16 @@ class AssistantSession:
             "persona_characters": plan.persona.characters,
             "behavior_characters": plan.behavior.characters,
             "behavior_estimated_tokens": plan.behavior.estimated_tokens,
+            "persona_attention_characters": plan.persona_attention.characters,
+            "persona_attention_estimated_tokens": plan.persona_attention.estimated_tokens,
+            "adventure_characters": plan.adventure.characters,
+            "adventure_estimated_tokens": plan.adventure.estimated_tokens,
             "policy_characters": plan.policy.characters,
             "recent_message_count": len(plan.messages) - 2,
             "recent_characters": plan.recent_conversation.characters,
             "recent_estimated_tokens": plan.recent_conversation.estimated_tokens,
             "retrieved": selected,
+            "shared_memory_visibility": list(visibility_decisions),
             "external_document_characters": plan.external_document.characters,
             "external_document_estimated_tokens": plan.external_document.estimated_tokens,
             "selected_document_chunk_ids": list(plan.selected_document_chunk_ids),
@@ -231,6 +372,8 @@ class AssistantSession:
             "prompt_characters": plan.prompt_characters,
             "prompt_estimated_tokens": plan.prompt_estimated_tokens,
             "ollama_options": self._ollama_options(),
+            "roleplay_session": self.roleplay_state.public_dict(),
+            "adventure_session": self.adventure_session.public_dict(),
             "phase_timings": dict(phase_timings or {}),
         }
 
@@ -263,6 +406,7 @@ class AssistantSession:
             return "No turn diagnostics are available yet."
         persona_chars = snapshot.get("persona_characters", 0)
         behavior_chars = snapshot.get("behavior_characters", 0)
+        attention_chars = snapshot.get("persona_attention_characters", 0)
         policy_chars = snapshot.get("policy_characters", 0)
         lines = [
             "=== CONTEXT STATS ===",
@@ -272,12 +416,43 @@ class AssistantSession:
             "Generation options: " + self._format_ollama_options(snapshot.get("ollama_options", {})),
             f"Persona: {persona_chars} characters (estimated {(persona_chars + 3) // 4} tokens)",
             f"Persona runtime state: {behavior_chars} characters (estimated {snapshot.get('behavior_estimated_tokens', 0)} tokens)",
+            f"Persona attention: {attention_chars} characters (estimated {snapshot.get('persona_attention_estimated_tokens', 0)} tokens)",
+            f"Adventure context: {snapshot.get('adventure_characters', 0)} characters (estimated {snapshot.get('adventure_estimated_tokens', 0)} tokens)",
             f"Policy: {policy_chars} characters (estimated {(policy_chars + 3) // 4} tokens)",
             f"Recent conversation: {snapshot.get('recent_message_count', 0)} messages, {snapshot.get('recent_characters', 0)} characters (estimated {snapshot.get('recent_estimated_tokens', 0)} tokens)",
+            "Roleplay session: " + (
+                f"active ({snapshot['roleplay_session'].get('title') or 'unnamed'}; session-ephemeral)"
+                if snapshot.get("roleplay_session", {}).get("active") else "inactive"
+            ),
+            "Adventure workspace: " + (
+                f"loaded ({snapshot['adventure_session'].get('title')}; session-ephemeral metadata mount)"
+                if snapshot.get("adventure_session", {}).get("mounted") else "none loaded"
+            ),
             f"Retrieved memories: {len(snapshot.get('retrieved', []))}",
         ]
         selected = snapshot.get("retrieved", [])
         lines.append("Selected memory IDs: " + (", ".join(item["public_id"] for item in selected) if selected else "(none)"))
+        visibility = snapshot.get("shared_memory_visibility", [])
+        if visibility:
+            policy_persona = visibility[0]["persona_id"]
+            threshold = visibility[0]["minimum_shared_memory_confidence"]
+            visible_count = sum(1 for item in visibility if item["visible"])
+            lines.append(
+                "Shared-memory visibility: "
+                f"{policy_persona}, threshold {threshold:.2f}; {visible_count}/{len(visibility)} visible"
+            )
+            hidden = [item["public_id"] for item in visibility if not item["visible"]]
+            if hidden:
+                lines.append("Hidden memory IDs: " + ", ".join(hidden))
+            lines.append("Visibility details:")
+            for item in visibility:
+                confidence = "unavailable" if item["source_confidence"] is None else f"{item['source_confidence']:.3f}"
+                state = "visible" if item["visible"] else "hidden"
+                lines.append(f"  {item['public_id']} confidence={confidence} {state}: {item['reason']}")
+                scope = item.get("memory_scope") or "unmapped"
+                lines.append(
+                    f"    scope: {scope} ({'allowed' if item.get('scope_visible') else 'denied'})"
+                )
         capability_ids = snapshot.get("selected_capability_ids", [])
         if capability_ids:
             lines.append("Capability context: " + ", ".join(capability_ids))
@@ -421,12 +596,18 @@ class AssistantSession:
             round((time.perf_counter() - retrieval_started) * 1000, 2),
         )
         phase_timings.setdefault("association_ms", 0.0)
+        retrieved, visibility_decisions = self._apply_shared_memory_visibility(retrieved)
         memories = [item["memory"] for item in retrieved]
         prompt_started = time.perf_counter()
         recent = self.messages[-self.config.max_session_messages:]
         selected_capabilities = (
             self.capability_manifest.select_for_query(user_text)
             if self.capability_manifest is not None else ()
+        )
+        persona_attention = select_persona_attention(
+            user_text,
+            self.persona_development_state,
+            as_of=datetime.now(timezone.utc),
         )
         plan = self.context_manager.build_chat(
             persona_text=self.persona.render_prompt(),
@@ -435,7 +616,10 @@ class AssistantSession:
             retrieved_memories=memories,
             capabilities=selected_capabilities,
             behavior_context=BehaviorContext.from_persona_state(self.persona_state),
+            persona_attention=persona_attention,
             external_document_context=external_document_context,
+            roleplay_context=self.roleplay_state.context_text(),
+            adventure_context=self.adventure_session.context_text(),
             user_text=user_text,
         )
         phase_timings["prompt_build_ms"] = round((time.perf_counter() - prompt_started) * 1000, 2)
@@ -455,8 +639,9 @@ class AssistantSession:
             context=plan.retrieved_memory.text,
             capability_ids=list(plan.selected_capability_ids),
             document_chunk_ids=list(plan.selected_document_chunk_ids),
+            persona_attention=[item.concept for item in persona_attention.items],
         )
-        self._begin_turn_diagnostics(plan, retrieved, phase_timings)
+        self._begin_turn_diagnostics(plan, retrieved, phase_timings, visibility_decisions)
         return plan
 
     def _proposal(self, user_text, assistant_text=None):
@@ -524,6 +709,10 @@ class AssistantSession:
             raw["source"] = "assistant_turn_proposal"
             proposal = validate_memory_proposal(raw, self.config.domain)
         self.trace.record("proposal_validation", status="accepted", store=proposal["store"], domain=proposal["domain"])
+        if proposal["store"] and self.roleplay_state.active:
+            # The model never selects a scope. An explicit Core-owned session
+            # state adds this metadata only after normal validation succeeds.
+            proposal["visibility_scope"] = "roleplay"
         if proposal["store"] and self.proposal_creator:
             result = self.proposal_creator(proposal, domain=self.config.domain, observation_text=user_text)
             proposal["id"] = result.get("proposal_id", result) if isinstance(result, dict) else result
@@ -545,6 +734,7 @@ class AssistantSession:
             subject="User", memory_type="personal_fact", summary=summary,
             importance=0.9, confidence=1.0, retention="long_term",
             source="explicit:user", domain=self.config.domain,
+            **({"visibility_scope": "roleplay"} if self.roleplay_state.active else {}),
         )
         return f"Remembered (memory {assistant_public_id('memory', memory_id, self.config.domain)})."
 
@@ -652,10 +842,12 @@ class AssistantSession:
         return f"Active model set to: {selected}"
 
     def persona_inspect(self):
-        """Return a read-only bounded PersonaState diagnostic."""
+        """Return a read-only, bounded persona-runtime diagnostic."""
         state = self.persona_state
+        development = self.persona_development_state
         traits = state.dynamic_traits.public_dict()
         momentary = state.momentary_state.public_dict()
+        guidance = derive_behavior_guidance(BehaviorContext.from_persona_state(state)).public_dict()
         lines = [
             "Persona Runtime",
             f"ID: {state.persona_id}",
@@ -670,15 +862,201 @@ class AssistantSession:
             f"  attention: {momentary['attention']:.2f}",
             f"  valence: {momentary['valence']:.2f}",
             f"  activity: {momentary['activity']}",
-            "Read-only runtime snapshot; its bounded presentation state is injected into normal chat prompts.",
+            "Derived behavior controls:",
+        ])
+        lines.extend(
+            f"  {name}: {guidance[name]:.2f}"
+            for name in (
+                "warmth", "directness", "humor", "initiative", "patience", "verbosity",
+                "clarification_threshold", "interruption_tolerance",
+            )
+        )
+        lines.extend([
+            "Persona-local development:",
+            f"  interests: {len(development.interests)}",
+            f"  verified skills: {len(development.skills)}",
+            f"  learning records: {len(development.learning_records)}",
+            f"  reference records: {len(development.reference_records)}",
+            f"  real-world relationships: {len(self.persona_runtime_state.relationship_states)}",
+            "  storage: restart-ephemeral",
+            "Read-only runtime snapshot; its bounded behavior guidance is injected into normal chat prompts.",
         ])
         return "\n".join(lines)
+
+    def persona_list(self):
+        if self.persona_registry is None:
+            return "No persona packages are configured for this session."
+        lines = ["Configured persona packages:"]
+        for package in self.persona_registry.packages():
+            suffix = " (active)" if package.persona_id == self.persona_state.persona_id else ""
+            lines.append(f"{'*' if suffix else ' '} {package.persona_id} - {package.display_name}{suffix}")
+        return "\n".join(lines)
+
+    def persona_current(self):
+        return f"Active persona: {self.persona_state.persona_id} ({self.persona_state.display_name})"
+
+    def persona_use(self, requested_id):
+        requested_id = requested_id.strip().casefold()
+        if not requested_id:
+            return "Usage: persona use <persona-id>"
+        if self.persona_registry is None:
+            return "No persona packages are configured for this session."
+        package = self.persona_registry.get(requested_id)
+        if package is None:
+            return f"Persona package not found: {requested_id}"
+        if package.persona_id == self.persona_state.persona_id:
+            return f"Persona is already active: {package.persona_id}"
+        self.persona = package.persona
+        runtime = self.persona_runtime_registry.ensure(package.initial_state)
+        self.persona_runtime_state = runtime
+        self.persona_state = runtime.persona_state
+        self.persona_development_state = runtime.development_state
+        self.messages.clear()
+        self.last_memory_ids = []
+        self._pending_bulk_proposal_ids = None
+        self.last_turn_diagnostics = None
+        self.trace.record("persona_selected", persona_id=package.persona_id)
+        return f"Active persona set to: {package.persona_id}. Recent conversation context was cleared."
+
+    def _set_roleplay_state(self, state):
+        self.roleplay_state = state
+        self.messages.clear()
+        self.last_memory_ids = []
+
+    def roleplay_begin(self, title=None):
+        try:
+            self._set_roleplay_state(self.roleplay_state.begin(title))
+        except (TypeError, ValueError) as error:
+            return f"Assistant error: {error}"
+        label = f" ({self.roleplay_state.title})" if self.roleplay_state.title else ""
+        return f"Roleplay mode started{label}. Recent conversation context was cleared; eligible new memories are roleplay-scoped."
+
+    def roleplay_end(self):
+        if not self.roleplay_state.active:
+            return "Roleplay mode is not active."
+        self._set_roleplay_state(self.roleplay_state.end())
+        return "Roleplay mode ended. Recent conversation context was cleared."
+
+    def roleplay_status(self):
+        if not self.roleplay_state.active:
+            return "Roleplay mode: inactive."
+        label = self.roleplay_state.title or "unnamed"
+        return f"Roleplay mode: active ({label}; session-ephemeral, no adventure workspace loaded)."
+
+    def adventure_list(self):
+        """List only registered workspace metadata; this never mounts a story."""
+        try:
+            records = self.adventure_registry.list()
+        except AdventureRegistryError as error:
+            return f"Adventure registry error: {error}"
+        if not records:
+            return "No adventure workspaces are registered."
+        lines = ["Registered adventure workspaces:"]
+        lines.extend(f"  {record.title} ({record.adventure_id}; {record.status})" for record in records)
+        return "\n".join(lines)
+
+    def adventure_create(self, title):
+        if not title or not title.strip():
+            return "Usage: adventure create <title>"
+        try:
+            record = self.adventure_registry.create(title)
+        except (AdventureRegistryError, TypeError) as error:
+            return f"Adventure workspace was not created: {error}"
+        return (
+            f"Created adventure workspace: {record.title} ({record.adventure_id}). "
+            "It is metadata-only and is not loaded into this conversation yet."
+        )
+
+    def adventure_inspect(self, title):
+        if not title or not title.strip():
+            return "Usage: adventure inspect <title>"
+        try:
+            record = self.adventure_registry.resolve_title(title)
+        except AdventureNotFoundError:
+            return "Adventure workspace not found."
+        except (AdventureRegistryError, TypeError) as error:
+            return f"Adventure registry error: {error}"
+        return "\n".join((
+            f"Adventure workspace: {record.title}",
+            f"ID: {record.adventure_id}",
+            f"Created: {record.created_at}",
+            f"Status: {record.status}",
+            "Storage: manifest only; no story event log, database, semantic index, or mounted session.",
+        ))
+
+    def _set_adventure_session(self, state):
+        self.adventure_session = state
+        self.messages.clear()
+        self.last_memory_ids = []
+        self.last_turn_diagnostics = None
+
+    def adventure_load(self, title):
+        if not title or not title.strip():
+            return "Usage: adventure load <title>"
+        try:
+            record = self.adventure_registry.resolve_title(title)
+        except AdventureNotFoundError:
+            return "Adventure workspace not found."
+        except (AdventureRegistryError, TypeError) as error:
+            return f"Adventure registry error: {error}"
+        if self.adventure_session.record == record:
+            return f"Adventure workspace is already loaded: {record.title}."
+        self._set_adventure_session(self.adventure_session.mount(record))
+        return (
+            f"Adventure workspace loaded: {record.title}. Recent conversation context was cleared. "
+            "The workspace is metadata-only; no story, replay state, or roleplay mode was started."
+        )
+
+    def adventure_unload(self):
+        if not self.adventure_session.active:
+            return "No adventure workspace is loaded."
+        title = self.adventure_session.record.title
+        self._set_adventure_session(self.adventure_session.unmount())
+        return f"Adventure workspace unloaded: {title}. Recent conversation context was cleared."
+
+    def adventure_status(self):
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded."
+        record = self.adventure_session.record
+        return (
+            f"Adventure workspace: loaded ({record.title}; {record.adventure_id}; metadata-only, "
+            "session-ephemeral mount; no story state or replay loaded)."
+        )
+
     def command(self, text):
         lowered = text.strip().casefold()
+        # Keep a tiny, explicit correction surface for typo-prone persona
+        # diagnostics. Do not apply fuzzy matching to mutating commands.
+        if lowered == "persona curretn":
+            lowered = "persona current"
         if lowered == "context stats":
             return self.context_stats()
+        if lowered == "roleplay status":
+            return self.roleplay_status()
+        if lowered == "roleplay end":
+            return self.roleplay_end()
+        if lowered == "roleplay begin" or lowered.startswith("roleplay begin "):
+            return self.roleplay_begin(text.strip()[len("roleplay begin"):])
+        if lowered in {"adventure list", "adventures"}:
+            return self.adventure_list()
+        if lowered == "adventure create" or lowered.startswith("adventure create "):
+            return self.adventure_create(text.strip()[len("adventure create"):])
+        if lowered == "adventure inspect" or lowered.startswith("adventure inspect "):
+            return self.adventure_inspect(text.strip()[len("adventure inspect"):])
+        if lowered == "adventure load" or lowered.startswith("adventure load "):
+            return self.adventure_load(text.strip()[len("adventure load"):])
+        if lowered in {"adventure unload", "adventure unmount"}:
+            return self.adventure_unload()
+        if lowered in {"adventure status", "what is loaded", "what is loaded?", "what's loaded", "what's loaded?"}:
+            return self.adventure_status()
         if lowered == "persona inspect":
             return self.persona_inspect()
+        if lowered in {"persona list", "list personas"}:
+            return self.persona_list()
+        if lowered == "persona current":
+            return self.persona_current()
+        if lowered == "persona use" or lowered.startswith("persona use "):
+            return self.persona_use(text.strip()[len("persona use"):])
         if lowered in {"model list", "list models"}:
             try:
                 return self.model_list()
@@ -706,6 +1084,10 @@ class AssistantSession:
             return "\n".join(f"{assistant_public_id('proposal', row['id'], self.config.domain)} [{row['memory_type']}] {row['summary']}" for row in rows) or "No pending assistant proposals."
         if lowered == "proposal approve all":
             return self._review_bulk_approval()
+        if lowered == "memory scope" or lowered.startswith("memory scope "):
+            return self._set_memory_visibility_scope(text)
+        if lowered == "proposal scope" or lowered.startswith("proposal scope "):
+            return self._set_proposal_visibility_scope(text)
         if lowered.startswith("memory inspect"):
             parts = text.strip().split()
             if len(parts) != 3:
@@ -742,15 +1124,65 @@ class AssistantSession:
                     return f"Assistant error: {error}"
         return None
 
+    def _parse_visibility_scope_command(self, text, *, kind):
+        parts = text.strip().split()
+        label = "memory" if kind == "memory" else "proposal"
+        if len(parts) != 4:
+            return None, None, f"Usage: {label} scope <{'M' if kind == 'memory' else 'P'}-### or numeric id> <scope|type-derived>"
+        record_id = resolve_assistant_id(parts[2], kind, self.config.domain)
+        if record_id is None:
+            return None, None, f"{label.title()} not found."
+        scope = None if parts[3].casefold() in {"type-derived", "default", "clear"} else parts[3]
+        return record_id, scope, None
+
+    def _set_memory_visibility_scope(self, text):
+        memory_id, scope, error = self._parse_visibility_scope_command(text, kind="memory")
+        if error:
+            return error
+        if get_assistant_memory(memory_id, domain=self.config.domain) is None:
+            return "Memory not found."
+        try:
+            memory = update_assistant_memory(
+                memory_id, domain=self.config.domain, visibility_scope=scope,
+            )
+        except (TypeError, ValueError) as error:
+            return f"Assistant error: {error}"
+        display = memory.get("visibility_scope") or "type-derived"
+        return f"Set {assistant_public_id('memory', memory_id, self.config.domain)} visibility scope to: {display}."
+
+    def _set_proposal_visibility_scope(self, text):
+        proposal_id, scope, error = self._parse_visibility_scope_command(text, kind="proposal")
+        if error:
+            return error
+        if get_assistant_memory_proposal(proposal_id, domain=self.config.domain) is None:
+            return "Proposal not found."
+        try:
+            proposal = update_assistant_memory_proposal_visibility_scope(
+                proposal_id, scope, domain=self.config.domain,
+            )
+        except (TypeError, ValueError) as error:
+            return f"Assistant error: {error}"
+        display = proposal.get("visibility_scope") or "type-derived"
+        return f"Set {assistant_public_id('proposal', proposal_id, self.config.domain)} visibility scope to: {display}."
+
     def explain_memory(self, query=None):
         """Return a bounded, provenance-safe explanation payload."""
         retrieval_items = []
         if self._uses_default_memory_store:
-            retrieval_items = self.retriever.retrieve(query, domain=self.config.domain, limit=self.config.max_memories) if query is not None else [{"memory":{"id": memory_id}, "reasons": []} for memory_id in self.last_memory_ids]
+            retrieval_items = (
+                self.retriever.retrieve(query, domain=self.config.domain, limit=self.config.max_memories)
+                if query is not None else [{"memory":{"id": memory_id}, "reasons": []} for memory_id in self.last_memory_ids]
+            )
+            if query is not None:
+                retrieval_items, _ = self._apply_shared_memory_visibility(retrieval_items)
             target_ids = [item["memory"]["id"] for item in retrieval_items]
             source_memories = {memory_id: inspect_assistant_memory(memory_id, domain=self.config.domain) for memory_id in target_ids}
         else:
             custom = self.memory_loader(domain=self.config.domain, status="active", limit=self.config.max_memories)
+            custom_items, _ = self._apply_shared_memory_visibility(
+                [{"memory": memory, "reasons": ["custom memory loader"]} for memory in custom]
+            )
+            custom = [item["memory"] for item in custom_items]
             target_ids = self.last_memory_ids if query is None else [memory["id"] for memory in custom if any(token in (memory.get("summary","")+" "+memory.get("details","")).casefold() for token in query.casefold().split())]
             source_memories = {memory["id"]: {"memory": memory, "evidence": []} for memory in custom if memory["id"] in target_ids}
         if not target_ids: return {"status": "ambiguous" if query is None else "no_match", "memories": []}
@@ -819,18 +1251,21 @@ class AssistantSession:
             return "Bulk approval cancelled."
         if user_text.casefold() == "context stats":
             return self.context_stats()
+        if detect_casual_roleplay_start(user_text):
+            result = self.roleplay_begin()
+            self.trace.record("roleplay_start", source="casual_explicit_phrase")
+            return result
+        command_result = self.command(user_text)
+        if command_result is not None:
+            self.trace.record("command", command=user_text)
+            return command_result
         direct_help = detect_command_help(user_text)
         if direct_help is not None:
             self.trace.record("command_help", intent=direct_help.intent, command=user_text)
             return direct_help.render()
-        command_result = self.command(user_text)
-        if command_result is None:
-            introspection = self._memory_introspection(user_text)
-            if introspection is not None:
-                return introspection
-        if command_result is not None:
-            self.trace.record("command", command=user_text)
-            return command_result
+        introspection = self._memory_introspection(user_text)
+        if introspection is not None:
+            return introspection
         previous_memory_ids = list(self.last_memory_ids)
         self._turn_started_at = time.perf_counter()
         plan = self._context_plan(user_text, external_document_context=external_document_context)
@@ -881,7 +1316,7 @@ class AssistantSession:
 
 def format_assistant_memory(inspected):
     memory = inspected["memory"]; evidence = inspected.get("evidence", [])
-    lines=[f"Memory {assistant_public_id('memory', memory['id'], memory.get('domain', 'personal'))}",f"Domain: {memory.get('domain','unknown')}",f"Type: {memory.get('memory_type','unknown')}",f"Subject: {memory.get('subject','unknown')}","","Summary:",memory.get('summary') or '(none)',"","Details:",memory.get('details') or '(none)',"",f"Confidence: {memory.get('confidence','unknown')}",f"Importance: {memory.get('importance','unknown')}",f"Retention: {memory.get('retention','unknown')}",f"Status: {memory.get('status','unknown')}","","Evidence:"]
+    lines=[f"Memory {assistant_public_id('memory', memory['id'], memory.get('domain', 'personal'))}",f"Domain: {memory.get('domain','unknown')}",f"Type: {memory.get('memory_type','unknown')}",f"Subject: {memory.get('subject','unknown')}","","Summary:",memory.get('summary') or '(none)',"","Details:",memory.get('details') or '(none)',"",f"Confidence: {memory.get('confidence','unknown')}",f"Importance: {memory.get('importance','unknown')}",f"Retention: {memory.get('retention','unknown')}",f"Visibility scope: {memory.get('visibility_scope') or 'type-derived (legacy fallback)'}",f"Status: {memory.get('status','unknown')}","","Evidence:"]
     if not evidence: lines.append("no recorded evidence provenance")
     for i,item in enumerate(evidence,1): lines.extend([f'{i}. "{item.get("raw_excerpt") or "(observation text unavailable)"}"',f"   Source: {item.get('source','unknown')}",f"   Added: {item.get('observed_at','unknown')}",f"   Observation key: {item.get('evidence_hash') or 'legacy/unavailable'}",f"   Proposal: {assistant_public_id('proposal', item.get('proposal_id'), memory.get('domain', 'personal')) if item.get('proposal_id') else 'unknown'}"])
     lines.extend(["",f"Created: {memory.get('created_at','unknown')}",f"Updated: {memory.get('updated_at','unknown')}"])
@@ -892,7 +1327,7 @@ def format_assistant_memory_proposal(inspected):
     evidence = inspected.get("evidence", [])
     identity = proposal.get("proposal_key") or "legacy/unavailable"
     support = proposal.get("evidence_count") if proposal.get("evidence_count") is not None else "legacy/unavailable"
-    lines = [f"Proposal {assistant_public_id('proposal', proposal['id'], proposal.get('domain', 'personal'))}", f"Status: {proposal.get('status', 'unknown')}", f"Domain: {proposal.get('domain', 'unknown')}", f"Type: {proposal.get('memory_type', 'unknown')}", f"Subject: {proposal.get('subject', 'unknown')}", "", "Summary:", proposal.get("summary") or "(none)", "", "Details:", proposal.get("details") or "(none)", "", f"Confidence: {proposal.get('confidence', 'unknown')}", f"Importance: {proposal.get('importance', 'unknown')}", f"Retention: {proposal.get('retention', 'unknown')}", f"Support: {support}", "", f"Identity: {identity}", "", "Evidence:"]
+    lines = [f"Proposal {assistant_public_id('proposal', proposal['id'], proposal.get('domain', 'personal'))}", f"Status: {proposal.get('status', 'unknown')}", f"Domain: {proposal.get('domain', 'unknown')}", f"Type: {proposal.get('memory_type', 'unknown')}", f"Subject: {proposal.get('subject', 'unknown')}", "", "Summary:", proposal.get("summary") or "(none)", "", "Details:", proposal.get("details") or "(none)", "", f"Confidence: {proposal.get('confidence', 'unknown')}", f"Importance: {proposal.get('importance', 'unknown')}", f"Retention: {proposal.get('retention', 'unknown')}", f"Visibility scope: {proposal.get('visibility_scope') or 'type-derived on approval'}", f"Support: {support}", "", f"Identity: {identity}", "", "Evidence:"]
     if not evidence:
         lines.append("no recorded evidence provenance")
     else:
@@ -919,7 +1354,7 @@ def run_interactive(config_path=DEFAULT_CONFIG_PATH, input_fn=input, output_fn=p
         stream_writer=stream_writer,
     )
     session = application.session
-    output_fn("StarFur Assistant (model list/current/use, remember/forget, memory list/search/inspect, persona inspect, proposal list/inspect/approve/reject/approve all, context stats; quit to exit)")
+    output_fn("StarFur Assistant (model list/current/use, persona list/current/use/inspect, roleplay begin/end/status, adventure list/create/inspect/load/status/unload, remember/forget, memory list/search/inspect/scope, proposal list/inspect/approve/reject/approve all/scope, context stats; quit to exit)")
     while True:
         try:
             user_text = input_fn("You: ")

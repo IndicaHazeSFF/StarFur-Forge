@@ -11,7 +11,7 @@ sys.modules.setdefault("ollama", types.ModuleType("ollama"))
 
 from pipeline.application import AssistantApplication
 
-from pipeline.api import API_MODEL_ID, CONVERSATION_HEADER, DOCUMENT_ANNOTATE_PATH, DOCUMENT_CONTEXT_PATH, DOCUMENT_PREPARE_PATH, DOCUMENT_REVIEW_PATH, StarFurAPI, StarFurHTTPServer
+from pipeline.api import API_MODEL_ID, CONVERSATION_HEADER, DOCUMENT_ANNOTATE_PATH, DOCUMENT_CONTEXT_PATH, DOCUMENT_PREPARE_PATH, DOCUMENT_REVIEW_PATH, PERSONA_RUNTIME_PATH, StarFurAPI, StarFurHTTPServer
 
 
 class FakeConfig:
@@ -124,6 +124,41 @@ class APITests(unittest.TestCase):
         self.assertEqual(diagnostics["model"]["active"], "qwen3:8b")
         self.assertFalse(diagnostics["provider"]["probe_performed"])
         self.assertIn("capabilities", diagnostics)
+
+    def test_diagnostics_provider_probe_is_explicit_and_non_generating(self):
+        class Provider:
+            name = "probe fake"
+
+            def __init__(self):
+                self.calls = 0
+
+            def probe_health(self):
+                self.calls += 1
+                return {"models": [{"name": "one"}]}
+
+        provider = Provider()
+        self.session.provider = provider
+        status, raw = self.request("GET", "/v1/starfur/diagnostics?probe=provider")
+        diagnostics = json.loads(raw)
+
+        self.assertEqual(status, 200)
+        self.assertEqual(provider.calls, 1)
+        self.assertEqual(diagnostics["provider"]["health"], "healthy")
+        self.assertEqual(diagnostics["provider"]["model_count"], 1)
+        self.assertEqual(self.session.calls, [])
+
+        status, raw = self.request("GET", "/v1/starfur/diagnostics?probe=all")
+        self.assertEqual(status, 400)
+        self.assertIn("probe=provider", json.loads(raw)["error"]["message"])
+
+    def test_persona_runtime_endpoint_is_read_only_and_compatible(self):
+        status, raw = self.request("GET", PERSONA_RUNTIME_PATH)
+
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(raw), {
+            "object": "starfur.persona_runtime", "available": False, "persona": None,
+        })
+        self.assertEqual(self.session.calls, [])
 
     def test_chat_uses_latest_user_message_and_does_not_accept_unknown_model(self):
         status, raw = self.request("POST", "/v1/chat/completions", {
@@ -270,6 +305,7 @@ class APITests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(payload["object"], "starfur.document.proposal_handoff")
         self.assertEqual(payload["proposal_id"], 77)
+        self.assertEqual(payload["proposal_ref"], "P-077")
         self.assertEqual(payload["proposal_status"], "pending")
         self.assertEqual(payload["persistence_action"], "created")
         self.assertEqual(self.proposal_writes[0]["domain"], "personal")

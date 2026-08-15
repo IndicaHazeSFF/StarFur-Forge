@@ -56,8 +56,32 @@ def detect_command_help(query: str) -> CommandHelp | None:
                 "proposal approve <id>",
                 "proposal reject <id>",
                 "proposal approve all",
+                "proposal scope <id> <scope|type-derived>",
             ),
-            notes=("For `proposal approve all`, StarFur requires a second confirmation: `approve all`.",),
+            notes=("For `proposal approve all`, StarFur requires a second confirmation: `approve all`. Scope changes are explicit; `type-derived` clears an explicit scope.",),
+        )
+
+    if _contains_any(value, (
+        "how do i start roleplay", "how can i start roleplay", "how do i begin roleplay",
+        "how do i start an adventure", "how can i start an adventure", "roleplay mode",
+    )):
+        return CommandHelp(
+            intent="roleplay_session",
+            title="To start or end the current session's bounded roleplay mode, use:",
+            commands=("roleplay begin [optional title]", "roleplay status", "roleplay end"),
+            notes=("You can also say 'let's roleplay' or 'let's go on an adventure'. This initial mode is session-only; no adventure workspace or replay history is created yet.",),
+        )
+
+    if _contains_any(value, (
+        "how do i create an adventure", "how can i create an adventure",
+        "how do i list adventures", "how can i list adventures",
+        "how do i inspect an adventure", "how can i inspect an adventure",
+    )):
+        return CommandHelp(
+            intent="adventure_registry",
+            title="To prepare or inspect an isolated future adventure workspace, use:",
+            commands=("adventure list", "adventure create <title>", "adventure inspect <title>", "adventure load <title>", "adventure status", "adventure unload"),
+            notes=("Creating a workspace writes only registry/manifest metadata. Loading currently attaches only that metadata to this session; it does not start or replay a story yet.",),
         )
 
     if _contains_any(value, (
@@ -91,6 +115,13 @@ def detect_command_help(query: str) -> CommandHelp | None:
             commands=("persona inspect",),
             notes=("This shows bounded state metadata and does not display the full persona prompt or change state.",),
         )
+    if _contains_any(value, ("how do i switch persona", "how can i switch persona", "how do i change persona", "how can i change persona", "how do i list personas", "how can i list personas", "how do i select a persona", "how can i select a persona")):
+        return CommandHelp(
+            intent="persona_selection",
+            title="To view or change the active persona for this session, use:",
+            commands=("persona list", "persona current", "persona use <persona-id>", "persona inspect"),
+            notes=("Selecting a persona clears only this session's recent conversation context; shared memory and system capabilities stay unchanged.",),
+        )
     if _contains_any(value, (
         "how do i remember", "how can i remember", "how do i save a memory",
         "how can i save a memory", "how do i forget", "how can i forget",
@@ -109,8 +140,9 @@ def detect_command_help(query: str) -> CommandHelp | None:
                 "memory list",
                 "memory search <query>",
                 "memory inspect <id>",
+                "memory scope <id> <scope|type-derived>",
             ),
-            notes=("Forgetting is a soft status change that preserves historical provenance.",),
+            notes=("Forgetting is a soft status change that preserves historical provenance. Scope changes are explicit; `type-derived` clears an explicit scope.",),
         )
 
     return None

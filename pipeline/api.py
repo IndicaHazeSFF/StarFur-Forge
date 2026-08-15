@@ -42,6 +42,7 @@ DOCUMENT_PREPARE_PATH = "/v1/starfur/documents/prepare"
 DOCUMENT_ANNOTATE_PATH = "/v1/starfur/documents/annotate"
 DOCUMENT_REVIEW_PATH = "/v1/starfur/documents/review"
 DOCUMENT_CONTEXT_PATH = "/v1/starfur/documents/context"
+PERSONA_RUNTIME_PATH = "/v1/starfur/persona-runtime"
 MAX_DOCUMENT_REQUEST_BYTES = DEFAULT_MAX_DOCUMENT_BYTES * 6 + 64 * 1024
 
 
@@ -456,7 +457,21 @@ class _Handler(BaseHTTPRequestHandler):
                 self._send_json(400, {"error": {"message": str(error), "type": "invalid_request_error"}})
         elif parsed.path == "/v1/starfur/diagnostics":
             try:
-                self._send_json(200, self.api.application.runtime_diagnostics(conversation_id=self.headers.get(CONVERSATION_HEADER)))
+                query = parse_qs(parsed.query, keep_blank_values=True)
+                probe_values = query.get("probe", [])
+                if len(probe_values) > 1 or (probe_values and probe_values[0] != "provider"):
+                    raise ValueError("Diagnostics probe must be exactly probe=provider.")
+                self._send_json(200, self.api.application.runtime_diagnostics(
+                    conversation_id=self.headers.get(CONVERSATION_HEADER),
+                    probe_provider=bool(probe_values),
+                ))
+            except ValueError as error:
+                self._send_json(400, {"error": {"message": str(error), "type": "invalid_request_error"}})
+        elif parsed.path == PERSONA_RUNTIME_PATH:
+            try:
+                self._send_json(200, self.api.application.persona_runtime_snapshot(
+                    conversation_id=self.headers.get(CONVERSATION_HEADER),
+                ))
             except ValueError as error:
                 self._send_json(400, {"error": {"message": str(error), "type": "invalid_request_error"}})
         elif parsed.path == DOCUMENT_REVIEW_PATH:
@@ -607,4 +622,4 @@ def serve(*, host="127.0.0.1", port=8000, config_path=None, api_key=None, quiet=
         server.server_close()
 
 
-__all__ = ["API_MODEL_ID", "CONVERSATION_HEADER", "DOCUMENT_ANNOTATE_PATH", "DOCUMENT_CONTEXT_PATH", "DOCUMENT_PREPARE_PATH", "DOCUMENT_REVIEW_PATH", "StarFurAPI", "StarFurHTTPServer", "create_api_application", "create_api_session", "serve"]
+__all__ = ["API_MODEL_ID", "CONVERSATION_HEADER", "DOCUMENT_ANNOTATE_PATH", "DOCUMENT_CONTEXT_PATH", "DOCUMENT_PREPARE_PATH", "DOCUMENT_REVIEW_PATH", "PERSONA_RUNTIME_PATH", "StarFurAPI", "StarFurHTTPServer", "create_api_application", "create_api_session", "serve"]

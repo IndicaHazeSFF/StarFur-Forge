@@ -21,6 +21,7 @@ class CapabilityRegistryTests(unittest.TestCase):
             sorted(capability["id"] for capability in payload["capabilities"]),
         )
         self.assertIn("assistant.memory.proposals", [capability["id"] for capability in payload["capabilities"]])
+        self.assertIn("assistant.roleplay_session", [capability["id"] for capability in payload["capabilities"]])
         self.assertEqual(manifest.get("assistant.model_selection").user_controls[0], "model list")
         self.assertIn("context stats", manifest.get("assistant.context_diagnostics").user_controls)
         self.assertEqual(manifest.get("assistant.memory.proposals").state, "requires_confirmation")
@@ -103,6 +104,8 @@ class CapabilityRegistryTests(unittest.TestCase):
 
         self.assertEqual([capability.id for capability in selected], ["assistant.memory.proposals"])
         self.assertEqual([capability.id for capability in review_selected], ["assistant.memory.proposals"])
+        roleplay_selected = manifest.select_for_query("How do I start roleplay?")
+        self.assertEqual([capability.id for capability in roleplay_selected], ["assistant.roleplay_session"])
     def test_manifest_rejects_unstable_order_and_duplicate_ids(self):
         first = Capability("test.a", "A", "test", "Summary", "Details")
         second = Capability("test.b", "B", "test", "Summary", "Details")
