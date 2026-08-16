@@ -52,6 +52,9 @@ class Filter:
         STARFUR_BASE_URL: str = "http://host.docker.internal:8001"
         STARFUR_API_KEY: str = ""
         DOMAIN: str = "personal"
+        # ``auto`` recognizes explicit adventure-state section labels and
+        # otherwise preserves normal assistant-note chunking.
+        DOCUMENT_PROFILE: str = "auto"
         DOCUMENT_CONTEXT_LIMIT: int = 3
         REVIEW_CACHE_SECONDS: int = 14 * 60
         MAX_SOURCE_BYTES: int = DEFAULT_MAX_SOURCE_BYTES
@@ -237,11 +240,12 @@ class Filter:
         try:
             with urlopen(Request(url, headers=headers, method="GET"), timeout=timeout) as response:
                 raw = self._read_bounded(response, maximum=maximum)
+        except TimeoutError as error:
+            raise DocumentBridgeError("OpenWebUI attachment download timed out.") from error
         except HTTPError as error:
             raise DocumentBridgeError(f"OpenWebUI could not provide the attachment (HTTP {error.code}).") from error
         except URLError as error:
-            reason = str(getattr(error, "reason", "unreachable"))
-            raise DocumentBridgeError(f"OpenWebUI attachment download failed ({reason}); check OPENWEBUI_BASE_URL.") from error
+            raise DocumentBridgeError("OpenWebUI attachment download failed; check OPENWEBUI_BASE_URL.") from error
         try:
             return filename, raw.decode("utf-8")
         except UnicodeDecodeError as error:
@@ -263,11 +267,12 @@ class Filter:
         try:
             with urlopen(Request(self._starfur_url(path), data=body, headers=headers, method="POST"), timeout=timeout) as response:
                 raw = self._read_bounded(response, maximum=DEFAULT_MAX_API_RESPONSE_BYTES)
+        except TimeoutError as error:
+            raise DocumentBridgeError("StarFur document intake timed out.") from error
         except HTTPError as error:
             raise DocumentBridgeError(f"StarFur document intake failed (HTTP {error.code}).") from error
         except URLError as error:
-            reason = str(getattr(error, "reason", "unreachable"))
-            raise DocumentBridgeError(f"StarFur document intake is unavailable ({reason}); check STARFUR_BASE_URL.") from error
+            raise DocumentBridgeError("StarFur document intake is unavailable; check STARFUR_BASE_URL.") from error
         try:
             value = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -280,7 +285,12 @@ class Filter:
         file_id = self._file_id(reference)
         if not file_id:
             raise DocumentBridgeError("Attachment is missing an OpenWebUI file ID.")
-        return "|".join((file_id, self.valves.DOMAIN.strip(), self.valves.STARFUR_BASE_URL.strip().rstrip("/")))
+        return "|".join((
+            file_id,
+            self.valves.DOMAIN.strip(),
+            self.valves.DOCUMENT_PROFILE.strip().casefold(),
+            self.valves.STARFUR_BASE_URL.strip().rstrip("/"),
+        ))
 
     def _cached_review(self, key: str) -> tuple[str, int] | None:
         now = time.monotonic()
@@ -312,6 +322,21 @@ class Filter:
         except Exception:
             # Progress reporting cannot change document safety or turn behavior.
             return
+
+    @staticmethod
+    def _unexpected_failure_message(stage: str, error: Exception) -> str:
+        """Return a useful failure category without exposing exception details."""
+        if isinstance(error, TimeoutError):
+            category = "timed out"
+        elif isinstance(error, UnicodeError):
+            category = "text decoding failed"
+        elif isinstance(error, (TypeError, KeyError, AttributeError, ValueError)):
+            category = "configuration or attachment metadata was invalid"
+        elif isinstance(error, OSError):
+            category = "transport error"
+        else:
+            category = "unexpected bridge error"
+        return f"StarFur document bridge: {stage} failed safely ({category})."
 
     async def inlet(self, body: dict[str, Any], __request__=None, __event_emitter__=None, __user__=None, __model__=None) -> dict[str, Any]:
         """Create/reuse one reviewed source, then bind its ID to this chat turn.
@@ -348,18 +373,27 @@ class Filter:
             return body
 
         reference = references[0]
+        stage = "attachment setup"
         try:
             limit = self._bounded_int(self.valves.DOCUMENT_CONTEXT_LIMIT, name="DOCUMENT_CONTEXT_LIMIT", minimum=1, maximum=8)
             key = self._cache_key(reference)
             cached = self._cached_review(key)
             if cached is None:
                 await self._emit(__event_emitter__, "StarFur document bridge: preparing attachment...", done=False)
+                stage = "attachment download"
                 filename, content = await asyncio.to_thread(self._download_file, reference, __request__)
+                stage = "StarFur annotation request"
                 annotation = await asyncio.to_thread(
                     self._starfur_json,
                     "/v1/starfur/documents/annotate",
-                    {"filename": filename, "content": content, "domain": self.valves.DOMAIN.strip()},
+                    {
+                        "filename": filename,
+                        "content": content,
+                        "domain": self.valves.DOMAIN.strip(),
+                        "profile": self.valves.DOCUMENT_PROFILE.strip(),
+                    },
                 )
+                stage = "annotation response validation"
                 review = annotation.get("review")
                 review_id = review.get("id") if isinstance(review, dict) else None
                 candidate_count = review.get("candidate_count") if isinstance(review, dict) else None
@@ -369,6 +403,7 @@ class Filter:
                     raise DocumentBridgeError("StarFur document intake returned an invalid review count.")
                 self._remember_review(key, review_id, candidate_count)
                 cached = (review_id, candidate_count)
+            stage = "review context binding"
             review_id, candidate_count = cached
             body["starfur_document_context"] = {"review_id": review_id, "limit": limit}
             await self._emit(
@@ -378,7 +413,7 @@ class Filter:
             )
         except DocumentBridgeError as error:
             await self._emit(__event_emitter__, f"StarFur document bridge: {error}", done=True)
-        except Exception:
-            # Do not leak implementation details or fall back to implicit RAG.
-            await self._emit(__event_emitter__, "StarFur document bridge: attachment processing failed safely.", done=True)
+        except Exception as error:
+            # Do not leak exception details or fall back to implicit RAG.
+            await self._emit(__event_emitter__, self._unexpected_failure_message(stage, error), done=True)
         return body

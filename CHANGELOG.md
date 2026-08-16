@@ -967,3 +967,14 @@
 
 - Design: future apartment presentation may show a cached illustrative adventure scene after permissioned user inactivity, using structured adventure state, stable asset/style references, debounce/resource limits, and immediate return on user activity.
 - Future research: procedural generated adventures may combine deterministic world/state simulation, persona-driven meaningful decisions, replayable event history, and generated/composited visuals. Authoritative state and replay must precede this feature; idle images are never canonical events.
+
+## 2026-08-15 - Roadmap adventure-owned narrative memory
+- Design: future adventures will maintain automatically updated, bounded narrative continuity inside an isolated `adventure:<id>` event/state store rather than using the shared user-memory approval workflow.
+- Scope: salient choices, discoveries, promises, lies, relationships, character knowledge, inventory, locations, and unresolved hooks may persist automatically; decorative prose and ordinary dialogue will not.
+- Boundary: adventure state remains replayable, inspectable, resettable, and separate from shared assistant memory, lore memory, and persona self-memory. External `details.md` imports remain reviewed document/context input until the authoritative event/state layer exists.
+
+## 2026-08-16 - Add structural external-document prechunking
+- Behavior: `pipeline.document_prechunker` adds deterministic, model-free `assistant_note`, `technical_document`, `adventure_state`, and `manuscript` profiles. Adventure sections preserve Markdown headings and explicit state labels before bounded paragraph/sentence chunking; legacy note behavior and chunk IDs remain compatible.
+- Integration: document prepare/annotate accepts an optional profile and returns the resolved profile. The optional OpenWebUI filter now sends `DOCUMENT_PROFILE=auto`, selecting adventure-state structure only from explicit labels while cache keys remain profile-specific.
+- Constraints: this does not annotate selectively, persist uploads, change review/proposal approval, create adventure state, call models during preparation, or add async processing.
+- Verification: focused prechunker (4), document-intake (11), API (21), and OpenWebUI filter (9) tests passed locally.

@@ -200,6 +200,8 @@ Create-your-own-adventure sessions are isolated, mountable story worlds rather t
 
 **COMPLETED SESSION-MOUNT FOUNDATION:** A user may now explicitly load or unload a resolved workspace in one conversation. The mount contains only registry metadata, clears that session's recent context on transitions, and renders a boundary stating that there are no events, characters, relationships, replay history, or hidden narration to resume. It does not activate roleplay or write story data.
 
+**ADVENTURE-OWNED NARRATIVE MEMORY (PLANNED):** Adventure continuity must use a separate automatically maintained `adventure:<id>` event/state store rather than the conservative shared assistant-memory proposal workflow. A bounded salience layer may persist meaningful choices, discoveries, promises, lies, relationship changes, character knowledge, inventory, locations, unresolved hooks, and other continuity-critical state without interrupting immersion. Decorative prose and ordinary dialogue should not become durable events. Adventure state remains isolated from shared user memory, lore memory, and persona self-memory; it is replayable, inspectable, resettable, size-bounded, and never silently promoted to real-world memory. Importing an external `details.md` file remains a reviewed document/context path until this authoritative event/state layer exists.
+
 1. Add deterministic story-mode controls for starting, resuming, pausing, archiving, resetting, and ending an adventure. Natural-language story-intent detection may assist discovery, but Core-owned commands—especially `end story now` and its documented equivalents—always take precedence and cannot be delayed or reinterpreted by the narrator. Support explicit natural-language entry and resume phrases such as `Murr, let's roleplay`, `Murr, let's go on an adventure`, `Murr, resume the adventure <title>`, and `Murr, load roleplay <title>`. Resolve titles through the global adventure registry; ask for clarification on ambiguous matches and never silently create a new world when the user requested a resume.
 2. Mount adventure state into context without merging it into user memory, lore memory, or persona self-memory. A resident persona may narrate inside the world while retaining a separate shared-reality identity and relationship with the user.
 3. Make a validated, append-only adventure event log authoritative. Record meaningful choices, discoveries, promises, lies, relationship changes, emotional transitions, state changes, and unresolved hooks as events. Derived state and snapshots may accelerate loading but must be rebuildable from events.
@@ -209,14 +211,36 @@ Create-your-own-adventure sessions are isolated, mountable story worlds rather t
 7. End or interrupt story turns transactionally: commit only completed validated events, never partial generated narration or unverified inferred state; unmount adventure-only recent context when returning to normal companion mode.
 8. Add replay, branching, long-session persistence, relationship consistency, event-recovery, and cross-boundary regression benchmarks before treating the subsystem as production-ready. Shared-reality memories such as “Roger enjoyed Quiet Ember” may enter normal memory only through ordinary assistant proposal and approval rules.
 
+#### Persistent adventure simulation (future)
+
+Adventures may eventually continue bounded, deterministic activity while the user is away. The language model must not
+simulate every elapsed minute. Core simulation logic advances approved activities, resources, timers, and state, then
+wakes a provider only for meaningful decisions, novel events, relationship interpretation, reflection, or significant
+narration. Simulation results become structured evidence first; the active persona presents them later.
+
+Keep these layers distinct: transcript (what was narrated), an append-only canonical event log (what happened),
+authoritative current state (money, inventory, health, location, activity, resources, equipment, and world flags),
+derived memory (salient history), and optional rebuildable snapshots. Volatile state must never be reconstructed from
+semantic memory retrieval or stale recalled facts. Simulation must use explicit time boundaries, resource limits,
+reproducible seeds/manifests, pause/resume/recovery behavior, and transactional commits that never persist partial
+narration or unverified inferred state. Activity selection may use persona interests, energy, mood, skills, goals,
+resources, relationship context, and repetition penalties, but formulas remain Core-owned, inspectable, and permissioned.
+Events stay inside `adventure:<id>` and cannot silently become real-world user memories or persona claims. On return,
+Core filters event salience before asking the persona for a concise recap; exact state remains available through
+structured inspection. A later apartment surface may show location, activity, and artifacts while resident and
+adventure state remain separate. Add simulation, offline-catch-up, recap, and boundary benchmarks before production.
+
 ### Stage 6 - Tools, perception, and resident environment
 
 1. Add structured tool registry and permission engine with allow-once, always-allow, deny, and confirmation-required policies.
 2. **IN PROGRESS:** Add document intake for large external files: OpenWebUI/API upload -> bounded validation -> Prechunker/Mr. Chonker chunking -> optional annotation/indexing -> provenance-aware retrieval. **COMPLETED INITIAL VERTICAL SLICE:** bounded text preparation, provider-backed annotation, re-annotation-stable candidate provenance, explicit single/batch review handoff, normal proposal approval, deterministic retrieval of approved document memories with safe origin labels, read-only review-scoped lexical source-context packets, explicit API chat-time source-context binding, and an optional OpenWebUI Filter artifact for one authenticated UTF-8 text upload per turn. The Filter disables OpenWebUI's built-in RAG only for the attached StarFur model, routes the source through StarFur annotation/review, binds only the resulting review ID to chat, and exposes exact Core-owned review/approve/reject commands for its short-lived candidates. Remaining: richer visual review controls, canonical manuscript-path integration, multi-file/non-text ingestion, and semantic indexing. Integrate or intercept external UI RAG so uploaded source text remains distinct from the user request, StarFur command routing remains reliable, and the canonical chunk/annotation/provenance pipeline owns document context before release. Do not inject entire documents into every assistant prompt; retain source identity, chunk identity, and domain.
+
+   **COMPLETED STRUCTURAL PRECHUNK SLICE:** Added deterministic, model-free document profiles before external annotation. Legacy `assistant_note` behavior remains stable; `technical_document` and `adventure_state` preserve heading/state boundaries before bounded chunking, and the OpenWebUI bridge can safely select `auto` from explicit structure. This improves large narrative-document throughput without changing review, proposal approval, shared memory, or source-context boundaries. Remaining: selective/query-driven annotation, asynchronous or pollable processing, multi-file intake, and semantic document indexing.
 3. Add one-shot VisionProvider screen/window/region/image/PDF inspection.
 4. Add image, speech, and media provider interfaces and explicit capability routing.
 5. Build the low-resource apartment as a state visualization: workbench for active projects, bookshelf for installed models, newspaper for feeds, calendar for schedule, window for permissioned desktop state, and frames for artwork.
 6. Keep generated/procedural placeholder assets replaceable by commissioned art through stable asset IDs.
+7. Add an opt-in idle adventure scene display after structured adventure state and image generation exist. When permissioned user inactivity exceeds a configurable delay and an adventure remains active, Core may summarize the current structured scene and generate a cached illustrative image for an apartment frame/overlay. It must debounce generation, respect privacy/resource modes, react immediately to user activity, and never treat the image as canon or invoke an LLM for every idle tick.
 
 ### Stage 7 - Resident intelligence and Crown of Claws writing mode
 
@@ -274,6 +298,8 @@ Required tools include deterministic benchmark suites, router decision traces, r
 - Autonomous learning and replayable companion regression benchmarks.
 - Proactive assistance and scheduling with permission.
 - Native media generation and perception.
+- Procedural generated adventures with deterministic world generation, persona-driven meaningful decisions, persistent event/state/replay support, and generated/composited visuals of the active scene. This is post-prototype work: authoritative simulation and replay must work before visuals become part of the adventure loop.
+- Idle adventure scene rendering in the apartment: a permissioned, cached “Murr is currently…” display driven by structured adventure state and stable asset/style IDs, with explicit hide/freeze/refresh controls.
 - Licensing, workshop distribution, and companion packaging.
 
 ## End state

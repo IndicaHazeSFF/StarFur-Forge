@@ -254,10 +254,23 @@ class APITests(unittest.TestCase):
         self.assertEqual(payload["object"], "starfur.document.preparation")
         self.assertEqual(payload["source"]["name"], "notes.md")
         self.assertEqual(payload["source"]["domain"], "project:starfur")
+        self.assertEqual(payload["source"]["profile"], "assistant_note")
         self.assertEqual(payload["source"]["chunk_count"], 1)
         self.assertTrue(payload["source"]["id"].startswith("external:"))
         self.assertNotIn("text", payload["chunks"][0])
         self.assertEqual(self.session.calls, [])
+
+    def test_document_preparation_accepts_structural_profile(self):
+        status, raw = self.request("POST", DOCUMENT_PREPARE_PATH, {
+            "filename": "adventure.md",
+            "content": "# Story State\n\nKnown fact.\n\nCURRENT SCENE\n\nThe storm begins.",
+            "domain": "personal",
+            "profile": "adventure_state",
+        })
+        payload = json.loads(raw)
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["source"]["profile"], "adventure_state")
+        self.assertEqual(payload["source"]["chunk_count"], 2)
 
     def test_document_annotation_returns_reviewable_candidates_without_chat_or_storage(self):
         status, raw = self.request("POST", DOCUMENT_ANNOTATE_PATH, {

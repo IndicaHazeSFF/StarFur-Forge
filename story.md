@@ -223,7 +223,7 @@ Do not offer choices.
 
 This is a **retrieval and continuity test only**.
 
-##details.md ##
+##details.md story is here: ##
 
 # Quiet Ember — Story Details
 

@@ -13,7 +13,12 @@ import json
 from pathlib import Path
 from typing import Callable, Iterable, Mapping
 
-from pipeline.chunker import chunk_text
+from pipeline.document_prechunker import (
+    ASSISTANT_NOTE_PROFILE,
+    DocumentPrechunkError,
+    prechunk_document_text,
+    resolve_document_profile,
+)
 from pipeline.domains import normalize_domain
 from pipeline.memory_proposal_validation import validate_memory_proposal
 
@@ -44,6 +49,7 @@ class IntakeChunk:
     source_name: str
     source_kind: str
     domain: str
+    profile: str
     chunk_id: str
     scene_index: int
     chunk_index: int
@@ -60,6 +66,7 @@ class PreparedDocument:
     source_name: str
     source_kind: str
     domain: str
+    profile: str
     content_hash: str
     byte_count: int
     chunks: tuple[IntakeChunk, ...]
@@ -162,18 +169,29 @@ def _prepare_document_bytes(
     source_name: object,
     domain: str | None,
     max_bytes: int,
-    max_chars: int,
+    max_chars: int | None,
     overlap_paragraphs: int,
+    profile: object,
 ) -> PreparedDocument:
     safe_name = _validate_source_name(source_name)
     text = _validate_document_bytes(data, max_bytes=max_bytes)
     normalized_domain = normalize_domain(domain)
+    try:
+        selected_profile = resolve_document_profile(profile, text)
+        raw_chunks = prechunk_document_text(
+            text,
+            profile=selected_profile,
+            max_chars=max_chars,
+            overlap_paragraphs=overlap_paragraphs,
+        )
+    except DocumentPrechunkError as error:
+        raise DocumentIntakeError(str(error)) from error
     content_hash = sha256(data).hexdigest()
     source_id = f"external:{content_hash}"
-    raw_chunks = chunk_text(
-        text,
-        max_chars=max_chars,
-        overlap_paragraphs=overlap_paragraphs,
+    chunk_prefix = (
+        f"{source_id}:scene"
+        if selected_profile == ASSISTANT_NOTE_PROFILE
+        else f"{source_id}:profile:{selected_profile}:scene"
     )
     chunks = tuple(
         IntakeChunk(
@@ -181,7 +199,8 @@ def _prepare_document_bytes(
             source_name=safe_name,
             source_kind=EXTERNAL_UPLOAD_SOURCE,
             domain=normalized_domain,
-            chunk_id=f"{source_id}:scene:{chunk['scene_index']}:chunk:{chunk_index}",
+            profile=selected_profile,
+            chunk_id=f"{chunk_prefix}:{chunk['scene_index']}:chunk:{chunk_index}",
             scene_index=chunk["scene_index"],
             chunk_index=chunk_index,
             heading=chunk.get("heading"),
@@ -195,6 +214,7 @@ def _prepare_document_bytes(
         source_name=safe_name,
         source_kind=EXTERNAL_UPLOAD_SOURCE,
         domain=normalized_domain,
+        profile=selected_profile,
         content_hash=content_hash,
         byte_count=len(data),
         chunks=chunks,
@@ -206,8 +226,9 @@ def prepare_document(
     *,
     domain: str | None = "personal",
     max_bytes: int = DEFAULT_MAX_DOCUMENT_BYTES,
-    max_chars: int = 1200,
+    max_chars: int | None = None,
     overlap_paragraphs: int = 1,
+    profile: str = ASSISTANT_NOTE_PROFILE,
 ) -> PreparedDocument:
     """Validate and chunk one external Markdown/plain-text file."""
     document_path = Path(path)
@@ -220,6 +241,7 @@ def prepare_document(
         max_bytes=max_bytes,
         max_chars=max_chars,
         overlap_paragraphs=overlap_paragraphs,
+        profile=profile,
     )
 
 
@@ -229,8 +251,9 @@ def prepare_document_text(
     *,
     domain: str | None = "personal",
     max_bytes: int = DEFAULT_MAX_DOCUMENT_BYTES,
-    max_chars: int = 1200,
+    max_chars: int | None = None,
     overlap_paragraphs: int = 1,
+    profile: str = ASSISTANT_NOTE_PROFILE,
 ) -> PreparedDocument:
     """Prepare extracted external text without writing it to the host filesystem."""
     if not isinstance(content, str):
@@ -242,6 +265,7 @@ def prepare_document_text(
         max_bytes=max_bytes,
         max_chars=max_chars,
         overlap_paragraphs=overlap_paragraphs,
+        profile=profile,
     )
 
 

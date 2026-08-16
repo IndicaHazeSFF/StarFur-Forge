@@ -141,6 +141,7 @@ class OpenWebUIDocumentFilterTests(unittest.TestCase):
         self.assertEqual(calls[1][0], "annotate")
         self.assertEqual(calls[1][1], "/v1/starfur/documents/annotate")
         self.assertEqual(calls[1][2]["domain"], "personal")
+        self.assertEqual(calls[1][2]["profile"], "auto")
         self.assertNotIn("RTX 4070", str(body["messages"]))
         self.assertIn("DR-created", events[-1]["data"]["description"])
         repeated = {
@@ -150,6 +151,47 @@ class OpenWebUIDocumentFilterTests(unittest.TestCase):
         asyncio.run(self.filter.inlet(repeated, __request__=object()))
         self.assertEqual(repeated["starfur_document_context"], {"review_id": "DR-created", "limit": 3})
         self.assertEqual(len(calls), 2, "an active review must be reused rather than re-annotated")
+
+    def test_attachment_download_timeout_reports_sanitized_stage(self):
+        events = []
+
+        async def emit(event):
+            events.append(event)
+
+        def download(_reference, _request):
+            raise TimeoutError("internal endpoint detail must not be exposed")
+
+        self.filter._download_file = download
+        body = {
+            "metadata": {"files": [{"id": "slow", "name": "story.md"}]},
+            "messages": [{"role": "user", "content": "Continue."}],
+        }
+        asyncio.run(self.filter.inlet(body, __request__=object(), __event_emitter__=emit))
+        self.assertNotIn("starfur_document_context", body)
+        description = events[-1]["data"]["description"]
+        self.assertIn("attachment download failed safely (timed out)", description)
+        self.assertNotIn("internal endpoint detail", description)
+
+    def test_annotation_transport_failure_reports_sanitized_stage(self):
+        events = []
+
+        async def emit(event):
+            events.append(event)
+
+        self.filter._download_file = lambda _reference, _request: ("story.md", "Story text")
+
+        def annotate(_path, _payload):
+            raise OSError("private connection detail")
+
+        self.filter._starfur_json = annotate
+        body = {
+            "metadata": {"files": [{"id": "story", "name": "story.md"}]},
+            "messages": [{"role": "user", "content": "Continue."}],
+        }
+        asyncio.run(self.filter.inlet(body, __request__=object(), __event_emitter__=emit))
+        description = events[-1]["data"]["description"]
+        self.assertIn("StarFur annotation request failed safely (transport error)", description)
+        self.assertNotIn("private connection detail", description)
 
 
 if __name__ == "__main__":

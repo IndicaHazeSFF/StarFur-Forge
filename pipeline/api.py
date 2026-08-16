@@ -114,7 +114,7 @@ class StarFurAPI:
     def _prepared_document(self, payload):
         if not isinstance(payload, dict):
             raise ValueError("Request body must be a JSON object.")
-        allowed = {"filename", "content", "domain"}
+        allowed = {"filename", "content", "domain", "profile"}
         unknown = set(payload) - allowed
         if unknown:
             raise ValueError(f"Unknown document-preparation field(s): {sorted(unknown)}")
@@ -124,6 +124,7 @@ class StarFurAPI:
             payload["content"],
             payload["filename"],
             domain=payload.get("domain", "personal"),
+            profile=payload.get("profile", "assistant_note"),
         )
 
     @staticmethod
@@ -133,6 +134,7 @@ class StarFurAPI:
             "name": document.source_name,
             "kind": document.source_kind,
             "domain": document.domain,
+            "profile": document.profile,
             "byte_count": document.byte_count,
             "chunk_count": len(document.chunks),
         }

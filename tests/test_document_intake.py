@@ -97,6 +97,15 @@ Beta paragraph.
             with self.assertRaisesRegex(ValueError, "max_bytes"):
                 prepare_document(path, max_bytes=0)
 
+    def test_adventure_profile_has_stable_profile_scoped_provenance(self):
+        text = "# Story State\n\nKnown fact.\n\nCURRENT SCENE\n\nThe story is here."
+        first = prepare_document_text(text, "adventure.md", profile="adventure_state")
+        second = prepare_document_text(text, "adventure.md", profile="adventure_state")
+
+        self.assertEqual(first.profile, "adventure_state")
+        self.assertEqual(first.chunks, second.chunks)
+        self.assertTrue(all(":profile:adventure_state:scene:" in chunk.chunk_id for chunk in first.chunks))
+
 
     def test_extracts_validated_non_persistent_candidates_with_engine_provenance(self):
         with tempfile.TemporaryDirectory() as directory:
