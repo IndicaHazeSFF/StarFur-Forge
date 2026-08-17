@@ -11,7 +11,7 @@ sys.modules.setdefault("ollama", types.ModuleType("ollama"))
 
 from pipeline.application import AssistantApplication
 
-from pipeline.api import API_MODEL_ID, CONVERSATION_HEADER, DOCUMENT_ANNOTATE_PATH, DOCUMENT_CONTEXT_PATH, DOCUMENT_PREPARE_PATH, DOCUMENT_REVIEW_PATH, PERSONA_RUNTIME_PATH, StarFurAPI, StarFurHTTPServer
+from pipeline.api import API_MODEL_ID, CONVERSATION_HEADER, DOCUMENT_ANNOTATE_PATH, DOCUMENT_CONTEXT_PATH, DOCUMENT_PREPARE_PATH, DOCUMENT_REVIEW_PATH, DOCUMENT_REVIEWS_PATH, PERSONA_RUNTIME_PATH, StarFurAPI, StarFurHTTPServer
 
 
 class FakeConfig:
@@ -371,6 +371,29 @@ class APITests(unittest.TestCase):
         status, raw = self.request("GET", f"{DOCUMENT_REVIEW_PATH}?review_id={review_id}")
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(raw)["candidates"][0]["status"], "handed_off")
+
+    def test_active_document_reviews_are_listed_by_read_only_endpoint_and_controlled_chat(self):
+        status, raw = self.request("POST", DOCUMENT_ANNOTATE_PATH, {
+            "filename": "notes.md", "content": "Roger is testing document intake.",
+        })
+        review_id = json.loads(raw)["review"]["id"]
+
+        status, raw = self.request("GET", DOCUMENT_REVIEWS_PATH)
+        review_list = json.loads(raw)
+        self.assertEqual(status, 200)
+        self.assertEqual(review_list["object"], "starfur.document.review_list")
+        self.assertEqual(review_list["reviews"][0]["review"]["id"], review_id)
+        self.assertNotIn("observation_text", str(review_list))
+        self.assertEqual(self.session.calls, [])
+
+        status, raw = self.request("POST", "/v1/chat/completions", {
+            "model": API_MODEL_ID,
+            "messages": [{"role": "user", "content": "document review list"}],
+            "starfur_document_review": {"action": "list"},
+        })
+        self.assertEqual(status, 200)
+        self.assertIn(review_id, json.loads(raw)["choices"][0]["message"]["content"])
+        self.assertEqual(self.session.calls, [])
 
     def test_document_review_rejection_is_ephemeral_and_never_writes_a_proposal(self):
         status, raw = self.request("POST", DOCUMENT_ANNOTATE_PATH, {

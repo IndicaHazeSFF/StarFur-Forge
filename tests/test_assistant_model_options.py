@@ -26,6 +26,15 @@ class AssistantModelOptionsTests(unittest.TestCase):
             path.write_text("{}", encoding="utf-8")
             self.assertEqual(load_config(path).ollama_options, {})
 
+    def test_config_loads_bounded_document_review_ttl(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "assistant.json"
+            path.write_text(json.dumps({"document_review_ttl_seconds": 3600}), encoding="utf-8")
+            self.assertEqual(load_config(path).document_review_ttl_seconds, 3600)
+            path.write_text(json.dumps({"document_review_ttl_seconds": 0}), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "document_review_ttl_seconds"):
+                load_config(path)
+
     def test_options_reject_unknown_or_invalid_values(self):
         with self.assertRaises(ValueError):
             validate_ollama_options({"banana": 1})

@@ -39,8 +39,11 @@ from pipeline.persona_visibility import (
     evaluate_shared_memory_visibility,
 )
 from pipeline.roleplay import RoleplaySessionState, detect_casual_roleplay_start
+from pipeline.roleplay_presentation import sanitize_roleplay_memories
+from pipeline.adventure_events import AdventureEventLog, AdventureEventLogError
 from pipeline.adventure_registry import AdventureNotFoundError, AdventureRegistry, AdventureRegistryError
 from pipeline.adventure_session import AdventureSessionState
+from pipeline.document_review import DEFAULT_REVIEW_TTL_SECONDS
 
 from pipeline.capabilities import CapabilityManifest
 from pipeline.command_help import detect_command_help
@@ -71,6 +74,7 @@ class AssistantConfig:
     persona_registry: PersonaRegistry | None = None
     active_persona_id: str | None = None
     adventure_root: Path = PROJECT_ROOT / "adventures"
+    document_review_ttl_seconds: int = DEFAULT_REVIEW_TTL_SECONDS
 
 
 def validate_ollama_options(value):
@@ -121,6 +125,9 @@ def load_config(path=DEFAULT_CONFIG_PATH):
     adventure_root = Path(data.get("adventure_root", "adventures"))
     if not adventure_root.is_absolute():
         adventure_root = PROJECT_ROOT / adventure_root
+    review_ttl_seconds = data.get("document_review_ttl_seconds", DEFAULT_REVIEW_TTL_SECONDS)
+    if isinstance(review_ttl_seconds, bool) or not isinstance(review_ttl_seconds, int) or not 60 <= review_ttl_seconds <= 7 * 24 * 60 * 60:
+        raise ValueError("document_review_ttl_seconds must be an integer from 60 through 604800.")
     return AssistantConfig(
         # A chat profile model is the declarative startup default. Later
         # ``model use`` selections remain per-session runtime state.
@@ -137,6 +144,7 @@ def load_config(path=DEFAULT_CONFIG_PATH):
         persona_registry=persona_registry,
         active_persona_id=active_persona_id,
         adventure_root=adventure_root,
+        document_review_ttl_seconds=review_ttl_seconds,
     )
 
 
@@ -425,7 +433,11 @@ class AssistantSession:
                 if snapshot.get("roleplay_session", {}).get("active") else "inactive"
             ),
             "Adventure workspace: " + (
-                f"loaded ({snapshot['adventure_session'].get('title')}; session-ephemeral metadata mount)"
+                f"loaded ({snapshot['adventure_session'].get('title')}; "
+                f"{snapshot['adventure_session'].get('event_count', 0)} authoritative event(s), "
+                f"{snapshot['adventure_session'].get('context_event_count', 0)} in bounded replay context; "
+                f"{snapshot['adventure_session'].get('state_fact_count', 0)} current state fact(s); "
+                "session-local mount)"
                 if snapshot.get("adventure_session", {}).get("mounted") else "none loaded"
             ),
             f"Retrieved memories: {len(snapshot.get('retrieved', []))}",
@@ -597,7 +609,11 @@ class AssistantSession:
         )
         phase_timings.setdefault("association_ms", 0.0)
         retrieved, visibility_decisions = self._apply_shared_memory_visibility(retrieved)
-        memories = [item["memory"] for item in retrieved]
+        raw_memories = [item["memory"] for item in retrieved]
+        memories = (
+            sanitize_roleplay_memories(raw_memories, user_text=user_text)
+            if self.roleplay_state.active else raw_memories
+        )
         prompt_started = time.perf_counter()
         recent = self.messages[-self.config.max_session_messages:]
         selected_capabilities = (
@@ -941,7 +957,8 @@ class AssistantSession:
         if not self.roleplay_state.active:
             return "Roleplay mode: inactive."
         label = self.roleplay_state.title or "unnamed"
-        return f"Roleplay mode: active ({label}; session-ephemeral, no adventure workspace loaded)."
+        adventure = self.adventure_session.record.title if self.adventure_session.active else "none"
+        return f"Roleplay mode: active ({label}; session-ephemeral; loaded adventure: {adventure})."
 
     def adventure_list(self):
         """List only registered workspace metadata; this never mounts a story."""
@@ -976,12 +993,19 @@ class AssistantSession:
             return "Adventure workspace not found."
         except (AdventureRegistryError, TypeError) as error:
             return f"Adventure registry error: {error}"
+        try:
+            events = AdventureEventLog(self.adventure_registry, record).events()
+        except AdventureEventLogError as error:
+            return f"Adventure event log error: {error}"
+        storage = "manifest only; no story event log, database, semantic index, or mounted session"
+        if events:
+            storage = f"validated event log with {len(events)} event(s); no database, semantic index, or mounted session"
         return "\n".join((
             f"Adventure workspace: {record.title}",
             f"ID: {record.adventure_id}",
             f"Created: {record.created_at}",
             f"Status: {record.status}",
-            "Storage: manifest only; no story event log, database, semantic index, or mounted session.",
+            f"Storage: {storage}.",
         ))
 
     def _set_adventure_session(self, state):
@@ -1001,10 +1025,17 @@ class AssistantSession:
             return f"Adventure registry error: {error}"
         if self.adventure_session.record == record:
             return f"Adventure workspace is already loaded: {record.title}."
-        self._set_adventure_session(self.adventure_session.mount(record))
+        try:
+            events = AdventureEventLog(self.adventure_registry, record).events()
+        except AdventureEventLogError as error:
+            return f"Adventure event log error: {error}"
+        self._set_adventure_session(self.adventure_session.mount(record, events))
+        event_note = "No authoritative events are recorded yet."
+        if events:
+            event_note = f"Loaded {len(events)} authoritative event(s) as bounded replay context."
         return (
             f"Adventure workspace loaded: {record.title}. Recent conversation context was cleared. "
-            "The workspace is metadata-only; no story, replay state, or roleplay mode was started."
+            f"{event_note} No roleplay mode was started."
         )
 
     def adventure_unload(self):
@@ -1014,14 +1045,113 @@ class AssistantSession:
         self._set_adventure_session(self.adventure_session.unmount())
         return f"Adventure workspace unloaded: {title}. Recent conversation context was cleared."
 
+    def adventure_resume(self, title):
+        """Resume means an explicit load; narrative mode remains an explicit choice."""
+        if not title or not title.strip():
+            return "Usage: adventure resume <title>"
+        return self.adventure_load(title)
+
+    def adventure_pause(self):
+        """Leave the mounted story cleanly while preserving its immutable event log."""
+        if not self.adventure_session.active:
+            return "No adventure workspace is loaded."
+        title = self.adventure_session.record.title
+        had_roleplay = self.roleplay_state.active
+        self._set_adventure_session(self.adventure_session.unmount())
+        if had_roleplay:
+            self.roleplay_state = self.roleplay_state.end()
+        roleplay_note = " Roleplay mode ended." if had_roleplay else ""
+        return f"Adventure paused: {title}. Stored events were preserved.{roleplay_note}"
+
+    def adventure_end(self):
+        """Core-owned immediate fictional-session exit; never deletes story data."""
+        if not self.adventure_session.active and not self.roleplay_state.active:
+            return "No active adventure or roleplay session is running."
+        title = self.adventure_session.record.title if self.adventure_session.active else None
+        if self.adventure_session.active:
+            self._set_adventure_session(self.adventure_session.unmount())
+        else:
+            self.messages.clear()
+            self.last_memory_ids = []
+            self.last_turn_diagnostics = None
+        self.roleplay_state = self.roleplay_state.end()
+        label = f": {title}" if title else ""
+        return f"Adventure session ended{label}. Stored events were preserved; no workspace was deleted or archived."
+
     def adventure_status(self):
         if not self.adventure_session.active:
             return "Adventure workspace: none loaded."
         record = self.adventure_session.record
         return (
-            f"Adventure workspace: loaded ({record.title}; {record.adventure_id}; metadata-only, "
-            "session-ephemeral mount; no story state or replay loaded)."
+            f"Adventure workspace: loaded ({record.title}; {record.adventure_id}; "
+            f"{self.adventure_session.event_count} authoritative event(s), "
+            f"{len(self.adventure_session.context_events)} in bounded replay context, "
+            f"{len(self.adventure_session.state_facts)} current state fact(s); session-local mount)."
         )
+
+    def adventure_events(self):
+        """Render only the bounded Core-provided event summaries for this mount."""
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded."
+        if not self.adventure_session.context_events:
+            return "No authoritative adventure events are recorded for the loaded workspace."
+        lines = [f"Adventure events for {self.adventure_session.record.title}:"]
+        lines.extend(
+            f"{event.event_id} [{event.event_type}] {event.summary}"
+            for event in self.adventure_session.context_events
+        )
+        if self.adventure_session.event_count > len(self.adventure_session.context_events):
+            lines.append(
+                f"Showing {len(self.adventure_session.context_events)} replay-spine facts selected from "
+                f"{self.adventure_session.event_count} authoritative events."
+            )
+        return "\n".join(lines)
+
+    def adventure_state(self):
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded."
+        if not self.adventure_session.state_facts:
+            return "No explicit authoritative story state is recorded for the loaded workspace."
+        lines = [f"Current story state for {self.adventure_session.record.title}:"]
+        lines.extend(f"{fact.key}: {fact.value} ({fact.source_event_id})" for fact in self.adventure_session.state_facts)
+        return "\n".join(lines)
+
+    def adventure_state_set(self, value):
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded. Load an adventure before setting story state."
+        if not isinstance(value, str) or ":" not in value:
+            return "Usage: adventure state set <key>: <value>"
+        key, state_value = value.split(":", 1)
+        try:
+            log = AdventureEventLog(self.adventure_registry, self.adventure_session.record)
+            event = log.append(
+                "state_change", f"Set {key.strip()} to {state_value.strip()}.",
+                state_key=key, state_value=state_value,
+            )
+            events = log.events()
+        except AdventureEventLogError as error:
+            return f"Adventure state was not set: {error}"
+        self.adventure_session = self.adventure_session.mount(self.adventure_session.record, events)
+        return f"Set adventure state {event.state_key}: {event.state_value} ({event.event_id})."
+
+    def adventure_record(self, value):
+        """Append one explicit user-authorized canonical event to the loaded world."""
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded. Load an adventure before recording an event."
+        if not isinstance(value, str) or ":" not in value:
+            return "Usage: adventure record <event-type>: <summary>"
+        event_type, summary = value.split(":", 1)
+        event_type = event_type.strip().casefold()
+        try:
+            log = AdventureEventLog(self.adventure_registry, self.adventure_session.record)
+            event = log.append(event_type, summary)
+            events = log.events()
+        except AdventureEventLogError as error:
+            return f"Adventure event was not recorded: {error}"
+        # Preserve ordinary conversation while refreshing only the bounded,
+        # Core-provided replay view for subsequent model turns.
+        self.adventure_session = self.adventure_session.mount(self.adventure_session.record, events)
+        return f"Recorded adventure event {event.event_id} [{event.event_type}]: {event.summary}"
 
     def command(self, text):
         lowered = text.strip().casefold()
@@ -1045,6 +1175,20 @@ class AssistantSession:
             return self.adventure_inspect(text.strip()[len("adventure inspect"):])
         if lowered == "adventure load" or lowered.startswith("adventure load "):
             return self.adventure_load(text.strip()[len("adventure load"):])
+        if lowered == "adventure resume" or lowered.startswith("adventure resume "):
+            return self.adventure_resume(text.strip()[len("adventure resume"):])
+        if lowered in {"adventure events", "adventure event list"}:
+            return self.adventure_events()
+        if lowered == "adventure state set" or lowered.startswith("adventure state set "):
+            return self.adventure_state_set(text.strip()[len("adventure state set"):])
+        if lowered in {"adventure state", "adventure state list"}:
+            return self.adventure_state()
+        if lowered == "adventure record" or lowered.startswith("adventure record "):
+            return self.adventure_record(text.strip()[len("adventure record"):])
+        if lowered in {"adventure pause", "pause adventure"}:
+            return self.adventure_pause()
+        if lowered in {"adventure end", "end adventure", "end story now", "end the story now"}:
+            return self.adventure_end()
         if lowered in {"adventure unload", "adventure unmount"}:
             return self.adventure_unload()
         if lowered in {"adventure status", "what is loaded", "what is loaded?", "what's loaded", "what's loaded?"}:

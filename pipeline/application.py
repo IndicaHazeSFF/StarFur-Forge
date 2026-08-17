@@ -308,7 +308,7 @@ class AssistantApplication:
                 "persona": public_dict(),
             }
 
-    def annotate_document(self, document: PreparedDocument, *, annotator=None):
+    def annotate_document(self, document: PreparedDocument, *, annotator=None, progress=None):
         """Return validated external-document candidates without persistence.
 
         This is intentionally separate from ``respond``: documents are source
@@ -341,7 +341,7 @@ class AssistantApplication:
             if lifecycle is not None:
                 lifecycle.begin_generation(stream=False, model=getattr(annotator, "model", self._active_model_for_session(session)))
             try:
-                result = extract_document_memory_candidates_resilient(document, annotator)
+                result = extract_document_memory_candidates_resilient(document, annotator, progress=progress)
             except Exception as error:
                 if lifecycle is not None:
                     lifecycle.fail(error)

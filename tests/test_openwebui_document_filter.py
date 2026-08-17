@@ -54,6 +54,7 @@ class OpenWebUIDocumentFilterTests(unittest.TestCase):
         self.assertTrue(self.module.file_handler)
         self.assertEqual(self.module.SUPPORTED_SUFFIXES, frozenset({".md", ".markdown", ".txt"}))
         self.assertEqual(self.filter.valves.OPENWEBUI_BASE_URL, "http://localhost:8080")
+        self.assertEqual(self.filter.valves.REVIEW_CACHE_SECONDS, 24 * 60 * 60)
 
     def test_collects_deduplicated_file_references_from_both_documented_locations(self):
         body = {
@@ -94,6 +95,10 @@ class OpenWebUIDocumentFilterTests(unittest.TestCase):
 
     def test_explicit_review_commands_become_controlled_extensions(self):
         review_id = "DR-" + "a" * 32
+        listing = {"messages": [{"role": "user", "content": "document review list"}]}
+        asyncio.run(self.filter.inlet(listing))
+        self.assertEqual(listing["starfur_document_review"], {"action": "list"})
+
         show = {"messages": [{"role": "user", "content": f"document review {review_id}"}]}
         asyncio.run(self.filter.inlet(show))
         self.assertEqual(show["starfur_document_review"], {"action": "show", "review_id": review_id})

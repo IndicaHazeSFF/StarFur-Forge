@@ -34,6 +34,14 @@ class CommandHelpTests(unittest.TestCase):
         self.assertIn("model current", rendered)
         self.assertIn("model use <model-name>", rendered)
 
+    def test_adventure_state_help_returns_exact_core_commands(self):
+        payload = detect_command_help("How do I set story state?")
+        self.assertEqual(payload.intent, "adventure_registry")
+        rendered = payload.render()
+        self.assertIn("adventure state", rendered)
+        self.assertIn("adventure state set <key>: <value>", rendered)
+        self.assertIn("current_location", rendered)
+
     def test_persona_help_returns_read_only_command(self):
 
         payload = detect_command_help("How do I inspect the persona?")

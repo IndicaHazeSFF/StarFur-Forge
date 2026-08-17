@@ -7,6 +7,7 @@ owner of persona, retrieval, policy, proposals, and session state.
 from __future__ import annotations
 
 import json
+import sys
 import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -16,6 +17,7 @@ from urllib.parse import parse_qs, urlsplit
 from pipeline.assistant import GenerationInterrupted
 from pipeline.application import AssistantApplication, create_assistant_application
 from pipeline.document_review import (
+    DEFAULT_REVIEW_TTL_SECONDS,
     DocumentReviewError,
     DocumentReviewStore,
     candidate_public_id,
@@ -41,6 +43,7 @@ CONVERSATION_HEADER = "X-StarFur-Conversation"
 DOCUMENT_PREPARE_PATH = "/v1/starfur/documents/prepare"
 DOCUMENT_ANNOTATE_PATH = "/v1/starfur/documents/annotate"
 DOCUMENT_REVIEW_PATH = "/v1/starfur/documents/review"
+DOCUMENT_REVIEWS_PATH = "/v1/starfur/documents/reviews"
 DOCUMENT_CONTEXT_PATH = "/v1/starfur/documents/context"
 PERSONA_RUNTIME_PATH = "/v1/starfur/persona-runtime"
 MAX_DOCUMENT_REQUEST_BYTES = DEFAULT_MAX_DOCUMENT_BYTES * 6 + 64 * 1024
@@ -97,7 +100,8 @@ class StarFurAPI:
         self.model_id = model_id
         # Optional injection keeps the document-review boundary service-free in tests.
         self.document_annotator = document_annotator
-        self.document_review_store = document_review_store or DocumentReviewStore()
+        review_ttl_seconds = getattr(self.session.config, "document_review_ttl_seconds", DEFAULT_REVIEW_TTL_SECONDS)
+        self.document_review_store = document_review_store or DocumentReviewStore(ttl_seconds=review_ttl_seconds)
 
     def authenticate(self, headers):
         if not self.api_key:
@@ -160,8 +164,18 @@ class StarFurAPI:
     def annotate_document(self, payload):
         """Return reviewable candidates plus bounded per-chunk failures."""
         document = self._prepared_document(payload)
+        def progress(done, total):
+            # Keep progress out of the JSON response; show it in the terminal
+            # running `starfur.py serve` during long annotations.
+            width = 24
+            filled = width if not total else int(width * done / total)
+            bar = "#" * filled + "-" * (width - filled)
+            sys.stderr.write(f"\rStarFur annotation: [{bar}] {done}/{total} chunks")
+            if done == total:
+                sys.stderr.write("\n")
+            sys.stderr.flush()
         annotation = self.application.annotate_document(
-            document, annotator=self.document_annotator,
+            document, annotator=self.document_annotator, progress=progress,
         )
         candidates = annotation.candidates
         review = self.document_review_store.create(document, candidates)
@@ -195,6 +209,19 @@ class StarFurAPI:
             "candidates": [
                 review_candidate_public_payload(candidate_id, status, candidate)
                 for candidate_id, status, candidate in candidates
+            ],
+        }
+
+    def document_reviews(self):
+        """List active bounded review metadata without a provider call."""
+        return {
+            "object": "starfur.document.review_list",
+            "reviews": [
+                {
+                    "review": review_public_payload(session),
+                    "source": self._document_source_payload(session.document),
+                }
+                for session in self.document_review_store.list_reviews()
             ],
         }
     def create_document_pending_proposal(self, payload):
@@ -304,6 +331,21 @@ class StarFurAPI:
         ))
         return "\n".join(lines)
 
+    @staticmethod
+    def _render_document_review_list(review_list):
+        reviews = review_list["reviews"]
+        if not reviews:
+            return "No active document reviews. Upload or annotate a document to create one."
+        lines = ["Active document reviews:", ""]
+        for entry in reviews:
+            review = entry["review"]
+            source = entry["source"]
+            lines.append(
+                f"- {review['id']} | {source['name']} | {review['candidate_count']} candidate(s) | expires {review['expires_at']}"
+            )
+        lines.extend(("", "Use `document review <review-id>` to inspect one review."))
+        return "\n".join(lines)
+
     def document_review_command(self, command):
         """Serve Filter-parsed review commands without invoking the chat model."""
         if not isinstance(command, dict):
@@ -313,6 +355,10 @@ class StarFurAPI:
         if unknown:
             raise ValueError(f"Unknown starfur_document_review field(s): {sorted(unknown)}")
         action = command.get("action")
+        if action == "list":
+            if set(command) != {"action"}:
+                raise ValueError("Document review list requires only action='list'.")
+            return self._render_document_review_list(self.document_reviews())
         if action == "show":
             if set(command) != {"action", "review_id"}:
                 raise ValueError("Document review display requires only action and review_id.")
@@ -337,7 +383,7 @@ class StarFurAPI:
                 "confirm": command.get("confirm"),
             })
             return f"Dismissed {result['count']} review candidate(s): {', '.join(result['candidate_ids'])}. No proposals or memories were created."
-        raise ValueError("starfur_document_review action must be show, approve, or reject.")
+        raise ValueError("starfur_document_review action must be list, show, approve, or reject.")
 
     def document_context(self, payload):
         """Return bounded matching source chunks from one active review only.
@@ -474,6 +520,13 @@ class _Handler(BaseHTTPRequestHandler):
                 self._send_json(200, self.api.application.persona_runtime_snapshot(
                     conversation_id=self.headers.get(CONVERSATION_HEADER),
                 ))
+            except ValueError as error:
+                self._send_json(400, {"error": {"message": str(error), "type": "invalid_request_error"}})
+        elif parsed.path == DOCUMENT_REVIEWS_PATH:
+            try:
+                if parse_qs(parsed.query, keep_blank_values=True):
+                    raise ValueError("Document review list does not accept query parameters.")
+                self._send_json(200, self.api.document_reviews())
             except ValueError as error:
                 self._send_json(400, {"error": {"message": str(error), "type": "invalid_request_error"}})
         elif parsed.path == DOCUMENT_REVIEW_PATH:
@@ -624,4 +677,4 @@ def serve(*, host="127.0.0.1", port=8000, config_path=None, api_key=None, quiet=
         server.server_close()
 
 
-__all__ = ["API_MODEL_ID", "CONVERSATION_HEADER", "DOCUMENT_ANNOTATE_PATH", "DOCUMENT_CONTEXT_PATH", "DOCUMENT_PREPARE_PATH", "DOCUMENT_REVIEW_PATH", "PERSONA_RUNTIME_PATH", "StarFurAPI", "StarFurHTTPServer", "create_api_application", "create_api_session", "serve"]
+__all__ = ["API_MODEL_ID", "CONVERSATION_HEADER", "DOCUMENT_ANNOTATE_PATH", "DOCUMENT_CONTEXT_PATH", "DOCUMENT_PREPARE_PATH", "DOCUMENT_REVIEW_PATH", "DOCUMENT_REVIEWS_PATH", "PERSONA_RUNTIME_PATH", "StarFurAPI", "StarFurHTTPServer", "create_api_application", "create_api_session", "serve"]

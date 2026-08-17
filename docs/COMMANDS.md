@@ -192,6 +192,7 @@ Endpoints:
     POST /v1/starfur/documents/prepare
     POST /v1/starfur/documents/annotate
     GET  /v1/starfur/documents/review?review_id=DR-...
+    GET  /v1/starfur/documents/reviews
     POST /v1/starfur/documents/review
     POST /v1/starfur/documents/context
 
@@ -219,7 +220,9 @@ short-lived review decision; it creates no proposal or memory:
 
     {"review_id":"DR-...","candidate_ids":["C-001"],"confirm":"reject document candidates"}
 
-The server uses its in-memory validated candidate—not client-supplied proposal fields—then calls the normal idempotent pending-proposal writer with original chunk evidence. The result is still pending and must be approved/rejected through the existing proposal controls. Review sessions expire after 15 minutes and disappear on server restart.
+The server uses its in-memory validated candidate—not client-supplied proposal fields—then calls the normal idempotent pending-proposal writer with original chunk evidence. The result is still pending and must be approved/rejected through the existing proposal controls. Review sessions default to 24 hours, disappear on server restart, and remain bounded by the server's active-review limit. Set the top-level assistant configuration field `document_review_ttl_seconds` to an integer from 60 through 604800 when a different local TTL is needed.
+
+`GET /v1/starfur/documents/reviews` lists only active review IDs and bounded source/review metadata; it never calls a model or exposes raw document text.
 
 `/v1/starfur/documents/context` is a separate, read-only source-selection endpoint for an active review. It accepts a `review_id`, an explicit `query`, and optional `limit` (1-8, default 3), then returns only lexical-matching chunks from the server-held source with stable scores and reasons. It does not create proposals, call a model, modify the review, or attach text to assistant chat on its own. This is the connector-facing context packet that later OpenWebUI custom retrieval will consume; raw source text remains absent from normal review metadata.
 
@@ -258,19 +261,23 @@ short-lived `review_id` and bounded context limit in `starfur_document_context`.
 StarFur derives source retrieval from the user's actual latest message. Raw
 document text is never appended to the user message or conversation history.
 
+Attachment failures are safe and non-persistent. The Filter may report a bounded stage/category such as attachment download, StarFur annotation request, timeout, or transport error; it intentionally does not show raw exception text, URLs, tokens, source text, or stack traces.
+
 Annotation candidates are not persisted by the Filter. Its status message
 includes the short-lived `DR-...` review ID and candidate count. In the same
 OpenWebUI model chat, use these exact controls (with the reported ID):
 
     document review DR-...
+    document review list
     document approve DR-... C-001 [C-002 ...]
     document reject DR-... C-001 [C-002 ...]
 
-`document review` displays bounded candidate metadata without calling the
+`document review list` shows active review IDs without calling the model, and
+`document review <id>` displays bounded candidate metadata without calling the
 model. `document approve` creates only normal pending proposals; use the
 existing `proposal approve <id>` command for final assistant-memory approval.
 `document reject` dismisses only the ephemeral reviewed candidate and writes no
-proposal/memory. The Filter's process-local review cache lasts at most 14 minutes;
+proposal/memory. The Filter's process-local review cache defaults to 24 hours;
 restart/expiry safely requires re-annotation. Unsupported, multiple, or failed
 attachments produce a status notice and no source context—there is no hidden
 fallback to OpenWebUI RAG. See `integrations/openwebui/README.md` for full
@@ -370,6 +377,10 @@ active, Core marks eligible new memory proposals and explicit `remember this:`
 requests with the explicit `roleplay` visibility scope. This is not automatic
 classification: only an explicit active roleplay session can add that scope.
 
+Relationship-meter scores are internal roleplay data. Normal in-character
+replies describe them qualitatively; explicitly ask for meter or score
+diagnostics to see raw values.
+
 ### Future adventure workspace registry
 
 Prepare or inspect isolated CYOA workspace metadata with exact Core commands:
@@ -378,16 +389,42 @@ Prepare or inspect isolated CYOA workspace metadata with exact Core commands:
     adventure create <title>
     adventure inspect <title>
     adventure load <title>
+    adventure resume <title>
     adventure status
+    adventure events
+    adventure state
+    adventure state set <key>: <value>
+    adventure record <event-type>: <summary>
+    adventure pause
+    adventure end
     adventure unload
 
 `adventure create` writes only a local registry entry and manifest under
-`adventures/<stable-id>/`. `adventure load` attaches that metadata to the
-current conversation and clears its recent chat context. Neither command begins
-or resumes a story, creates an event log/database/index, replays events, starts
-roleplay, invokes a model, or touches assistant memory. A duplicate normalized
-title is rejected; future resume controls will be explicit rather than silently
-creating another world.
+`adventures/<stable-id>/`. `adventure load` attaches that workspace to the
+current conversation, clears its recent chat context, and reads at most eight
+validated authoritative event summaries when its event log already exists. The
+selection preserves the opening event plus high-value continuity facts and
+recent state in chronological order; it is not necessarily the last eight.
+`adventure events` displays those bounded stored summaries without a model call.
+`adventure state` displays the bounded current authoritative state projected from
+explicit state-change records. `adventure state set <key>: <value>` writes one
+validated `state_change` event and refreshes that projection. Keys must use
+lowercase letters, numbers, and underscores (for example `current_location`).
+Core never extracts state from ordinary narration or model output.
+`adventure record` is the initial explicit Core-owned write path; it requires a
+loaded workspace and one of: `choice`, `discovery`, `promise`, `lie`,
+`relationship_change`, `emotional_transition`, `state_change`,
+`unresolved_hook`, `character_knowledge`, `inventory_change`, or
+`location_change`.
+`adventure resume <title>` is an exact load alias that does not begin roleplay
+automatically. `adventure pause` ends the mounted adventure/active roleplay
+session while preserving its stored event log. `adventure end` does the same
+immediately; `end story now` is its exact Core-owned alias. Neither deletes,
+archives, resets, or changes an adventure workspace.
+This slice never captures narration, automatically creates events, starts
+roleplay, writes shared assistant memory, runs a replay engine, or creates an
+adventure database/index. A duplicate normalized title is rejected; future
+resume controls will be explicit rather than silently creating another world.
 
 `what is loaded?` is a read-only conversational alias for `adventure status`.
 

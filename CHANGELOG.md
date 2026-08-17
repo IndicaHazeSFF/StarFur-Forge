@@ -1,3 +1,50 @@
+## 2026-08-17 - Add explicit event-backed adventure story state
+
+- Behavior: A loaded adventure now supports exact `adventure state` inspection and `adventure state set <key>: <value>` writes. Each write appends one validated `state_change` record; the session deterministically projects the latest value per key into bounded adventure context and diagnostics.
+- Constraints: state is only explicit Core input, never inferred from narration, a provider response, or shared memory. The projection is rebuildable from `events.jsonl`; no snapshots, simulation, automatic state capture, relationship database, or shared-memory write was added.
+- Verification: focused event/state and adventure-command tests cover validation, latest-value replacement, prompt refresh, diagnostics, and no-model command isolation.
+
+## 2026-08-17 - Add exact adventure resume, pause, and end controls
+
+- Behavior: `adventure resume <title>` is an explicit load alias. `adventure pause`, `adventure end`, and exact `end story now` cleanly unmount a story and end active roleplay while preserving all stored events.
+- Constraints: lifecycle controls do not call a model, create proposals, mutate shared memory, delete/archive/reset a workspace, start roleplay on resume, or infer user intent from narration.
+- Verification: focused adventure-command tests cover no-provider command isolation, persistence through pause/resume, roleplay cleanup, exact end alias, and idempotent no-active-session failure.
+
+## 2026-08-17 - Add deterministic adventure replay-spine selection
+
+- Behavior: mounted adventure context now rebuilds a small chronological replay spine from the append-only event log. It retains the opening event, recent high-value continuity categories, and recency within the bounded prompt budget.
+- Constraints: the event log remains authoritative. No derived spine is persisted; no model ranks events, extracts prose, changes relationships, creates branches, or writes shared memory.
+- Verification: focused selector and adventure-command tests cover deterministic selection, premise retention, priority categories, chronological output, bounded context, and private-detail exclusion.
+
+## 2026-08-17 - Correct mounted adventure diagnostics
+
+- Diagnostics: `context stats` now reports the recorded authoritative event count and bounded replay-context count for the completed turn's mounted adventure, replacing the stale metadata-only label.
+
+## 2026-08-17 - Add explicit Core-owned adventure event recording
+
+- Behavior: a loaded adventure accepts `adventure record <event-type>: <summary>` for one validated append-only continuity event. The mount refreshes its bounded replay summaries immediately; `adventure events` exposes the result without a model call.
+- Constraints: recording requires an exact Core command and closed event type. Ordinary narration, provider output, proposals, shared memories, and model extraction cannot create events. Details, automatic salience, derived state, replay logic, and relationship calculation remain future work.
+- Verification: focused adventure command tests cover no-workspace rejection, exact syntax/type validation, command isolation, ordinary-chat non-persistence, immediate context refresh, and no proposal creation.
+
+## 2026-08-17 - Mount bounded adventure event context read-only
+
+- Behavior: loading a registered adventure now validates and reads its isolated event log, injecting at most eight recent summary-only facts as Core-provided context. `adventure events` inspects the same bounded mount without calling a model or writing state.
+- Constraints: no automatic event capture, event details in prompts, model extraction, shared-memory interaction, roleplay transition, replay engine, snapshot, or relationship/state derivation was added.
+- Verification: focused adventure command tests cover empty and populated log mounts, bounded prompt context, isolation, and read-only inspection.
+
+## 2026-08-17 - Add isolated append-only adventure event-log foundation
+
+- Behavior: `pipeline.adventure_events` can lazily create a validated `events.jsonl` file under one registry-owned adventure workspace. It accepts only bounded, explicit Core-authored continuity-event types; every stored entry and its sequence is validated on read.
+- Constraints: this is storage only. It adds no command, automatic narration/event extraction, model call, prompt mounting, shared-memory write, snapshot, replay engine, relationship calculation, or document-import behavior.
+- Verification: focused temporary-workspace tests cover lazy creation, append order, manifest status, validation, corruption failure, and registry binding.
+
+## 2026-08-17 - Keep roleplay meter values internal by default
+
+- Roleplay context directs narrators to describe relationship and affinity
+  state qualitatively. A deterministic prompt-presentation safeguard also
+  redacts numeric relationship-meter values from selected story memories unless
+  the user explicitly requests meter/score/internal diagnostics.
+
 ## 2026-08-09 - Add semantic retrieval cutoff calibration
 
 - Purpose: measure semantic-recall versus no-match false-positive tradeoffs before any production semantic-retrieval policy.
@@ -978,3 +1025,14 @@
 - Integration: document prepare/annotate accepts an optional profile and returns the resolved profile. The optional OpenWebUI filter now sends `DOCUMENT_PROFILE=auto`, selecting adventure-state structure only from explicit labels while cache keys remain profile-specific.
 - Constraints: this does not annotate selectively, persist uploads, change review/proposal approval, create adventure state, call models during preparation, or add async processing.
 - Verification: focused prechunker (4), document-intake (11), API (21), and OpenWebUI filter (9) tests passed locally.
+
+## 2026-08-16 - Harden OpenWebUI document-bridge failure diagnostics
+- Behavior: attachment bridge failures now retain a sanitized stage/category for download, annotation request, response validation, timeout, transport, or invalid configuration/metadata. Timeout and unavailable-service paths no longer echo underlying URL/connection details.
+- Constraints: no attachment text, credential, URL, exception message, stack trace, review, proposal, memory, or storage data is exposed or mutated by a failed request.
+- Verification: focused OpenWebUI filter tests cover download timeout and annotation transport isolation.
+## 2026-08-17 - Make external-document review recovery durable within a server session
+
+- Purpose: prevent routine pauses from losing review IDs while preserving the review-only, non-durable lifecycle.
+- Files modified: `pipeline/document_review.py`, `pipeline/assistant.py`, `pipeline/api.py`, `config/assistant.json`, `integrations/openwebui/starfur_document_filter.py`, tests, `AGENTS.md`, and `docs/COMMANDS.md`.
+- Behavior: active review snapshots and the OpenWebUI bridge cache now default to 24 hours. `document_review_ttl_seconds` accepts a bounded local configuration value from 60 seconds through seven days. `GET /v1/starfur/documents/reviews` and exact Filter command `document review list` expose active bounded review metadata without model calls, raw source text, or persistence. Reviews remain restart-ephemeral and bounded.
+- Verification: focused document-review, API, and OpenWebUI Filter tests cover default TTL, expiry, stable listing, controlled command dispatch, and no-model isolation.

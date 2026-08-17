@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from pipeline.document_intake import extract_document_memory_candidates, prepare_document
 from pipeline.document_review import (
+    DEFAULT_REVIEW_TTL_SECONDS,
     DocumentReviewError,
     DocumentReviewStore,
     candidate_public_id,
@@ -109,6 +110,20 @@ class DocumentReviewStoreTests(unittest.TestCase):
         store.mark_handed_off(session.review_id, ["C-001"])
         self.assertEqual(store.get_review(session.review_id)[1][0][1], "handed_off")
         self.assertIs(store.get_candidate(session.review_id, "C-001"), candidates[0])
+
+    def test_default_ttl_is_one_day_and_list_only_returns_active_reviews_newest_first(self):
+        now = [datetime(2026, 8, 16, tzinfo=UTC)]
+        store = DocumentReviewStore(clock=lambda: now[0])
+        document, candidates = self._document_and_candidate()
+        first = store.create(document, candidates)
+        now[0] += timedelta(seconds=1)
+        second = store.create(document, candidates)
+
+        self.assertEqual(first.expires_at - first.created_at, timedelta(seconds=DEFAULT_REVIEW_TTL_SECONDS))
+        self.assertEqual([session.review_id for session in store.list_reviews()], [second.review_id, first.review_id])
+
+        now[0] += timedelta(seconds=DEFAULT_REVIEW_TTL_SECONDS)
+        self.assertEqual(store.list_reviews(), ())
 
 
 if __name__ == "__main__":

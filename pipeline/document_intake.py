@@ -333,6 +333,7 @@ def extract_document_memory_candidates_resilient(
     annotator: Callable[[IntakeChunk], object],
     *,
     max_attempts: int = 3,
+    progress: Callable[[int, int], None] | None = None,
 ) -> DocumentAnnotationResult:
     """Retry invalid chunks without allowing one failure to abort a document."""
     if not callable(annotator):
@@ -341,10 +342,13 @@ def extract_document_memory_candidates_resilient(
         raise ValueError("max_attempts must be a positive integer.")
     candidates: list[DocumentMemoryCandidate] = []
     failures: list[DocumentAnnotationFailure] = []
-    for chunk in document.chunks:
+    total_chunks = len(document.chunks)
+    for chunk_number, chunk in enumerate(document.chunks, 1):
         for attempt in range(1, max_attempts + 1):
             try:
                 candidates.extend(_extract_chunk_candidates(document, chunk, annotator, attempt=attempt))
+                if progress is not None:
+                    progress(chunk_number, total_chunks)
                 break
             except DocumentAnnotationError:
                 if attempt == max_attempts:
@@ -352,6 +356,8 @@ def extract_document_memory_candidates_resilient(
                         chunk_id=chunk.chunk_id, scene_index=chunk.scene_index,
                         chunk_index=chunk.chunk_index, attempts=attempt,
                     ))
+                    if progress is not None:
+                        progress(chunk_number, total_chunks)
     return DocumentAnnotationResult(tuple(candidates), tuple(failures))
 
 __all__ = [

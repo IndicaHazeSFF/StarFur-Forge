@@ -71,6 +71,7 @@ class RoleplaySessionTests(unittest.TestCase):
         self.assertEqual("narration", session.respond("I prefer starlight."))
         self.assertEqual("roleplay", persisted[-1][0]["visibility_scope"])
         self.assertIn("ACTIVE ROLEPLAY SESSION", calls[0]["messages"][0]["content"])
+        self.assertIn("never expose numeric scores", calls[0]["messages"][0]["content"])
         self.assertIn("Roleplay session: active", session.context_stats())
 
         session.respond("roleplay end")
@@ -87,6 +88,27 @@ class RoleplaySessionTests(unittest.TestCase):
         with patch("pipeline.assistant.assistant_public_id", return_value="M-001"):
             session.respond("remember this: Story fact")
         self.assertEqual("roleplay", created[-1]["visibility_scope"])
+
+    def test_roleplay_hides_relationship_meter_values_from_normal_model_context(self):
+        calls = []
+        relationship = {
+            "id": 9, "memory_type": "relationship_context", "summary": "Vespera trust level",
+            "details": "Trust: 49/100. Comfort: 58 / 100.", "confidence": 0.9,
+        }
+        session = AssistantSession(
+            self._config(), "Persona",
+            chat=lambda **kwargs: calls.append(kwargs) or {"message": {"content": "narration"}},
+            memory_loader=lambda **kwargs: [relationship],
+        )
+        session.respond("roleplay begin Quiet Ember")
+        self.assertEqual("narration", session.respond("How does Vespera feel about the player?"))
+        prompt = calls[-1]["messages"][0]["content"]
+        self.assertNotIn("49/100", prompt)
+        self.assertNotIn("58 / 100", prompt)
+        self.assertIn("qualitative internal state", prompt)
+
+        session.respond("Show the relationship meter scores")
+        self.assertIn("49/100", calls[-1]["messages"][0]["content"])
 
 
 if __name__ == "__main__":

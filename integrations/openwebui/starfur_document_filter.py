@@ -56,7 +56,7 @@ class Filter:
         # otherwise preserves normal assistant-note chunking.
         DOCUMENT_PROFILE: str = "auto"
         DOCUMENT_CONTEXT_LIMIT: int = 3
-        REVIEW_CACHE_SECONDS: int = 14 * 60
+        REVIEW_CACHE_SECONDS: int = 24 * 60 * 60
         MAX_SOURCE_BYTES: int = DEFAULT_MAX_SOURCE_BYTES
         REQUEST_TIMEOUT_SECONDS: int = 180
         # OpenWebUI's backend listens on 8080 inside its container. Override
@@ -66,8 +66,8 @@ class Filter:
     def __init__(self) -> None:
         self.valves = self.Valves()
         # file-id + StarFur configuration -> (monotonic expiry, review id,
-        # candidate count). It is intentionally in-memory, bounded, and
-        # shorter than StarFur review expiry. A restart simply re-annotates.
+        # candidate count). It is intentionally in-memory and bounded. A
+        # restart simply re-annotates; server-side review state is separate.
         self._review_cache: OrderedDict[str, tuple[float, str, int]] = OrderedDict()
 
     @staticmethod
@@ -136,6 +136,8 @@ class Filter:
         extension; the model never decides what gets persisted.
         """
         text = self._latest_user_text(body)
+        if re.fullmatch(r"document\s+review\s+list", text, flags=re.IGNORECASE):
+            return {"action": "list"}
         show = re.fullmatch(rf"document\s+review\s+({_REVIEW_ID_RE})", text, flags=re.IGNORECASE)
         if show:
             return {"action": "show", "review_id": show.group(1)}
@@ -305,7 +307,12 @@ class Filter:
         return review_id, candidate_count
 
     def _remember_review(self, key: str, review_id: str, candidate_count: int) -> None:
-        ttl = self._bounded_int(self.valves.REVIEW_CACHE_SECONDS, name="REVIEW_CACHE_SECONDS", minimum=1, maximum=14 * 60)
+        ttl = self._bounded_int(
+            self.valves.REVIEW_CACHE_SECONDS,
+            name="REVIEW_CACHE_SECONDS",
+            minimum=1,
+            maximum=7 * 24 * 60 * 60,
+        )
         self._review_cache[key] = (time.monotonic() + ttl, review_id, candidate_count)
         self._review_cache.move_to_end(key)
         while len(self._review_cache) > 32:

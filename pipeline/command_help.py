@@ -76,12 +76,18 @@ def detect_command_help(query: str) -> CommandHelp | None:
         "how do i create an adventure", "how can i create an adventure",
         "how do i list adventures", "how can i list adventures",
         "how do i inspect an adventure", "how can i inspect an adventure",
+        "how do i resume an adventure", "how can i resume an adventure",
+        "how do i pause an adventure", "how can i pause an adventure",
+        "how do i end an adventure", "how can i end an adventure",
+        "how do i record an adventure event", "how can i record an adventure event",
+        "how do i see story state", "how can i see story state",
+        "how do i set story state", "how can i set story state",
     )):
         return CommandHelp(
             intent="adventure_registry",
             title="To prepare or inspect an isolated future adventure workspace, use:",
-            commands=("adventure list", "adventure create <title>", "adventure inspect <title>", "adventure load <title>", "adventure status", "adventure unload"),
-            notes=("Creating a workspace writes only registry/manifest metadata. Loading currently attaches only that metadata to this session; it does not start or replay a story yet.",),
+            commands=("adventure list", "adventure create <title>", "adventure inspect <title>", "adventure load <title>", "adventure resume <title>", "adventure status", "adventure events", "adventure state", "adventure state set <key>: <value>", "adventure record <event-type>: <summary>", "adventure pause", "adventure end", "adventure unload"),
+            notes=("`adventure state set` records one explicit current-state value; keys use lowercase letters, numbers, and underscores (for example `current_location`). `adventure resume` loads a saved workspace but does not start roleplay automatically. `adventure pause` and `adventure end` preserve stored events; `end story now` is an exact immediate alias. Use only these event types: choice, discovery, promise, lie, relationship_change, emotional_transition, state_change, unresolved_hook, character_knowledge, inventory_change, or location_change. Recording is explicit; ordinary narration is never captured automatically.",),
         )
 
     if _contains_any(value, (

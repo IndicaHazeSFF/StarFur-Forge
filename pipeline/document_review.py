@@ -17,7 +17,7 @@ from uuid import uuid4
 from pipeline.document_intake import DocumentMemoryCandidate, PreparedDocument
 
 
-DEFAULT_REVIEW_TTL_SECONDS = 15 * 60
+DEFAULT_REVIEW_TTL_SECONDS = 24 * 60 * 60
 DEFAULT_MAX_REVIEW_SESSIONS = 32
 
 
@@ -130,6 +130,22 @@ class DocumentReviewStore:
                 for index, candidate in enumerate(session.candidates)
             )
             return session, candidates
+
+    def list_reviews(self) -> tuple[DocumentReviewSession, ...]:
+        """Return active review metadata in stable newest-first order.
+
+        This deliberately returns sessions rather than documents/candidates.
+        Callers must render only the bounded public review metadata, so a
+        recovery/listing control never becomes a raw-source browsing API.
+        """
+        now = self._now()
+        with self._lock:
+            self._prune(now)
+            return tuple(sorted(
+                self._sessions.values(),
+                key=lambda session: (session.created_at, session.review_id),
+                reverse=True,
+            ))
 
     def mark_handed_off(self, review_id: object, candidate_ids: object) -> None:
         """Record that selected candidates entered the pending-proposal flow."""
@@ -246,6 +262,7 @@ def review_public_payload(session: DocumentReviewSession) -> dict[str, object]:
     """Return bounded metadata that never includes raw document chunk text."""
     return {
         "id": session.review_id,
+        "created_at": session.created_at.isoformat(),
         "expires_at": session.expires_at.isoformat(),
         "candidate_count": len(session.candidates),
     }

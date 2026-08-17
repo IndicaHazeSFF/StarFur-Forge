@@ -85,8 +85,10 @@ model decides what is persisted.
 
 ## Boundaries and limitations
 
-- The source/review cache is process-local, bounded to 32 entries, and expires
-  in at most 14 minutes (shorter than StarFur's 15-minute review lifetime).
+- The source/review cache is process-local, bounded to 32 entries, and defaults
+  to 24 hours (configurable through the Filter's `REVIEW_CACHE_SECONDS` Valve).
+  StarFur review state is separately bounded, restart-ephemeral, and defaults
+  to the configured 24-hour server TTL.
   Restarting OpenWebUI or StarFur causes safe re-annotation.
 - One supported text attachment per turn only. PDFs, Office files, images,
   collections, and multi-file synthesis are intentionally not handled yet.
