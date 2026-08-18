@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from pipeline.adventure_events import AdventureEvent
+from pipeline.adventure_knowledge import AdventureKnowledgeFact, derive_adventure_knowledge
+from pipeline.adventure_relationship import AdventureRelationshipFact, derive_adventure_relationships
 from pipeline.adventure_replay import DEFAULT_REPLAY_SPINE_LIMIT, select_replay_spine
 from pipeline.adventure_state import AdventureStateFact, derive_adventure_state
 from pipeline.adventure_registry import AdventureRecord
@@ -21,6 +23,8 @@ class AdventureSessionState:
     event_count: int = 0
     context_events: tuple[AdventureEvent, ...] = ()
     state_facts: tuple[AdventureStateFact, ...] = ()
+    relationship_facts: tuple[AdventureRelationshipFact, ...] = ()
+    knowledge_facts: tuple[AdventureKnowledgeFact, ...] = ()
 
     def __post_init__(self) -> None:
         if self.record is not None and not isinstance(self.record, AdventureRecord):
@@ -31,9 +35,13 @@ class AdventureSessionState:
             raise TypeError("mounted adventure context events must be AdventureEvents")
         if not isinstance(self.state_facts, tuple) or not all(isinstance(fact, AdventureStateFact) for fact in self.state_facts):
             raise TypeError("mounted adventure state facts must be AdventureStateFacts")
+        if not isinstance(self.relationship_facts, tuple) or not all(isinstance(fact, AdventureRelationshipFact) for fact in self.relationship_facts):
+            raise TypeError("mounted adventure relationship facts must be AdventureRelationshipFacts")
+        if not isinstance(self.knowledge_facts, tuple) or not all(isinstance(fact, AdventureKnowledgeFact) for fact in self.knowledge_facts):
+            raise TypeError("mounted adventure knowledge facts must be AdventureKnowledgeFacts")
         if len(self.context_events) > MAX_CONTEXT_EVENTS:
             raise ValueError("mounted adventure context event limit exceeded")
-        if self.record is None and (self.event_count or self.context_events or self.state_facts):
+        if self.record is None and (self.event_count or self.context_events or self.state_facts or self.relationship_facts or self.knowledge_facts):
             raise ValueError("unmounted adventure state cannot contain events")
         if self.event_count < len(self.context_events):
             raise ValueError("mounted adventure event count cannot be smaller than context events")
@@ -56,6 +64,8 @@ class AdventureSessionState:
             event_count=total,
             context_events=select_replay_spine(events),
             state_facts=derive_adventure_state(events),
+            relationship_facts=derive_adventure_relationships(events),
+            knowledge_facts=derive_adventure_knowledge(events),
         )
 
     def unmount(self) -> "AdventureSessionState":
@@ -72,6 +82,8 @@ class AdventureSessionState:
             "event_count": self.event_count,
             "context_event_count": len(self.context_events),
             "state_fact_count": len(self.state_facts),
+            "relationship_fact_count": len(self.relationship_facts),
+            "knowledge_fact_count": len(self.knowledge_facts),
             "storage": "session_ephemeral",
         }
 
@@ -96,10 +108,35 @@ class AdventureSessionState:
         if self.state_facts:
             state_lines = "\n".join(f"- {fact.key}: {fact.value}" for fact in self.state_facts)
             state = "CURRENT AUTHORITATIVE STORY STATE (core-provided):\n" + state_lines + "\nEND CURRENT AUTHORITATIVE STORY STATE\n"
+        relationships = ""
+        if self.relationship_facts:
+            relationship_lines = "\n".join(
+                f"- {fact.subject} / {fact.dimension}: {fact.value}"
+                for fact in self.relationship_facts
+            )
+            relationships = (
+                "CURRENT AUTHORITATIVE ADVENTURE RELATIONSHIPS (core-provided):\n"
+                f"{relationship_lines}\n"
+                "END CURRENT AUTHORITATIVE ADVENTURE RELATIONSHIPS\n"
+            )
+        knowledge = ""
+        if self.knowledge_facts:
+            knowledge_lines = "\n".join(
+                f"- {fact.subject} {fact.status}: {fact.fact}"
+                for fact in self.knowledge_facts
+            )
+            knowledge = (
+                "CHARACTER KNOWLEDGE AND BELIEFS (core-provided):\n"
+                "These are character-specific perspectives, not automatically objective world truth.\n"
+                f"{knowledge_lines}\n"
+                "END CHARACTER KNOWLEDGE AND BELIEFS\n"
+            )
         return header + (
             f"Authoritative event log: {self.event_count} event(s); {len(self.context_events)} replay-spine facts are supplied below.\n"
             "These are established story facts, not user memories. Do not invent omitted events, details, or values.\n"
             f"{state}"
+            f"{relationships}"
+            f"{knowledge}"
             "RECENT AUTHORITATIVE ADVENTURE EVENTS:\n"
             f"{events}\n"
             "END MOUNTED ADVENTURE WORKSPACE"

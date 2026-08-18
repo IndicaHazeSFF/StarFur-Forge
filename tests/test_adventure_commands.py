@@ -103,7 +103,7 @@ class AdventureCommandTests(unittest.TestCase):
             self.assertNotIn("clue 1", system_prompt)
             self.assertNotIn("Private event detail", system_prompt)
             self.assertIn(
-                "10 authoritative event(s), 8 in bounded replay context; 0 current state fact(s); session-local mount",
+                "10 authoritative event(s), 8 in bounded replay context; 0 current state fact(s); 0 relationship fact(s); 0 character-knowledge fact(s); session-local mount",
                 session.context_stats(),
             )
 
@@ -175,6 +175,135 @@ class AdventureCommandTests(unittest.TestCase):
             self.assertIn("location: engine room", prompt)
             self.assertNotIn("location: bridge\n", prompt)
             self.assertIn("1 current state fact(s)", session.context_stats())
+
+    def test_explicit_qualitative_relationship_is_event_backed_and_refreshed_in_context(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(directory, calls)
+            session.respond("adventure create Quiet Ember")
+            session.respond("adventure load Quiet Ember")
+            self.assertEqual(
+                "No explicit authoritative adventure relationships are recorded for the loaded workspace.",
+                session.respond("adventure relationships"),
+            )
+            self.assertIn(
+                "AE-000001",
+                session.respond("adventure relationship set Vespera trust: guarded"),
+            )
+            self.assertIn("Vespera / trust: guarded", session.respond("adventure relationships"))
+            self.assertIn(
+                "AE-000002",
+                session.respond("adventure relationship set Vespera trust: cautious"),
+            )
+            self.assertIn(
+                "Vespera / trust: cautious (AE-000002)",
+                session.respond("adventure relationships"),
+            )
+            self.assertEqual(
+                "Usage: adventure relationship set <character> <dimension>: <value>",
+                session.respond("adventure relationship set Vespera"),
+            )
+            self.assertIn(
+                "relationship dimension",
+                session.respond("adventure relationship set Vespera trust-level: cautious"),
+            )
+            self.assertEqual([], calls)
+
+            self.assertEqual("unexpected", session.respond("How does Vespera feel about us?"))
+            prompt = calls[-1]["messages"][0]["content"]
+            self.assertIn("CURRENT AUTHORITATIVE ADVENTURE RELATIONSHIPS", prompt)
+            self.assertIn("Vespera / trust: cautious", prompt)
+            self.assertNotIn("Vespera / trust: guarded\n", prompt)
+            self.assertIn("1 relationship fact(s)", session.context_stats())
+
+    def test_mounted_adventure_hides_imported_numeric_relationship_meters_unless_explicitly_requested(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            relationship = {
+                "id": 9, "memory_type": "relationship_context", "summary": "Vespera trust level",
+                "details": "Trust: 49/100. Comfort at 58 / 100.", "confidence": 0.9,
+            }
+            registry = AdventureRegistry(directory, now=lambda: datetime(2026, 8, 15, tzinfo=UTC))
+            session = AssistantSession(
+                self._config(), "Persona", policy="Policy", adventure_registry=registry,
+                chat=lambda **kwargs: calls.append(kwargs) or {"message": {"content": "unexpected"}},
+                memory_loader=lambda **kwargs: [relationship],
+            )
+            session.respond("adventure create Quiet Ember")
+            session.respond("adventure load Quiet Ember")
+
+            self.assertEqual("unexpected", session.respond("How does Vespera feel about us?"))
+            prompt = calls[-1]["messages"][0]["content"]
+            self.assertNotIn("49/100", prompt)
+            self.assertNotIn("58 / 100", prompt)
+            self.assertIn("qualitative internal state", prompt)
+            self.assertEqual("Trust: 49/100. Comfort at 58 / 100.", relationship["details"])
+
+            self.assertEqual("unexpected", session.respond("Show Vespera's internal relationship meter scores."))
+            self.assertIn("49/100", calls[-1]["messages"][0]["content"])
+
+    def test_explicit_character_knowledge_is_event_backed_and_perspective_scoped(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(directory, calls)
+            session.respond("adventure create Quiet Ember")
+            session.respond("adventure load Quiet Ember")
+            self.assertEqual(
+                "No explicit character knowledge or beliefs are recorded for the loaded workspace.",
+                session.respond("adventure knowledge"),
+            )
+            self.assertIn(
+                "AE-000001",
+                session.respond("adventure knowledge set Vespera believes: the hatch is trapped"),
+            )
+            self.assertIn("Vespera believes: the hatch is trapped", session.respond("adventure knowledge"))
+            self.assertIn(
+                "AE-000002",
+                session.respond("adventure knowledge set Vespera uncertain: the hatch is trapped"),
+            )
+            self.assertIn(
+                "Vespera uncertain: the hatch is trapped (AE-000002)",
+                session.respond("adventure knowledge"),
+            )
+            self.assertEqual(
+                "Usage: adventure knowledge set <character> <knows|believes|uncertain>: <fact>",
+                session.respond("adventure knowledge set Vespera"),
+            )
+            self.assertIn(
+                "knowledge status",
+                session.respond("adventure knowledge set Vespera guesses: the hatch is trapped"),
+            )
+            self.assertEqual([], calls)
+
+            self.assertEqual("unexpected", session.respond("What does Vespera know about the hatch?"))
+            prompt = calls[-1]["messages"][0]["content"]
+            self.assertIn("CHARACTER KNOWLEDGE AND BELIEFS", prompt)
+            self.assertIn("Vespera uncertain: the hatch is trapped", prompt)
+            self.assertIn("not automatically objective world truth", prompt)
+            self.assertIn("1 character-knowledge fact(s)", session.context_stats())
+
+    def test_explicit_adventure_turn_staging_commits_or_aborts_as_one_batch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(directory, calls)
+            self.assertIn("none loaded", session.respond("adventure turn begin"))
+            session.respond("adventure create Quiet Ember")
+            session.respond("adventure load Quiet Ember")
+            self.assertIn("staging started", session.respond("adventure turn begin"))
+            self.assertIn("[discovery]", session.respond("adventure turn stage discovery: The crew finds a hatch."))
+            self.assertIn("[choice]", session.respond("adventure turn stage choice: The crew opens it."))
+            self.assertIn("2 event(s) staged", session.respond("adventure turn status"))
+            self.assertEqual("No authoritative adventure events are recorded for the loaded workspace.", session.respond("adventure events"))
+            self.assertIn("Committed 2 staged adventure event(s): AE-000001 through AE-000002.", session.respond("adventure turn commit"))
+            self.assertIn("AE-000001", session.respond("adventure events"))
+            self.assertIn("AE-000002", session.respond("adventure events"))
+            self.assertEqual("Adventure turn staging: inactive.", session.respond("adventure turn status"))
+
+            session.respond("adventure turn begin")
+            session.respond("adventure turn stage discovery: A second hatch appears.")
+            self.assertIn("Discarded 1 staged adventure event(s)", session.respond("adventure turn abort"))
+            self.assertNotIn("second hatch", session.respond("adventure events"))
+            self.assertEqual([], calls)
 
 
 if __name__ == "__main__":

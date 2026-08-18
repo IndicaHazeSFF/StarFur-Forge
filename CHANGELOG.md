@@ -1,3 +1,27 @@
+## 2026-08-18 - Add explicit atomic adventure-turn staging
+
+- Behavior: Loaded adventures now support `adventure turn begin/status/stage/commit/abort`. Staged validated ordinary event drafts stay session-local until one `append_many` commit writes the complete batch; abort and mount changes discard them without event-log mutation.
+- Constraints: no automatic narration extraction, provider call, prompt injection, shared-memory write, snapshot, or state/relationship/knowledge staging was added. Existing direct controls remain immediate.
+- Verification: focused event-log and adventure-command tests cover invisible staging, atomic ordered commit, abort preservation, inactive failure, and command isolation.
+
+## 2026-08-17 - Add explicit character knowledge and belief projection
+
+- Behavior: Loaded adventures now support exact `adventure knowledge` inspection and `adventure knowledge set <character> <knows|believes|uncertain>: <fact>` writes. Each write appends one validated `character_knowledge` event; the mounted session projects the latest bounded stance per character/fact into prompt context and diagnostics.
+- Constraints: character knowledge is adventure-local and perspective-specific, not automatic world truth. No model extraction, narrative inference, lie/reasoning engine, shared-memory write, background simulation, or real-world persona-state interaction was added.
+- Verification: focused event/knowledge, adventure-command, help, and context-diagnostic tests cover validation, latest-status replacement, prompt refresh, diagnostics, and command isolation.
+
+## 2026-08-17 - Redact numeric fictional relationship meters before prompting
+
+- Behavior: Active roleplay and mounted adventures now apply the existing pure relationship-meter presentation sanitizer to retrieved `relationship_context` records before ContextManager sees them. Explicit score/meter/diagnostic requests retain the original values.
+- Constraints: sanitization changes only a copied prompt payload. It does not rewrite memory, alter retrieval order, hide public diagnostics, change Core-owned qualitative adventure facts, or suppress unrelated numerical details.
+- Verification: focused presentation and adventure-command tests cover normal redaction, explicit diagnostic disclosure, mounted-adventure prompt behavior, and raw-record preservation.
+
+## 2026-08-17 - Add explicit qualitative adventure relationships
+
+- Behavior: Loaded adventures now support exact `adventure relationships` inspection and `adventure relationship set <character> <dimension>: <value>` writes. Each write appends one validated `relationship_change` event; the mounted session deterministically projects only the latest bounded qualitative fact per character/dimension.
+- Constraints: this is isolated adventure continuity, not the real-world relationship runtime. No numeric meter, automatic narrative inference, emotion derivation, shared-memory write, model call, or provider-selected relationship update was added.
+- Verification: focused event/relationship, adventure-command, help, and context-diagnostic tests cover validation, latest-value replacement, prompt refresh, diagnostics, and command isolation.
+
 ## 2026-08-17 - Add explicit event-backed adventure story state
 
 - Behavior: A loaded adventure now supports exact `adventure state` inspection and `adventure state set <key>: <value>` writes. Each write appends one validated `state_change` record; the session deterministically projects the latest value per key into bounded adventure context and diagnostics.

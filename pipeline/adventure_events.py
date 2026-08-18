@@ -30,6 +30,12 @@ _MAX_SUMMARY_LENGTH = 500
 _MAX_DETAILS_LENGTH = 4_000
 _MAX_STATE_VALUE_LENGTH = 500
 _STATE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+_MAX_RELATIONSHIP_SUBJECT_LENGTH = 96
+_MAX_RELATIONSHIP_VALUE_LENGTH = 160
+_RELATIONSHIP_DIMENSION_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+_MAX_KNOWLEDGE_SUBJECT_LENGTH = 96
+_MAX_KNOWLEDGE_FACT_LENGTH = 500
+KNOWLEDGE_STATUSES = frozenset({"knows", "believes", "uncertain"})
 
 
 class AdventureEventLogError(ValueError):
@@ -63,6 +69,27 @@ def normalize_state_key(value: object) -> str:
     return key
 
 
+def normalize_relationship_dimension(value: object) -> str:
+    """Normalize one explicit relationship dimension; it is never inferred."""
+    if not isinstance(value, str):
+        raise AdventureEventLogError("relationship dimension must be text")
+    dimension = value.strip().casefold()
+    if not _RELATIONSHIP_DIMENSION_PATTERN.fullmatch(dimension):
+        raise AdventureEventLogError("relationship dimension must use lowercase letters, numbers, and underscores")
+    return dimension
+
+
+def normalize_knowledge_status(value: object) -> str:
+    """Normalize a character's explicit epistemic status."""
+    if not isinstance(value, str):
+        raise AdventureEventLogError("knowledge status must be text")
+    status = value.strip().casefold()
+    if status not in KNOWLEDGE_STATUSES:
+        allowed = ", ".join(sorted(KNOWLEDGE_STATUSES))
+        raise AdventureEventLogError(f"knowledge status must be one of: {allowed}")
+    return status
+
+
 @dataclass(frozen=True)
 class AdventureEvent:
     """One authoritative, replayable story fact in sequence order."""
@@ -75,6 +102,12 @@ class AdventureEvent:
     recorded_at: str
     state_key: str | None = None
     state_value: str | None = None
+    relationship_subject: str | None = None
+    relationship_dimension: str | None = None
+    relationship_value: str | None = None
+    knowledge_subject: str | None = None
+    knowledge_status: str | None = None
+    knowledge_fact: str | None = None
     source: str = EVENT_SOURCE_CORE_EXPLICIT
     schema_version: int = EVENT_LOG_SCHEMA_VERSION
 
@@ -102,6 +135,36 @@ class AdventureEvent:
             object.__setattr__(self, "state_value", _required_text(
                 self.state_value, field="state value", maximum=_MAX_STATE_VALUE_LENGTH, collapse=True
             ))
+        relationship_values = (self.relationship_subject, self.relationship_dimension, self.relationship_value)
+        if all(value is None for value in relationship_values):
+            pass
+        elif any(value is None for value in relationship_values):
+            raise AdventureEventLogError("relationship change requires subject, dimension, and value")
+        elif self.event_type != "relationship_change":
+            raise AdventureEventLogError("structured relationship is allowed only for relationship_change events")
+        else:
+            object.__setattr__(self, "relationship_subject", _required_text(
+                self.relationship_subject, field="relationship subject", maximum=_MAX_RELATIONSHIP_SUBJECT_LENGTH, collapse=True
+            ))
+            object.__setattr__(self, "relationship_dimension", normalize_relationship_dimension(self.relationship_dimension))
+            object.__setattr__(self, "relationship_value", _required_text(
+                self.relationship_value, field="relationship value", maximum=_MAX_RELATIONSHIP_VALUE_LENGTH, collapse=True
+            ))
+        knowledge_values = (self.knowledge_subject, self.knowledge_status, self.knowledge_fact)
+        if all(value is None for value in knowledge_values):
+            pass
+        elif any(value is None for value in knowledge_values):
+            raise AdventureEventLogError("character knowledge requires subject, status, and fact")
+        elif self.event_type != "character_knowledge":
+            raise AdventureEventLogError("structured knowledge is allowed only for character_knowledge events")
+        else:
+            object.__setattr__(self, "knowledge_subject", _required_text(
+                self.knowledge_subject, field="knowledge subject", maximum=_MAX_KNOWLEDGE_SUBJECT_LENGTH, collapse=True
+            ))
+            object.__setattr__(self, "knowledge_status", normalize_knowledge_status(self.knowledge_status))
+            object.__setattr__(self, "knowledge_fact", _required_text(
+                self.knowledge_fact, field="knowledge fact", maximum=_MAX_KNOWLEDGE_FACT_LENGTH, collapse=True
+            ))
         if not isinstance(self.recorded_at, str) or not self.recorded_at:
             raise AdventureEventLogError("event recording time is required")
         if self.source != EVENT_SOURCE_CORE_EXPLICIT:
@@ -118,11 +181,51 @@ class AdventureEvent:
                 sequence=value["sequence"], event_id=value["event_id"], event_type=value["event_type"],
                 summary=value["summary"], details=value.get("details"), recorded_at=value["recorded_at"],
                 state_key=value.get("state_key"), state_value=value.get("state_value"),
+                relationship_subject=value.get("relationship_subject"),
+                relationship_dimension=value.get("relationship_dimension"), relationship_value=value.get("relationship_value"),
+                knowledge_subject=value.get("knowledge_subject"), knowledge_status=value.get("knowledge_status"),
+                knowledge_fact=value.get("knowledge_fact"),
                 source=value.get("source", EVENT_SOURCE_CORE_EXPLICIT),
                 schema_version=value.get("schema_version", EVENT_LOG_SCHEMA_VERSION),
             )
         except KeyError as exc:
             raise AdventureEventLogError("event log entry is incomplete") from exc
+
+
+@dataclass(frozen=True)
+class AdventureEventDraft:
+    """A validated, sequence-free event held before one explicit turn commit."""
+
+    event_type: str
+    summary: str
+    details: str | None = None
+    state_key: str | None = None
+    state_value: str | None = None
+    relationship_subject: str | None = None
+    relationship_dimension: str | None = None
+    relationship_value: str | None = None
+    knowledge_subject: str | None = None
+    knowledge_status: str | None = None
+    knowledge_fact: str | None = None
+
+    def __post_init__(self) -> None:
+        # Reuse the authoritative field validation while deliberately omitting
+        # sequence/time, which belong to the eventual append operation.
+        validated = AdventureEvent(
+            sequence=1, event_id="AE-000001", event_type=self.event_type, summary=self.summary,
+            details=self.details, recorded_at="draft",
+            state_key=self.state_key, state_value=self.state_value,
+            relationship_subject=self.relationship_subject, relationship_dimension=self.relationship_dimension,
+            relationship_value=self.relationship_value,
+            knowledge_subject=self.knowledge_subject, knowledge_status=self.knowledge_status,
+            knowledge_fact=self.knowledge_fact,
+        )
+        for field_name in (
+            "event_type", "summary", "details", "state_key", "state_value",
+            "relationship_subject", "relationship_dimension", "relationship_value",
+            "knowledge_subject", "knowledge_status", "knowledge_fact",
+        ):
+            object.__setattr__(self, field_name, getattr(validated, field_name))
 
 
 class AdventureEventLog:
@@ -170,25 +273,53 @@ class AdventureEventLog:
     def append(
         self, event_type: object, summary: object, *, details: object = None,
         state_key: object = None, state_value: object = None,
+        relationship_subject: object = None, relationship_dimension: object = None, relationship_value: object = None,
+        knowledge_subject: object = None, knowledge_status: object = None, knowledge_fact: object = None,
     ) -> AdventureEvent:
-        """Append one Core-authored event and mark the workspace log as initialized."""
-        if not isinstance(event_type, str) or event_type not in EVENT_TYPES:
-            raise AdventureEventLogError("event type is unsupported")
-        sequence = len(self.events()) + 1
-        event = AdventureEvent(
-            sequence=sequence, event_id=f"AE-{sequence:06d}", event_type=event_type, summary=summary,
-            details=details, recorded_at=self._now().astimezone(UTC).isoformat(),
+        """Append one Core-authored event through the same atomic batch path."""
+        draft = AdventureEventDraft(
+            event_type=event_type, summary=summary, details=details,
             state_key=state_key, state_value=state_value,
+            relationship_subject=relationship_subject, relationship_dimension=relationship_dimension,
+            relationship_value=relationship_value,
+            knowledge_subject=knowledge_subject, knowledge_status=knowledge_status, knowledge_fact=knowledge_fact,
         )
+        return self.append_many((draft,))[0]
+
+    def append_many(self, drafts: object) -> list[AdventureEvent]:
+        """Atomically append a bounded already-validated batch of drafts."""
+        if not isinstance(drafts, (list, tuple)) or not drafts:
+            raise AdventureEventLogError("event batch must contain at least one draft")
+        if len(drafts) > 16 or not all(isinstance(draft, AdventureEventDraft) for draft in drafts):
+            raise AdventureEventLogError("event batch must contain at most 16 validated drafts")
+        existing = self.events()
+        recorded_at = self._now().astimezone(UTC).isoformat()
+        events = [
+            AdventureEvent(
+                sequence=len(existing) + index, event_id=f"AE-{len(existing) + index:06d}",
+                event_type=draft.event_type, summary=draft.summary, details=draft.details, recorded_at=recorded_at,
+                state_key=draft.state_key, state_value=draft.state_value,
+                relationship_subject=draft.relationship_subject, relationship_dimension=draft.relationship_dimension,
+                relationship_value=draft.relationship_value,
+                knowledge_subject=draft.knowledge_subject, knowledge_status=draft.knowledge_status,
+                knowledge_fact=draft.knowledge_fact,
+            )
+            for index, draft in enumerate(drafts, start=1)
+        ]
         try:
-            with self.path.open("a", encoding="utf-8", newline="\n") as handle:
-                handle.write(json.dumps(asdict(event), sort_keys=True, separators=(",", ":")) + "\n")
+            existing_text = self.path.read_text(encoding="utf-8") if self.path.exists() else ""
+            temporary = self.path.with_suffix(".jsonl.pending")
+            with temporary.open("w", encoding="utf-8", newline="\n") as handle:
+                handle.write(existing_text)
+                for event in events:
+                    handle.write(json.dumps(asdict(event), sort_keys=True, separators=(",", ":")) + "\n")
                 handle.flush()
                 os.fsync(handle.fileno())
+            os.replace(temporary, self.path)
         except OSError as exc:
             raise AdventureEventLogError("adventure event log cannot be written") from exc
         self._mark_manifest_initialized()
-        return event
+        return events
 
     def _mark_manifest_initialized(self) -> None:
         manifest_path = self._workspace / MANIFEST_FILENAME
@@ -210,6 +341,7 @@ class AdventureEventLog:
 
 
 __all__ = [
-    "AdventureEvent", "AdventureEventLog", "AdventureEventLogError", "EVENT_LOG_FILENAME",
-    "EVENT_LOG_SCHEMA_VERSION", "EVENT_SOURCE_CORE_EXPLICIT", "EVENT_TYPES", "normalize_state_key",
+    "AdventureEvent", "AdventureEventDraft", "AdventureEventLog", "AdventureEventLogError", "EVENT_LOG_FILENAME",
+    "EVENT_LOG_SCHEMA_VERSION", "EVENT_SOURCE_CORE_EXPLICIT", "EVENT_TYPES", "KNOWLEDGE_STATUSES",
+    "normalize_knowledge_status", "normalize_relationship_dimension", "normalize_state_key",
 ]

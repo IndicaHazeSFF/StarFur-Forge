@@ -42,6 +42,22 @@ class CommandHelpTests(unittest.TestCase):
         self.assertIn("adventure state set <key>: <value>", rendered)
         self.assertIn("current_location", rendered)
 
+    def test_adventure_relationship_help_returns_exact_core_commands(self):
+        payload = detect_command_help("How do I set adventure relationships?")
+        self.assertEqual(payload.intent, "adventure_registry")
+        rendered = payload.render()
+        self.assertIn("adventure relationships", rendered)
+        self.assertIn("adventure relationship set <character> <dimension>: <value>", rendered)
+        self.assertIn("Vespera trust: cautious", rendered)
+
+    def test_adventure_knowledge_help_returns_exact_core_commands(self):
+        payload = detect_command_help("How do I set character knowledge?")
+        self.assertEqual(payload.intent, "adventure_registry")
+        rendered = payload.render()
+        self.assertIn("adventure knowledge", rendered)
+        self.assertIn("adventure knowledge set <character> <knows|believes|uncertain>: <fact>", rendered)
+        self.assertIn("Vespera believes: the hatch is trapped", rendered)
+
     def test_persona_help_returns_read_only_command(self):
 
         payload = detect_command_help("How do I inspect the persona?")

@@ -394,6 +394,15 @@ Prepare or inspect isolated CYOA workspace metadata with exact Core commands:
     adventure events
     adventure state
     adventure state set <key>: <value>
+    adventure relationships
+    adventure relationship set <character> <dimension>: <value>
+    adventure knowledge
+    adventure knowledge set <character> <knows|believes|uncertain>: <fact>
+    adventure turn begin
+    adventure turn status
+    adventure turn stage <event-type>: <summary>
+    adventure turn commit
+    adventure turn abort
     adventure record <event-type>: <summary>
     adventure pause
     adventure end
@@ -411,6 +420,28 @@ explicit state-change records. `adventure state set <key>: <value>` writes one
 validated `state_change` event and refreshes that projection. Keys must use
 lowercase letters, numbers, and underscores (for example `current_location`).
 Core never extracts state from ordinary narration or model output.
+`adventure relationships` displays bounded qualitative character relationship
+facts. `adventure relationship set <character> <dimension>: <value>` records
+one explicit `relationship_change` event, such as `adventure relationship set
+Vespera trust: cautious`. Latest values are event-backed and rebuildable; Core
+never assigns relationships from ordinary narration or a provider response.
+`adventure knowledge` displays bounded character-specific knowledge, beliefs,
+and uncertainty. `adventure knowledge set <character> <knows|believes|uncertain>:
+<fact>` writes one explicit `character_knowledge` event, for example
+`adventure knowledge set Vespera believes: the hatch is trapped`. A belief or
+uncertainty is not automatically objective world truth; Core never derives it
+from narration or a provider response.
+`adventure turn` provides an explicit staged-event transaction for future
+generated adventure turns. `adventure turn stage` keeps one ordinary validated
+event draft in session memory only; it does not alter prompt context or the
+event log. `adventure turn commit` atomically appends the full staged batch,
+while `adventure turn abort` discards it. A mount change also discards staging.
+This initial transaction slice stages ordinary event drafts only; direct state,
+relationship, and knowledge commands remain immediate writes.
+While a workspace is mounted, numeric relationship-meter wording in retrieved
+`relationship_context` memories is redacted before normal narration unless the
+user explicitly asks for a meter, score, or internal diagnostic. This changes
+only prompt presentation; stored records and `context stats` remain intact.
 `adventure record` is the initial explicit Core-owned write path; it requires a
 loaded workspace and one of: `choice`, `discovery`, `promise`, `lie`,
 `relationship_change`, `emotional_transition`, `state_change`,

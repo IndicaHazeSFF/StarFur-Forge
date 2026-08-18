@@ -39,10 +39,11 @@ from pipeline.persona_visibility import (
     evaluate_shared_memory_visibility,
 )
 from pipeline.roleplay import RoleplaySessionState, detect_casual_roleplay_start
-from pipeline.roleplay_presentation import sanitize_roleplay_memories
-from pipeline.adventure_events import AdventureEventLog, AdventureEventLogError
+from pipeline.roleplay_presentation import sanitize_fictional_relationship_memories
+from pipeline.adventure_events import AdventureEventDraft, AdventureEventLog, AdventureEventLogError
 from pipeline.adventure_registry import AdventureNotFoundError, AdventureRegistry, AdventureRegistryError
 from pipeline.adventure_session import AdventureSessionState
+from pipeline.adventure_turn import AdventureTurnTransaction
 from pipeline.document_review import DEFAULT_REVIEW_TTL_SECONDS
 
 from pipeline.capabilities import CapabilityManifest
@@ -250,6 +251,7 @@ class AssistantSession:
             getattr(config, "adventure_root", PROJECT_ROOT / "adventures")
         )
         self.adventure_session = AdventureSessionState.unmounted()
+        self.adventure_turn = AdventureTurnTransaction.inactive()
         self.proposals = []
         self.last_memory_ids = []
         self._pending_bulk_proposal_ids = None
@@ -437,6 +439,8 @@ class AssistantSession:
                 f"{snapshot['adventure_session'].get('event_count', 0)} authoritative event(s), "
                 f"{snapshot['adventure_session'].get('context_event_count', 0)} in bounded replay context; "
                 f"{snapshot['adventure_session'].get('state_fact_count', 0)} current state fact(s); "
+                f"{snapshot['adventure_session'].get('relationship_fact_count', 0)} relationship fact(s); "
+                f"{snapshot['adventure_session'].get('knowledge_fact_count', 0)} character-knowledge fact(s); "
                 "session-local mount)"
                 if snapshot.get("adventure_session", {}).get("mounted") else "none loaded"
             ),
@@ -611,8 +615,8 @@ class AssistantSession:
         retrieved, visibility_decisions = self._apply_shared_memory_visibility(retrieved)
         raw_memories = [item["memory"] for item in retrieved]
         memories = (
-            sanitize_roleplay_memories(raw_memories, user_text=user_text)
-            if self.roleplay_state.active else raw_memories
+            sanitize_fictional_relationship_memories(raw_memories, user_text=user_text)
+            if self.roleplay_state.active or self.adventure_session.active else raw_memories
         )
         prompt_started = time.perf_counter()
         recent = self.messages[-self.config.max_session_messages:]
@@ -1010,6 +1014,7 @@ class AssistantSession:
 
     def _set_adventure_session(self, state):
         self.adventure_session = state
+        self.adventure_turn = AdventureTurnTransaction.inactive()
         self.messages.clear()
         self.last_memory_ids = []
         self.last_turn_diagnostics = None
@@ -1086,7 +1091,9 @@ class AssistantSession:
             f"Adventure workspace: loaded ({record.title}; {record.adventure_id}; "
             f"{self.adventure_session.event_count} authoritative event(s), "
             f"{len(self.adventure_session.context_events)} in bounded replay context, "
-            f"{len(self.adventure_session.state_facts)} current state fact(s); session-local mount)."
+            f"{len(self.adventure_session.state_facts)} current state fact(s), "
+            f"{len(self.adventure_session.relationship_facts)} relationship fact(s), "
+            f"{len(self.adventure_session.knowledge_facts)} character-knowledge fact(s); session-local mount)."
         )
 
     def adventure_events(self):
@@ -1134,6 +1141,80 @@ class AssistantSession:
         self.adventure_session = self.adventure_session.mount(self.adventure_session.record, events)
         return f"Set adventure state {event.state_key}: {event.state_value} ({event.event_id})."
 
+    def adventure_relationships(self):
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded."
+        if not self.adventure_session.relationship_facts:
+            return "No explicit authoritative adventure relationships are recorded for the loaded workspace."
+        lines = [f"Current adventure relationships for {self.adventure_session.record.title}:"]
+        lines.extend(
+            f"{fact.subject} / {fact.dimension}: {fact.value} ({fact.source_event_id})"
+            for fact in self.adventure_session.relationship_facts
+        )
+        return "\n".join(lines)
+
+    def adventure_relationship_set(self, value):
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded. Load an adventure before setting a relationship."
+        if not isinstance(value, str) or ":" not in value:
+            return "Usage: adventure relationship set <character> <dimension>: <value>"
+        identity, relationship_value = value.split(":", 1)
+        parts = identity.split()
+        if len(parts) < 2:
+            return "Usage: adventure relationship set <character> <dimension>: <value>"
+        subject = " ".join(parts[:-1])
+        dimension = parts[-1]
+        try:
+            log = AdventureEventLog(self.adventure_registry, self.adventure_session.record)
+            event = log.append(
+                "relationship_change", f"{subject.strip()} / {dimension.strip()}: {relationship_value.strip()}.",
+                relationship_subject=subject, relationship_dimension=dimension,
+                relationship_value=relationship_value,
+            )
+            events = log.events()
+        except AdventureEventLogError as error:
+            return f"Adventure relationship was not set: {error}"
+        self.adventure_session = self.adventure_session.mount(self.adventure_session.record, events)
+        return (
+            f"Set adventure relationship {event.relationship_subject} / "
+            f"{event.relationship_dimension}: {event.relationship_value} ({event.event_id})."
+        )
+
+    def adventure_knowledge(self):
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded."
+        if not self.adventure_session.knowledge_facts:
+            return "No explicit character knowledge or beliefs are recorded for the loaded workspace."
+        lines = [f"Character knowledge and beliefs for {self.adventure_session.record.title}:"]
+        lines.extend(
+            f"{fact.subject} {fact.status}: {fact.fact} ({fact.source_event_id})"
+            for fact in self.adventure_session.knowledge_facts
+        )
+        return "\n".join(lines)
+
+    def adventure_knowledge_set(self, value):
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded. Load an adventure before setting character knowledge."
+        if not isinstance(value, str) or ":" not in value:
+            return "Usage: adventure knowledge set <character> <knows|believes|uncertain>: <fact>"
+        identity, fact = value.split(":", 1)
+        parts = identity.split()
+        if len(parts) < 2:
+            return "Usage: adventure knowledge set <character> <knows|believes|uncertain>: <fact>"
+        subject = " ".join(parts[:-1])
+        status = parts[-1]
+        try:
+            log = AdventureEventLog(self.adventure_registry, self.adventure_session.record)
+            event = log.append(
+                "character_knowledge", f"{subject.strip()} {status.strip()}: {fact.strip()}.",
+                knowledge_subject=subject, knowledge_status=status, knowledge_fact=fact,
+            )
+            events = log.events()
+        except AdventureEventLogError as error:
+            return f"Character knowledge was not set: {error}"
+        self.adventure_session = self.adventure_session.mount(self.adventure_session.record, events)
+        return f"Set character knowledge {event.knowledge_subject} {event.knowledge_status}: {event.knowledge_fact} ({event.event_id})."
+
     def adventure_record(self, value):
         """Append one explicit user-authorized canonical event to the loaded world."""
         if not self.adventure_session.active:
@@ -1152,6 +1233,65 @@ class AssistantSession:
         # Core-provided replay view for subsequent model turns.
         self.adventure_session = self.adventure_session.mount(self.adventure_session.record, events)
         return f"Recorded adventure event {event.event_id} [{event.event_type}]: {event.summary}"
+
+    def adventure_turn_begin(self):
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded. Load an adventure before beginning a staged turn."
+        try:
+            self.adventure_turn = self.adventure_turn.begin(self.adventure_session.record)
+        except ValueError as error:
+            return f"Adventure turn was not started: {error}"
+        return f"Adventure turn staging started for {self.adventure_session.record.title}."
+
+    def adventure_turn_status(self):
+        if not self.adventure_turn.active:
+            return "Adventure turn staging: inactive."
+        return (
+            f"Adventure turn staging: active for {self.adventure_turn.record.title}; "
+            f"{len(self.adventure_turn.drafts)} event(s) staged and not yet persisted."
+        )
+
+    def adventure_turn_stage(self, value):
+        if not self.adventure_turn.active:
+            return "Adventure turn staging: inactive. Use adventure turn begin first."
+        if not self.adventure_session.active or self.adventure_session.record != self.adventure_turn.record:
+            self.adventure_turn = self.adventure_turn.abort()
+            return "Adventure turn staging was discarded because its workspace is no longer loaded."
+        if not isinstance(value, str) or ":" not in value:
+            return "Usage: adventure turn stage <event-type>: <summary>"
+        event_type, summary = value.split(":", 1)
+        try:
+            draft = AdventureEventDraft(event_type=event_type.strip().casefold(), summary=summary)
+            self.adventure_turn = self.adventure_turn.stage(draft)
+        except (AdventureEventLogError, ValueError, TypeError) as error:
+            return f"Adventure event was not staged: {error}"
+        return f"Staged adventure event [{draft.event_type}]: {draft.summary}"
+
+    def adventure_turn_commit(self):
+        if not self.adventure_turn.active:
+            return "Adventure turn staging: inactive."
+        if not self.adventure_turn.drafts:
+            return "Adventure turn has no staged events. Stage an event or abort the turn."
+        if not self.adventure_session.active or self.adventure_session.record != self.adventure_turn.record:
+            self.adventure_turn = self.adventure_turn.abort()
+            return "Adventure turn staging was discarded because its workspace is no longer loaded."
+        try:
+            log = AdventureEventLog(self.adventure_registry, self.adventure_session.record)
+            events = log.append_many(self.adventure_turn.drafts)
+            all_events = log.events()
+        except AdventureEventLogError as error:
+            return f"Adventure turn was not committed: {error}"
+        count = len(events)
+        self.adventure_turn = self.adventure_turn.abort()
+        self.adventure_session = self.adventure_session.mount(self.adventure_session.record, all_events)
+        return f"Committed {count} staged adventure event(s): {events[0].event_id} through {events[-1].event_id}."
+
+    def adventure_turn_abort(self):
+        if not self.adventure_turn.active:
+            return "Adventure turn staging: inactive."
+        count = len(self.adventure_turn.drafts)
+        self.adventure_turn = self.adventure_turn.abort()
+        return f"Discarded {count} staged adventure event(s); nothing was persisted."
 
     def command(self, text):
         lowered = text.strip().casefold()
@@ -1183,6 +1323,24 @@ class AssistantSession:
             return self.adventure_state_set(text.strip()[len("adventure state set"):])
         if lowered in {"adventure state", "adventure state list"}:
             return self.adventure_state()
+        if lowered == "adventure relationship set" or lowered.startswith("adventure relationship set "):
+            return self.adventure_relationship_set(text.strip()[len("adventure relationship set"):])
+        if lowered in {"adventure relationship", "adventure relationships"}:
+            return self.adventure_relationships()
+        if lowered == "adventure knowledge set" or lowered.startswith("adventure knowledge set "):
+            return self.adventure_knowledge_set(text.strip()[len("adventure knowledge set"):])
+        if lowered in {"adventure knowledge", "adventure beliefs"}:
+            return self.adventure_knowledge()
+        if lowered == "adventure turn begin":
+            return self.adventure_turn_begin()
+        if lowered in {"adventure turn status", "adventure turn"}:
+            return self.adventure_turn_status()
+        if lowered == "adventure turn stage" or lowered.startswith("adventure turn stage "):
+            return self.adventure_turn_stage(text.strip()[len("adventure turn stage"):])
+        if lowered == "adventure turn commit":
+            return self.adventure_turn_commit()
+        if lowered in {"adventure turn abort", "adventure turn discard"}:
+            return self.adventure_turn_abort()
         if lowered == "adventure record" or lowered.startswith("adventure record "):
             return self.adventure_record(text.strip()[len("adventure record"):])
         if lowered in {"adventure pause", "pause adventure"}:
@@ -1498,7 +1656,7 @@ def run_interactive(config_path=DEFAULT_CONFIG_PATH, input_fn=input, output_fn=p
         stream_writer=stream_writer,
     )
     session = application.session
-    output_fn("StarFur Assistant (model list/current/use, persona list/current/use/inspect, roleplay begin/end/status, adventure list/create/inspect/load/status/unload, remember/forget, memory list/search/inspect/scope, proposal list/inspect/approve/reject/approve all/scope, context stats; quit to exit)")
+    output_fn("StarFur Assistant (model list/current/use, persona list/current/use/inspect, roleplay begin/end/status, adventure list/create/inspect/load/resume/status/events/state/relationships/knowledge/turn/pause/end/unload, remember/forget, memory list/search/inspect/scope, proposal list/inspect/approve/reject/approve all/scope, context stats; quit to exit)")
     while True:
         try:
             user_text = input_fn("You: ")
