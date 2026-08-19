@@ -21,12 +21,8 @@ class AdventureRelationshipFact:
     source_event_id: str
 
 
-def derive_adventure_relationships(
-    events: Iterable[AdventureEvent], *, limit: int = MAX_CONTEXT_RELATIONSHIP_FACTS
-) -> tuple[AdventureRelationshipFact, ...]:
-    """Project only explicit relationship-change records; never infer narration."""
-    if not isinstance(limit, int) or not 1 <= limit <= MAX_CONTEXT_RELATIONSHIP_FACTS:
-        raise ValueError(f"relationship fact limit must be between 1 and {MAX_CONTEXT_RELATIONSHIP_FACTS}")
+def derive_adventure_relationships(events: Iterable[AdventureEvent]) -> tuple[AdventureRelationshipFact, ...]:
+    """Rebuild complete latest qualitative relationships from event history."""
     values = tuple(events)
     if not all(isinstance(event, AdventureEvent) for event in values):
         raise TypeError("adventure relationship events must be AdventureEvents")
@@ -41,9 +37,22 @@ def derive_adventure_relationships(
             value=event.relationship_value,
             source_event_id=event.event_id,
         )
-    return tuple(latest[key] for key in sorted(latest)[:limit])
+    return tuple(latest[key] for key in sorted(latest))
+
+
+def select_adventure_relationship_context(
+    facts: Iterable[AdventureRelationshipFact], *, limit: int = MAX_CONTEXT_RELATIONSHIP_FACTS,
+) -> tuple[AdventureRelationshipFact, ...]:
+    """Select a deterministic bounded prompt/UI view without truncating truth."""
+    if not isinstance(limit, int) or not 1 <= limit <= MAX_CONTEXT_RELATIONSHIP_FACTS:
+        raise ValueError(f"relationship fact limit must be between 1 and {MAX_CONTEXT_RELATIONSHIP_FACTS}")
+    values = tuple(facts)
+    if not all(isinstance(fact, AdventureRelationshipFact) for fact in values):
+        raise TypeError("adventure relationship facts must be AdventureRelationshipFacts")
+    return values[:limit]
 
 
 __all__ = [
     "AdventureRelationshipFact", "MAX_CONTEXT_RELATIONSHIP_FACTS", "derive_adventure_relationships",
+    "select_adventure_relationship_context",
 ]

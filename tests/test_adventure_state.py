@@ -1,7 +1,7 @@
 import unittest
 
 from pipeline.adventure_events import AdventureEvent
-from pipeline.adventure_state import derive_adventure_state
+from pipeline.adventure_state import derive_adventure_state, select_adventure_state_context
 
 
 def event(sequence, event_type, *, key=None, value=None):
@@ -32,6 +32,19 @@ class AdventureStateTests(unittest.TestCase):
             event(1, "state_change", key="Current Location", value="bridge")
         with self.assertRaises(TypeError):
             derive_adventure_state(("not an event",))
+
+    def test_full_projection_is_not_truncated_by_bounded_context_selection(self):
+        facts = derive_adventure_state(tuple(
+            event(index + 1, "state_change", key=f"fact_{index:02}", value=f"value {index}")
+            for index in range(13)
+        ))
+
+        self.assertEqual(13, len(facts))
+        self.assertEqual(12, len(select_adventure_state_context(facts)))
+        self.assertEqual("fact_12", facts[-1].key)
+        self.assertNotIn("fact_12", [fact.key for fact in select_adventure_state_context(facts)])
+        self.assertEqual((facts[0],), select_adventure_state_context(facts, limit=1))
+        self.assertEqual(13, len(facts))
 
 
 if __name__ == "__main__":

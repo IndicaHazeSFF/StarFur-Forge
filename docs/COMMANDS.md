@@ -415,18 +415,19 @@ validated authoritative event summaries when its event log already exists. The
 selection preserves the opening event plus high-value continuity facts and
 recent state in chronological order; it is not necessarily the last eight.
 `adventure events` displays those bounded stored summaries without a model call.
-`adventure state` displays the bounded current authoritative state projected from
-explicit state-change records. `adventure state set <key>: <value>` writes one
+`adventure state` displays the complete current authoritative state projected from
+explicit state-change records. Prompt context uses a separate deterministic bounded
+selection, so context limits never discard state. `adventure state set <key>: <value>` writes one
 validated `state_change` event and refreshes that projection. Keys must use
 lowercase letters, numbers, and underscores (for example `current_location`).
 Core never extracts state from ordinary narration or model output.
-`adventure relationships` displays bounded qualitative character relationship
-facts. `adventure relationship set <character> <dimension>: <value>` records
+`adventure relationships` displays complete qualitative character relationship
+facts; prompt context uses a separate deterministic bounded selection. `adventure relationship set <character> <dimension>: <value>` records
 one explicit `relationship_change` event, such as `adventure relationship set
 Vespera trust: cautious`. Latest values are event-backed and rebuildable; Core
 never assigns relationships from ordinary narration or a provider response.
-`adventure knowledge` displays bounded character-specific knowledge, beliefs,
-and uncertainty. `adventure knowledge set <character> <knows|believes|uncertain>:
+`adventure knowledge` displays complete character-specific knowledge, beliefs,
+and uncertainty; prompt context uses a separate deterministic bounded selection. `adventure knowledge set <character> <knows|believes|uncertain>:
 <fact>` writes one explicit `character_knowledge` event, for example
 `adventure knowledge set Vespera believes: the hatch is trapped`. A belief or
 uncertainty is not automatically objective world truth; Core never derives it
@@ -434,8 +435,9 @@ from narration or a provider response.
 `adventure turn` provides an explicit staged-event transaction for future
 generated adventure turns. `adventure turn stage` keeps one ordinary validated
 event draft in session memory only; it does not alter prompt context or the
-event log. `adventure turn commit` atomically appends the full staged batch,
-while `adventure turn abort` discards it. A mount change also discards staging.
+event log. `adventure turn commit` atomically appends the full staged batch;
+the opaque Core request ID makes a matching completed-commit retry idempotent.
+`adventure turn abort` discards staging, and a mount change also discards it.
 This initial transaction slice stages ordinary event drafts only; direct state,
 relationship, and knowledge commands remain immediate writes.
 While a workspace is mounted, numeric relationship-meter wording in retrieved

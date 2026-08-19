@@ -1,7 +1,10 @@
 import unittest
 
 from pipeline.adventure_events import AdventureEvent
-from pipeline.adventure_relationship import derive_adventure_relationships
+from pipeline.adventure_relationship import (
+    derive_adventure_relationships,
+    select_adventure_relationship_context,
+)
 
 
 def event(sequence, event_type, *, subject=None, dimension=None, value=None):
@@ -37,6 +40,19 @@ class AdventureRelationshipTests(unittest.TestCase):
             event(1, "relationship_change", subject="Vespera", dimension="Trust Level", value="cautious")
         with self.assertRaises(TypeError):
             derive_adventure_relationships(("not an event",))
+
+    def test_full_projection_is_not_truncated_by_bounded_context_selection(self):
+        facts = derive_adventure_relationships(tuple(
+            event(index + 1, "relationship_change", subject=f"Character {index:02}", dimension="trust", value="guarded")
+            for index in range(13)
+        ))
+
+        self.assertEqual(13, len(facts))
+        self.assertEqual(12, len(select_adventure_relationship_context(facts)))
+        self.assertEqual("Character 12", facts[-1].subject)
+        self.assertNotIn("Character 12", [fact.subject for fact in select_adventure_relationship_context(facts)])
+        self.assertEqual((facts[0],), select_adventure_relationship_context(facts, limit=1))
+        self.assertEqual(13, len(facts))
 
 
 if __name__ == "__main__":

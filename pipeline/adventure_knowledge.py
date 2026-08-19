@@ -21,12 +21,8 @@ class AdventureKnowledgeFact:
     source_event_id: str
 
 
-def derive_adventure_knowledge(
-    events: Iterable[AdventureEvent], *, limit: int = MAX_CONTEXT_KNOWLEDGE_FACTS,
-) -> tuple[AdventureKnowledgeFact, ...]:
-    """Project explicit character knowledge without treating it as world truth."""
-    if not isinstance(limit, int) or not 1 <= limit <= MAX_CONTEXT_KNOWLEDGE_FACTS:
-        raise ValueError(f"knowledge fact limit must be between 1 and {MAX_CONTEXT_KNOWLEDGE_FACTS}")
+def derive_adventure_knowledge(events: Iterable[AdventureEvent]) -> tuple[AdventureKnowledgeFact, ...]:
+    """Rebuild complete character-scoped knowledge from event history."""
     values = tuple(events)
     if not all(isinstance(event, AdventureEvent) for event in values):
         raise TypeError("adventure knowledge events must be AdventureEvents")
@@ -41,7 +37,22 @@ def derive_adventure_knowledge(
             fact=event.knowledge_fact,
             source_event_id=event.event_id,
         )
-    return tuple(latest[key] for key in sorted(latest)[:limit])
+    return tuple(latest[key] for key in sorted(latest))
 
 
-__all__ = ["AdventureKnowledgeFact", "MAX_CONTEXT_KNOWLEDGE_FACTS", "derive_adventure_knowledge"]
+def select_adventure_knowledge_context(
+    facts: Iterable[AdventureKnowledgeFact], *, limit: int = MAX_CONTEXT_KNOWLEDGE_FACTS,
+) -> tuple[AdventureKnowledgeFact, ...]:
+    """Select a deterministic bounded prompt/UI view without truncating truth."""
+    if not isinstance(limit, int) or not 1 <= limit <= MAX_CONTEXT_KNOWLEDGE_FACTS:
+        raise ValueError(f"knowledge fact limit must be between 1 and {MAX_CONTEXT_KNOWLEDGE_FACTS}")
+    values = tuple(facts)
+    if not all(isinstance(fact, AdventureKnowledgeFact) for fact in values):
+        raise TypeError("adventure knowledge facts must be AdventureKnowledgeFacts")
+    return values[:limit]
+
+
+__all__ = [
+    "AdventureKnowledgeFact", "MAX_CONTEXT_KNOWLEDGE_FACTS", "derive_adventure_knowledge",
+    "select_adventure_knowledge_context",
+]

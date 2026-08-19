@@ -1,8 +1,13 @@
 import tempfile
 import unittest
 from datetime import UTC, datetime
+from pathlib import Path
+import sys
 
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pipeline.adventure_events import AdventureEventDraft, AdventureEventLog
+from pipeline.adventure_mutation import AdventureMutation, MUTATION_KNOWLEDGE_SET, MUTATION_RELATIONSHIP_SET, MUTATION_STATE_SET
 from pipeline.adventure_registry import AdventureRegistry
 from pipeline.adventure_turn import AdventureTurnTransaction
 
@@ -17,8 +22,10 @@ class AdventureTurnTests(unittest.TestCase):
             transaction = transaction.stage(AdventureEventDraft("choice", "The crew opens it."))
             log = AdventureEventLog(registry, record)
             self.assertEqual([], log.events())
-            written = log.append_many(transaction.drafts)
+            written = log.append_many(transaction.drafts, request_id=transaction.request_id)
             self.assertEqual(["AE-000001", "AE-000002"], [event.event_id for event in written])
+            self.assertTrue(all(event.request_id == transaction.request_id for event in written))
+            self.assertEqual(written, log.append_many(transaction.drafts, request_id=transaction.request_id))
             self.assertEqual(2, len(log.events()))
 
     def test_abort_never_persists_and_inactive_cannot_stage(self):
@@ -31,6 +38,46 @@ class AdventureTurnTests(unittest.TestCase):
             self.assertEqual([], AdventureEventLog(registry, record).events())
             with self.assertRaisesRegex(ValueError, "no adventure turn"):
                 AdventureTurnTransaction.inactive().stage(AdventureEventDraft("choice", "Open it."))
+
+    def test_typed_structured_mutations_stage_with_ordinary_events_and_commit_together(self):
+        with tempfile.TemporaryDirectory() as directory:
+            registry = AdventureRegistry(directory, now=lambda: datetime(2026, 8, 18, tzinfo=UTC))
+            record = registry.create("Quiet Ember")
+            transaction = AdventureTurnTransaction.inactive().begin(record)
+            transaction = transaction.stage(AdventureEventDraft("discovery", "The crew finds a compass."))
+            transaction = transaction.stage_mutation(
+                AdventureMutation(MUTATION_STATE_SET, state_key="location", state_value="chart room"),
+                summary="The crew reaches the chart room.",
+            )
+            transaction = transaction.stage_mutation(
+                AdventureMutation(
+                    MUTATION_RELATIONSHIP_SET,
+                    relationship_subject="Vespera",
+                    relationship_dimension="trust",
+                    relationship_value="cautious",
+                ),
+                summary="Vespera remains cautiously trusting.",
+            )
+            transaction = transaction.stage_mutation(
+                AdventureMutation(
+                    MUTATION_KNOWLEDGE_SET,
+                    knowledge_subject="Rook",
+                    knowledge_status="believes",
+                    knowledge_fact="the hatch is trapped",
+                ),
+                summary="Rook believes the hatch is trapped.",
+            )
+
+            self.assertEqual(4, len(transaction.drafts))
+            self.assertEqual(3, len(transaction.mutations))
+            log = AdventureEventLog(registry, record)
+            written = log.append_many(transaction.drafts, request_id=transaction.request_id)
+
+            self.assertEqual(["discovery", "state_change", "relationship_change", "character_knowledge"], [event.event_type for event in written])
+            self.assertEqual("chart room", written[1].state_value)
+            self.assertEqual("cautious", written[2].relationship_value)
+            self.assertEqual("the hatch is trapped", written[3].knowledge_fact)
+            self.assertEqual(4, len(log.events()))
 
 
 if __name__ == "__main__":

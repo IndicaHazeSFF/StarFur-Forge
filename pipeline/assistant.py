@@ -438,9 +438,12 @@ class AssistantSession:
                 f"loaded ({snapshot['adventure_session'].get('title')}; "
                 f"{snapshot['adventure_session'].get('event_count', 0)} authoritative event(s), "
                 f"{snapshot['adventure_session'].get('context_event_count', 0)} in bounded replay context; "
-                f"{snapshot['adventure_session'].get('state_fact_count', 0)} current state fact(s); "
-                f"{snapshot['adventure_session'].get('relationship_fact_count', 0)} relationship fact(s); "
-                f"{snapshot['adventure_session'].get('knowledge_fact_count', 0)} character-knowledge fact(s); "
+                f"{snapshot['adventure_session'].get('state_fact_count', 0)} authoritative state fact(s), "
+                f"{snapshot['adventure_session'].get('context_state_fact_count', 0)} selected for context; "
+                f"{snapshot['adventure_session'].get('relationship_fact_count', 0)} authoritative relationship fact(s), "
+                f"{snapshot['adventure_session'].get('context_relationship_fact_count', 0)} selected for context; "
+                f"{snapshot['adventure_session'].get('knowledge_fact_count', 0)} authoritative character-knowledge fact(s), "
+                f"{snapshot['adventure_session'].get('context_knowledge_fact_count', 0)} selected for context; "
                 "session-local mount)"
                 if snapshot.get("adventure_session", {}).get("mounted") else "none loaded"
             ),
@@ -1091,9 +1094,12 @@ class AssistantSession:
             f"Adventure workspace: loaded ({record.title}; {record.adventure_id}; "
             f"{self.adventure_session.event_count} authoritative event(s), "
             f"{len(self.adventure_session.context_events)} in bounded replay context, "
-            f"{len(self.adventure_session.state_facts)} current state fact(s), "
-            f"{len(self.adventure_session.relationship_facts)} relationship fact(s), "
-            f"{len(self.adventure_session.knowledge_facts)} character-knowledge fact(s); session-local mount)."
+            f"{len(self.adventure_session.state_facts)} authoritative state fact(s), "
+            f"{len(self.adventure_session.context_state_facts)} selected for context; "
+            f"{len(self.adventure_session.relationship_facts)} authoritative relationship fact(s), "
+            f"{len(self.adventure_session.context_relationship_facts)} selected for context; "
+            f"{len(self.adventure_session.knowledge_facts)} authoritative character-knowledge fact(s), "
+            f"{len(self.adventure_session.context_knowledge_facts)} selected for context; session-local mount)."
         )
 
     def adventure_events(self):
@@ -1277,7 +1283,7 @@ class AssistantSession:
             return "Adventure turn staging was discarded because its workspace is no longer loaded."
         try:
             log = AdventureEventLog(self.adventure_registry, self.adventure_session.record)
-            events = log.append_many(self.adventure_turn.drafts)
+            events = log.append_many(self.adventure_turn.drafts, request_id=self.adventure_turn.request_id)
             all_events = log.events()
         except AdventureEventLogError as error:
             return f"Adventure turn was not committed: {error}"

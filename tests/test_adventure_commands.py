@@ -103,7 +103,7 @@ class AdventureCommandTests(unittest.TestCase):
             self.assertNotIn("clue 1", system_prompt)
             self.assertNotIn("Private event detail", system_prompt)
             self.assertIn(
-                "10 authoritative event(s), 8 in bounded replay context; 0 current state fact(s); 0 relationship fact(s); 0 character-knowledge fact(s); session-local mount",
+                "10 authoritative event(s), 8 in bounded replay context; 0 authoritative state fact(s), 0 selected for context; 0 authoritative relationship fact(s), 0 selected for context; 0 authoritative character-knowledge fact(s), 0 selected for context; session-local mount",
                 session.context_stats(),
             )
 
@@ -174,7 +174,31 @@ class AdventureCommandTests(unittest.TestCase):
             self.assertIn("CURRENT AUTHORITATIVE STORY STATE", prompt)
             self.assertIn("location: engine room", prompt)
             self.assertNotIn("location: bridge\n", prompt)
-            self.assertIn("1 current state fact(s)", session.context_stats())
+            self.assertIn("1 authoritative state fact(s), 1 selected for context", session.context_stats())
+
+    def test_full_state_inspection_survives_bounded_prompt_context_and_reload(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(directory, calls)
+            session.respond("adventure create Quiet Ember")
+            session.respond("adventure load Quiet Ember")
+            for index in range(13):
+                session.respond(f"adventure state set fact_{index:02}: value {index}")
+
+            inspection = session.respond("adventure state")
+            self.assertIn("fact_12: value 12", inspection)
+            self.assertIn("13 authoritative state fact(s), 12 selected for context", session.respond("adventure status"))
+
+            self.assertEqual("unexpected", session.respond("What is the current story state?"))
+            prompt = calls[-1]["messages"][0]["content"]
+            self.assertIn("13 total fact(s); 12 selected for bounded context.", prompt)
+            self.assertIn("fact_00: value 0", prompt)
+            self.assertNotIn("fact_12: value 12", prompt)
+            self.assertIn("13 authoritative state fact(s), 12 selected for context", session.context_stats())
+
+            session.respond("adventure pause")
+            session.respond("adventure resume Quiet Ember")
+            self.assertIn("fact_12: value 12", session.respond("adventure state"))
 
     def test_explicit_qualitative_relationship_is_event_backed_and_refreshed_in_context(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -214,7 +238,7 @@ class AdventureCommandTests(unittest.TestCase):
             self.assertIn("CURRENT AUTHORITATIVE ADVENTURE RELATIONSHIPS", prompt)
             self.assertIn("Vespera / trust: cautious", prompt)
             self.assertNotIn("Vespera / trust: guarded\n", prompt)
-            self.assertIn("1 relationship fact(s)", session.context_stats())
+            self.assertIn("1 authoritative relationship fact(s), 1 selected for context", session.context_stats())
 
     def test_mounted_adventure_hides_imported_numeric_relationship_meters_unless_explicitly_requested(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -280,7 +304,7 @@ class AdventureCommandTests(unittest.TestCase):
             self.assertIn("CHARACTER KNOWLEDGE AND BELIEFS", prompt)
             self.assertIn("Vespera uncertain: the hatch is trapped", prompt)
             self.assertIn("not automatically objective world truth", prompt)
-            self.assertIn("1 character-knowledge fact(s)", session.context_stats())
+            self.assertIn("1 authoritative character-knowledge fact(s), 1 selected for context", session.context_stats())
 
     def test_explicit_adventure_turn_staging_commits_or_aborts_as_one_batch(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -297,6 +321,9 @@ class AdventureCommandTests(unittest.TestCase):
             self.assertIn("Committed 2 staged adventure event(s): AE-000001 through AE-000002.", session.respond("adventure turn commit"))
             self.assertIn("AE-000001", session.respond("adventure events"))
             self.assertIn("AE-000002", session.respond("adventure events"))
+            committed = AdventureEventLog(session.adventure_registry, session.adventure_session.record).events()
+            self.assertEqual(1, len({event.request_id for event in committed}))
+            self.assertIsNotNone(committed[0].request_id)
             self.assertEqual("Adventure turn staging: inactive.", session.respond("adventure turn status"))
 
             session.respond("adventure turn begin")

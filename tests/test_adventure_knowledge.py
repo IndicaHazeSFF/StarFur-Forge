@@ -1,7 +1,7 @@
 import unittest
 
 from pipeline.adventure_events import AdventureEvent
-from pipeline.adventure_knowledge import derive_adventure_knowledge
+from pipeline.adventure_knowledge import derive_adventure_knowledge, select_adventure_knowledge_context
 
 
 def event(sequence, event_type, *, subject=None, status=None, fact=None):
@@ -37,6 +37,19 @@ class AdventureKnowledgeTests(unittest.TestCase):
             event(1, "character_knowledge", subject="Vespera", status="guesses", fact="A fact")
         with self.assertRaises(TypeError):
             derive_adventure_knowledge(("not an event",))
+
+    def test_full_projection_is_not_truncated_by_bounded_context_selection(self):
+        facts = derive_adventure_knowledge(tuple(
+            event(index + 1, "character_knowledge", subject=f"Character {index:02}", status="knows", fact="the hatch is trapped")
+            for index in range(13)
+        ))
+
+        self.assertEqual(13, len(facts))
+        self.assertEqual(12, len(select_adventure_knowledge_context(facts)))
+        self.assertEqual("Character 12", facts[-1].subject)
+        self.assertNotIn("Character 12", [fact.subject for fact in select_adventure_knowledge_context(facts)])
+        self.assertEqual((facts[0],), select_adventure_knowledge_context(facts, limit=1))
+        self.assertEqual(13, len(facts))
 
 
 if __name__ == "__main__":

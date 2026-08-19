@@ -1060,3 +1060,50 @@
 - Files modified: `pipeline/document_review.py`, `pipeline/assistant.py`, `pipeline/api.py`, `config/assistant.json`, `integrations/openwebui/starfur_document_filter.py`, tests, `AGENTS.md`, and `docs/COMMANDS.md`.
 - Behavior: active review snapshots and the OpenWebUI bridge cache now default to 24 hours. `document_review_ttl_seconds` accepts a bounded local configuration value from 60 seconds through seven days. `GET /v1/starfur/documents/reviews` and exact Filter command `document review list` expose active bounded review metadata without model calls, raw source text, or persistence. Reviews remain restart-ephemeral and bounded.
 - Verification: focused document-review, API, and OpenWebUI Filter tests cover default TTL, expiry, stable listing, controlled command dispatch, and no-model isolation.
+## 2026-08-19 - Separate authoritative adventure projections from bounded context
+
+- Behavior: Adventure state, qualitative relationship, and character-knowledge projections now rebuild completely from validated event history. Separate deterministic selectors retain at most twelve facts per category for model context, while Core inspection and reload retain the full projection.
+- Diagnostics: adventure status and completed-turn context stats now distinguish authoritative projection counts from selected context counts.
+- Constraints: no event schema change, provider call, automatic extraction, shared-memory mutation, snapshot, or new command was added. Changing context limits cannot discard event-backed adventure state.
+- Verification: focused state/relationship/knowledge and adventure-command tests cover over-limit projections, deterministic selection, reload preservation, bounded prompt context, and diagnostics.
+## 2026-08-19 - Add mixed typed-mutation adventure turn staging
+
+- Behavior: an active adventure turn can now retain ordinary event drafts alongside validated state, qualitative relationship, and character-knowledge mutations under one existing request ID. At explicit commit, mutations produce compatible schema-v1 structured drafts in the same all-or-nothing batch.
+- Constraints: no user command syntax, immediate-command behavior, provider path, model extraction, or automatic turn writer changed. Schema-v2 writes remain deferred to an explicit migration policy.
+- Verification: focused turn tests cover an ordinary discovery plus all three structured mutation classes committing together.
+
+## 2026-08-19 - Add schema-v1/v2 adventure event-log compatibility adapter
+
+- Behavior: event logs now validate and read schema-v1 records unchanged alongside schema-v2 typed-mutation envelopes. A v2 state/relationship/knowledge payload projects through the established structured readers, and later appends preserve the original record schema rather than silently migrating it.
+- Constraints: new Core writes remain schema-v1; there is no automatic migration, command change, provider call, model-authored mutation path, or automatic extraction.
+- Verification: focused event-log tests cover unchanged v1 reads, v2 structured projection, mixed-log append preservation, and v2 envelope validation.
+
+## 2026-08-19 - Add typed adventure-mutation envelope foundation
+
+- Behavior: introduced a pure schema-v2 `AdventureEventEnvelope` and closed typed mutation payloads for explicit state, qualitative relationship, and character-knowledge changes. Envelopes validate Core-only source/provenance, request IDs, optional supersession, bounded text, and serialization without parsing narrative prose.
+- Constraints: this foundation initially left active event-log writes at schema-v1. No command, provider, automatic extraction, or generated-turn behavior changed.
+- Verification: focused tests cover v2 round-trip serialization, unsupported/mixed payload rejection, and rejection of model-authored authority.
+
+## 2026-08-19 - Replace stale-prone adventure write sentinels with advisory locks
+
+- Behavior: adventure event writes now use a nonblocking OS advisory lock held on a persistent workspace lock file. Live writers still fail closed; process exit releases the lock automatically, so legacy leftover file contents no longer block recovery.
+- Constraints: this is local workspace coordination, not a distributed/network-filesystem lock protocol. Broader injected cross-process failure coverage, typed mutation envelopes, and automatic extraction remain future A2/A3 work.
+- Verification: focused event-log tests cover independent-handle contention and a pre-existing legacy lock file.
+
+## 2026-08-19 - Reconcile authoritative adventure logs with manifest markers
+
+- Behavior: under the workspace write lock, a valid nonempty `events.jsonl` repairs only the known crash-ordering gap where its manifest still says `not_created`. A manifest that claims `events.jsonl:v1` while no validated event exists remains an explicit fail-closed error rather than being guessed or reset.
+- Constraints: registry creation, stale-lock recovery, orphan handling, and generalized injected crash recovery remain future A2 work. No new user command, model, narration, or shared-memory behavior was added.
+- Verification: focused event-log tests cover safe marker repair and missing-log contradiction rejection.
+
+## 2026-08-19 - Recover validated pending adventure event logs
+
+- Behavior: before an append (or explicit storage recovery), Core holds the existing workspace lock and reconciles `events.jsonl.pending` only when it is a fully validated extension of the authoritative log. Exact/redundant pending artifacts are removed. Malformed or divergent pending artifacts fail closed and leave the authoritative log untouched.
+- Constraints: stale-lock recovery, manifest reconciliation, orphan handling, and generalized injected crash recovery remain future A2 work. No model, narration, shared memory, or new user command was added.
+- Verification: focused event-log tests cover extension promotion plus malformed and conflicting pending artifacts.
+
+## 2026-08-19 - Add initial adventure write coordination and idempotent commits
+
+- Behavior: Adventure event writes now acquire a workspace-scoped fail-closed lock sentinel. Beginning a staged adventure turn creates a validated opaque request ID, stored on its committed events; retrying the same matching batch returns its original events without duplication, while conflicting reuse fails.
+- Constraints: stale-lock recovery, manifest/event-log crash reconciliation, typed mutation envelopes, automatic extraction, and cross-process recovery injection remain future A2 work. No new user command, provider call, model extraction, or shared-memory mutation was added.
+- Verification: focused event-log and turn tests cover request-ID retries, conflict rejection, and two independent event-log handles contending for one workspace lock.
