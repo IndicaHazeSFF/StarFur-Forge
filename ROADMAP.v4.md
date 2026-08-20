@@ -138,7 +138,9 @@ This is a functional prototype, not yet a durable simulation system. The impleme
 
 **Completed A3 foundation:** `pipeline.adventure_mutation` now validates and serializes pure schema-v2 envelopes carrying identity, timestamp, Core source, request ID, optional supersession, narrative summary/details, and one typed state/relationship/knowledge mutation. `pipeline.adventure_events` reads and preserves those validated v2 entries beside schema-v1 records, exposing their typed facts through existing projections. Core continues writing v1 until an explicit migration policy is validated.
 
-**Completed A4 staging foundation:** `AdventureTurnTransaction` can retain ordinary drafts and typed state/relationship/knowledge mutations together under one request ID. Its explicit commit path currently converts validated mutations to compatible schema-v1 structured drafts, maintaining storage compatibility while establishing one all-or-nothing transaction boundary. Existing immediate commands remain unchanged until Core wiring is added.
+**Completed A4 staging foundation:** `AdventureTurnTransaction` can retain ordinary drafts and typed state/relationship/knowledge mutations together under one request ID. Its explicit commit path writes compatible schema-v1 structured drafts, maintaining storage compatibility while establishing one all-or-nothing transaction boundary.
+
+**Completed initial A4 Core-wiring slice:** exact `adventure turn stage state`, `adventure turn stage relationship`, and `adventure turn stage knowledge` commands validate typed structured facts and stage their schema-v1-compatible drafts beside ordinary events. Nothing reaches authoritative projections, prompt context, or the event log until the one Core commit. Existing direct state, relationship, and knowledge controls remain intentionally immediate.
 
 #### A3. Introduce a typed mutation envelope
 
@@ -166,9 +168,19 @@ This is a functional prototype, not yet a durable simulation system. The impleme
 **Acceptance:** malformed adventure mutations never call a provider or create a proposal.  
 **Tests:** malformed prefixes, near-miss verbs, unknown event types, command precedence through CLI/API/OpenWebUI.
 
+**Completed initial slice:** after exact documented adventure controls are considered, the reserved `adventure` namespace now returns deterministic Core guidance for every malformed or unknown `adventure ...` form. It does not call a provider, create a proposal, mutate chat history, or write the event log. Focused OpenAI-compatible API coverage now proves both malformed-command isolation and staged structured-fact invisibility/commit behavior through the adapter. A reserved adventure command also ignores stale OpenWebUI document-context/review extensions before those extensions can trigger review lookup or document retrieval. Remaining: a live OpenWebUI smoke check only.
+
 ### Stage B — Generic adventure state without becoming a game engine (NEXT)
 
 #### B1. Scenario-declared resource definitions
+
+**Completed initial definition slice:** Core now has a pure, closed generic resource catalog for scenario declarations: stable IDs and labels, public/hidden visibility, bounded integer/decimal ranges, enum values, and kind-valid permitted-operation metadata. It intentionally has no workspace-manifest integration, current values, event writes, commands, prompt projections, model extraction, or game-specific rules. Remaining B1 work must add event-backed resource state only through catalog-validated operations.
+
+**Completed initial value slice:** Core now has a pure immutable reducer that supplies deterministic declared-resource defaults and validates supported operations against a catalog before producing a new complete value state. Illegal operations, unknown IDs, invalid inventory counts, and bounds violations fail before replacement. At this slice it remained in-memory only; the subsequent catalog-persistence slice adds declarations but still no resource events, commands, prompt/UI projections, model extraction, or generic game rules.
+
+**Completed initial catalog-persistence slice:** A workspace may now receive exactly one JSON-safe validated catalog declaration before it has an event log; repeated identical initialization is idempotent, conflicting replacement fails, and legacy workspaces retain an empty catalog. This remains a package/Core setup boundary, not a user-facing configuration flow. No resource values, operations, events, commands, prompt projections, providers, or game-specific names were added.
+
+**Completed initial resource-event slice:** Schema-v1 now supports a closed `resource_change` event with generic resource identifier, operation, and JSON-safe value. The event log validates the entire resource-operation sequence against the workspace's immutable catalog before reading or appending, and the pure reducer rebuilds complete values from validated events. There are still no resource commands, mounted-session/prompt/UI projections, provider extraction, or game-specific behavior.
 
 - Core supplies a small closed set of generic kinds: boolean/enum flag, bounded integer/decimal resource, inventory item/count, equipment slot, objective, location, and clock/time marker.
 - Adventure packages declare stable IDs, labels, type, bounds, visibility, and permitted operations.
@@ -225,6 +237,8 @@ This is a functional prototype, not yet a durable simulation system. The impleme
 **Stage C gate:** no automatic extraction until Stage A concurrency/recovery, complete projection separation, typed mutations, and mixed transaction tests pass.
 
 ### Stage D — Continuous behavioral evaluation (START ALONGSIDE STAGE A)
+
+**Completed initial fixture slice:** checked-in `adventure-integrity-v1` now evaluates validated in-memory event streams for complete structured projections, bounded replay selection, context-limit separation, and repeatability. The `adventure-eval` CLI is provider-free and cannot open runtime workspaces, production memory, or a ledger. Remaining fixtures must add command/lifecycle, corruption/recovery, relationship consistency, restart, and later resources; ledger integration needs a dedicated bounded adventure-result schema.
 
 1. Add adventure fixtures for replay, state projection, correction, relationship consistency, knowledge isolation, resources, interruption, corruption, restart, and branching.
 2. Record retrieval success separately from whether the model used retrieved facts correctly.
@@ -285,6 +299,30 @@ This is a functional prototype, not yet a durable simulation system. The impleme
 - Add opt-in idle scene cards/screensaver images derived from structured state, cached and debounced.
 - Later add voice, notifications, calendar/feed displays, and permissioned system monitoring.
 - Generated visuals are illustrations, never authoritative events.
+
+### Cross-cutting later requirement — Zero-provider resident runtime (LATER; dependency-gated)
+
+StarFur must remain meaningfully functional with no configured inference providers. This is not an anti-AI branch: it is the architectural consequence of Core resident continuity being separate from optional inference capabilities.
+
+> Models add capabilities; they do not create the resident.
+
+With chat, embedding, vision, image, speech, and hosted providers disabled or unavailable, Core must still restore the allowed resident/persona state and provide a coherent deterministic apartment-companion experience through authored assets and package data. Open-ended conversation, reasoning, perception, generated media, and voice remain optional provider-backed enhancements layered on top of that same resident state.
+
+Use a Core-owned deterministic behavior selector rather than persona-specific provider checks:
+
+```text
+activity + momentary state + relationship/development state + elapsed time
++ deterministic events + persona behavior defaults
+    -> ResidentAction
+```
+
+`ResidentAction` is a future structured presentation intent (for example: activity, animation, expression, movement target, reaction/sound cue, duration, and priority). Core chooses the intent; persona, sprite, apartment, and authored-dialogue packages supply optional asset or text variants such as `greeting.return_short`, `idle.reading`, or `status.tired`. A provider may later enrich wording from the same intent, but its absence must never reset identity or resident state.
+
+Model-free resident behavior should use ordinary simulation techniques: finite state machines, utility scoring, schedules, deterministic transitions, seeded variation, and event-driven reactions. Commissioned or human-created sprite/rig assets, authored reactions, Workshop persona/sprite/apartment packages, local save/load, restart continuity, notifications, and simple interactions must work independently of generative systems.
+
+**Release requirement:** a zero-provider installation boots a persona, restores allowed persistent resident state, runs deterministic activities/reactions, renders available human-authored assets, and exposes normal inspection/settings controls. Removing, unloading, swapping, or re-enabling an optional provider preserves persona identity, resident continuity, and apartment state while clearly reporting only the affected capability as unavailable.
+
+**Tests:** no-provider startup; provider unavailable at startup; provider unload/swap while a resident is active; deterministic seeded behavior; authored-dialogue fallback; missing optional-media assets; restart continuity; assertions that zero-provider mode never attempts a provider call.
 
 ### Cross-cutting later slice — Persona-local continuity and presentation profiles (LATER; dependency-gated)
 

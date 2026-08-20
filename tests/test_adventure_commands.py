@@ -55,6 +55,30 @@ class AdventureCommandTests(unittest.TestCase):
             self.assertIn("was not created", session.respond("adventure create quiet ember"))
             self.assertEqual([], calls)
 
+    def test_malformed_adventure_namespace_never_reaches_model_or_writes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(directory, calls)
+            session.respond("adventure create Quiet Ember")
+            session.respond("adventure load Quiet Ember")
+            record = session.adventure_session.record
+
+            for command in (
+                "adventure",
+                "adventure status/",
+                "adventure turn typo",
+                "adventure state nonsense",
+                "adventure relationship mutate Vespera trust: cautious",
+                "adventure knowledge invent Vespera knows: the hatch is trapped",
+                "adventure recordish discovery: This must not persist.",
+            ):
+                self.assertIn("Unknown or malformed adventure command", session.respond(command))
+
+            self.assertEqual([], calls)
+            self.assertEqual([], session.messages)
+            self.assertEqual([], session.proposals)
+            self.assertEqual([], AdventureEventLog(session.adventure_registry, record).events())
+
     def test_help_is_core_owned_and_explicit(self):
         help_payload = detect_command_help("How do I create an adventure?")
         self.assertIsNotNone(help_payload)
@@ -330,6 +354,69 @@ class AdventureCommandTests(unittest.TestCase):
             session.respond("adventure turn stage discovery: A second hatch appears.")
             self.assertIn("Discarded 1 staged adventure event(s)", session.respond("adventure turn abort"))
             self.assertNotIn("second hatch", session.respond("adventure events"))
+            self.assertEqual([], calls)
+
+    def test_staged_structured_facts_remain_invisible_until_one_commit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(directory, calls)
+            session.respond("adventure create Quiet Ember")
+            session.respond("adventure load Quiet Ember")
+            session.respond("adventure turn begin")
+            self.assertIn("[discovery]", session.respond(
+                "adventure turn stage discovery: The crew finds a hatch."
+            ))
+            self.assertIn("state", session.respond(
+                "adventure turn stage state current_location: chart room"
+            ))
+            self.assertIn("relationship", session.respond(
+                "adventure turn stage relationship Vespera trust: cautious"
+            ))
+            self.assertIn("character knowledge", session.respond(
+                "adventure turn stage knowledge Rook believes: the hatch is trapped"
+            ))
+            self.assertIn("4 event(s) staged", session.respond("adventure turn status"))
+            self.assertEqual(
+                "No explicit authoritative story state is recorded for the loaded workspace.",
+                session.respond("adventure state"),
+            )
+            self.assertEqual(
+                "No explicit authoritative adventure relationships are recorded for the loaded workspace.",
+                session.respond("adventure relationships"),
+            )
+            self.assertEqual(
+                "No explicit character knowledge or beliefs are recorded for the loaded workspace.",
+                session.respond("adventure knowledge"),
+            )
+            self.assertIn("Committed 4 staged adventure event(s)", session.respond("adventure turn commit"))
+            self.assertIn("current_location: chart room", session.respond("adventure state"))
+            self.assertIn("Vespera / trust: cautious", session.respond("adventure relationships"))
+            self.assertIn("Rook believes: the hatch is trapped", session.respond("adventure knowledge"))
+            events = AdventureEventLog(session.adventure_registry, session.adventure_session.record).events()
+            self.assertEqual(
+                ["discovery", "state_change", "relationship_change", "character_knowledge"],
+                [event.event_type for event in events],
+            )
+            self.assertEqual(1, len({event.request_id for event in events}))
+            self.assertEqual([], calls)
+
+            session.respond("adventure turn begin")
+            self.assertEqual(
+                "Usage: adventure turn stage state <key>: <value>",
+                session.respond("adventure turn stage state current_location"),
+            )
+            self.assertEqual(
+                "Usage: adventure turn stage relationship <character> <dimension>: <value>",
+                session.respond("adventure turn stage relationship Vespera"),
+            )
+            self.assertIn(
+                "knowledge status is unsupported",
+                session.respond("adventure turn stage knowledge Rook guesses: the hatch is trapped"),
+            )
+            self.assertEqual(
+                "Adventure turn has no staged events. Stage an event or abort the turn.",
+                session.respond("adventure turn commit"),
+            )
             self.assertEqual([], calls)
 
 

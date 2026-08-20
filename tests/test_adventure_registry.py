@@ -7,6 +7,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pipeline.adventure_registry import AdventureNotFoundError, AdventureRegistry, AdventureRegistryError
+from pipeline.adventure_resources import AdventureResourceCatalog, AdventureResourceDefinition
 
 
 class AdventureRegistryTests(unittest.TestCase):
@@ -52,6 +53,34 @@ class AdventureRegistryTests(unittest.TestCase):
             with self.assertRaises(AdventureRegistryError):
                 registry.create("x" * 121)
             self.assertFalse(root.exists())
+
+    def test_resource_catalog_is_immutable_manifest_metadata_before_event_log_exists(self):
+        with tempfile.TemporaryDirectory() as directory:
+            registry = self._registry(directory)
+            record = registry.create("Quiet Ember")
+            catalog = AdventureResourceCatalog((
+                AdventureResourceDefinition("fuel", "Fuel", "integer", minimum=0, maximum=100),
+            ))
+            self.assertEqual((), registry.resource_catalog(record).definitions)
+            self.assertEqual(catalog, registry.configure_resource_catalog(record, catalog))
+            self.assertEqual(catalog, registry.resource_catalog(record))
+            self.assertEqual(catalog, registry.configure_resource_catalog(record, catalog))
+            different = AdventureResourceCatalog((
+                AdventureResourceDefinition("oxygen", "Oxygen", "integer", minimum=0, maximum=100),
+            ))
+            with self.assertRaisesRegex(AdventureRegistryError, "already configured"):
+                registry.configure_resource_catalog(record, different)
+
+    def test_resource_catalog_cannot_be_configured_after_event_log_exists(self):
+        with tempfile.TemporaryDirectory() as directory:
+            registry = self._registry(directory)
+            record = registry.create("Quiet Ember")
+            (registry.workspace_path(record.adventure_id) / "events.jsonl").write_text("", encoding="utf-8")
+            catalog = AdventureResourceCatalog((
+                AdventureResourceDefinition("fuel", "Fuel", "integer", minimum=0, maximum=100),
+            ))
+            with self.assertRaisesRegex(AdventureRegistryError, "event log exists"):
+                registry.configure_resource_catalog(record, catalog)
 
 
 if __name__ == "__main__":

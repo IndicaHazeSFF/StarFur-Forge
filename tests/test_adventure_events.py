@@ -10,6 +10,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pipeline.adventure_events import AdventureEvent, AdventureEventDraft, AdventureEventLog, AdventureEventLogError
 from pipeline.adventure_mutation import AdventureEventEnvelope, AdventureMutation, MUTATION_STATE_SET
 from pipeline.adventure_registry import AdventureRegistry
+from pipeline.adventure_resources import AdventureResourceCatalog, AdventureResourceDefinition
+from pipeline.adventure_resource_state import derive_adventure_resource_state
 
 
 class AdventureEventLogTests(unittest.TestCase):
@@ -241,6 +243,47 @@ class AdventureEventLogTests(unittest.TestCase):
             self.assertEqual(v2.mutation, loaded[1].mutation)
             self.assertEqual([1, 2, 1], [entry["schema_version"] for entry in raw])
             self.assertEqual([first, loaded[1], appended], log.events())
+
+    def test_resource_events_require_the_declared_catalog_and_replay_through_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            registry, record, log = self._log(directory)
+            catalog = AdventureResourceCatalog((
+                AdventureResourceDefinition("fuel", "Fuel", "integer", minimum=0, maximum=100),
+                AdventureResourceDefinition("medkit", "Medkit", "inventory"),
+            ))
+            registry.configure_resource_catalog(record, catalog)
+
+            fuel = log.append(
+                "resource_change", "Fuel reserve increases.",
+                resource_id="fuel", resource_operation="increment", resource_value=20,
+            )
+            kits = log.append(
+                "resource_change", "A repair kit is stored.",
+                resource_id="medkit", resource_operation="add", resource_value=("repair_kit", 2),
+            )
+            state = derive_adventure_resource_state(catalog, log.events())
+
+            self.assertEqual("fuel", fuel.resource_id)
+            self.assertEqual(20, fuel.resource_value)
+            self.assertEqual(["repair_kit", 2], kits.resource_value)
+            self.assertEqual(20, state.value_for("fuel"))
+            self.assertEqual((("repair_kit", 2),), state.value_for("medkit"))
+            with self.assertRaisesRegex(AdventureEventLogError, "resource event is invalid"):
+                log.append(
+                    "resource_change", "Fuel reserve drops too far.",
+                    resource_id="fuel", resource_operation="decrement", resource_value=21,
+                )
+            self.assertEqual(2, len(log.events()))
+
+    def test_resource_event_is_rejected_when_the_workspace_declares_no_catalog(self):
+        with tempfile.TemporaryDirectory() as directory:
+            _, _, log = self._log(directory)
+            with self.assertRaisesRegex(AdventureEventLogError, "resource event is invalid"):
+                log.append(
+                    "resource_change", "This must not persist.",
+                    resource_id="fuel", resource_operation="set", resource_value=10,
+                )
+            self.assertFalse(log.path.exists())
 
 
 if __name__ == "__main__":

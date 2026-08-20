@@ -401,12 +401,17 @@ Prepare or inspect isolated CYOA workspace metadata with exact Core commands:
     adventure turn begin
     adventure turn status
     adventure turn stage <event-type>: <summary>
+    adventure turn stage state <key>: <value>
+    adventure turn stage relationship <character> <dimension>: <value>
+    adventure turn stage knowledge <character> <knows|believes|uncertain>: <fact>
     adventure turn commit
     adventure turn abort
     adventure record <event-type>: <summary>
     adventure pause
     adventure end
     adventure unload
+
+    python starfur.py adventure-eval
 
 `adventure create` writes only a local registry entry and manifest under
 `adventures/<stable-id>/`. `adventure load` attaches that workspace to the
@@ -434,12 +439,28 @@ uncertainty is not automatically objective world truth; Core never derives it
 from narration or a provider response.
 `adventure turn` provides an explicit staged-event transaction for future
 generated adventure turns. `adventure turn stage` keeps one ordinary validated
-event draft in session memory only; it does not alter prompt context or the
-event log. `adventure turn commit` atomically appends the full staged batch;
+event draft in session memory only; the `state`, `relationship`, and `knowledge`
+variants stage one Core-validated structured fact. None alter prompt context or
+the event log until `adventure turn commit` atomically appends the full batch;
 the opaque Core request ID makes a matching completed-commit retry idempotent.
 `adventure turn abort` discards staging, and a mount change also discards it.
-This initial transaction slice stages ordinary event drafts only; direct state,
-relationship, and knowledge commands remain immediate writes.
+The direct state, relationship, and knowledge commands remain documented
+immediate-write alternatives.
+`adventure` is a reserved Core command namespace. Exact documented forms run as
+shown; malformed or unknown `adventure ...` input returns deterministic Core
+guidance and never falls through to model generation, memory proposals, chat
+history changes, or adventure writes.
+`python starfur.py adventure-eval` runs only checked-in, deterministic adventure
+integrity fixtures. It opens no provider, production memory, or live adventure
+workspace; the initial suite measures event-backed projections, bounded replay,
+and repeatability.
+Generic adventure resource declarations are currently a package/Core validation
+foundation. Core also has an internal, test-owned in-memory reducer for declared
+values and legal operations, plus a one-time pre-event-log workspace manifest
+declaration. There are still no resource-value, inventory, equipment, currency,
+or stat commands. Core can now store internal catalog-validated resource events,
+but user-facing inspection and mutation wait for the mounted-projection/control
+slice.
 While a workspace is mounted, numeric relationship-meter wording in retrieved
 `relationship_context` memories is redacted before normal narration unless the
 user explicitly asks for a meter, score, or internal diagnostic. This changes

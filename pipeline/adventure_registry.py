@@ -15,11 +15,14 @@ from pathlib import Path
 import re
 from typing import Callable
 
+from pipeline.adventure_resources import AdventureResourceCatalog, AdventureResourceError
+
 
 REGISTRY_SCHEMA_VERSION = 1
 ADVENTURE_SCHEMA_VERSION = 1
 REGISTRY_FILENAME = "registry.json"
 MANIFEST_FILENAME = "manifest.json"
+RESOURCE_CATALOG_MANIFEST_KEY = "resource_catalog"
 _MAX_TITLE_LENGTH = 120
 _ID_PATTERN = re.compile(r"^[a-z][a-z0-9-]{0,95}$")
 
@@ -181,6 +184,69 @@ class AdventureRegistry:
         )
         return record
 
+    def resource_catalog(self, record: AdventureRecord) -> AdventureResourceCatalog:
+        """Read one validated declared catalog; legacy workspaces have none."""
+        manifest = self._read_workspace_manifest(record)
+        value = manifest.get(RESOURCE_CATALOG_MANIFEST_KEY)
+        if value is None:
+            return AdventureResourceCatalog(())
+        try:
+            return AdventureResourceCatalog.from_dict(value)
+        except AdventureResourceError as error:
+            raise AdventureRegistryError("adventure resource catalog is invalid") from error
+
+    def configure_resource_catalog(
+        self, record: AdventureRecord, catalog: AdventureResourceCatalog,
+    ) -> AdventureResourceCatalog:
+        """Persist one immutable scenario declaration before an event log exists.
+
+        This is an internal package/Core setup boundary, not a chat command. A
+        catalog cannot be rewritten after any authoritative event exists, so a
+        later event reducer always has a stable resource schema.
+        """
+        if not isinstance(catalog, AdventureResourceCatalog):
+            raise TypeError("adventure resource catalog must be an AdventureResourceCatalog")
+        manifest = self._read_workspace_manifest(record)
+        workspace = self.workspace_path(record.adventure_id)
+        if (workspace / "events.jsonl").exists():
+            raise AdventureRegistryError("resource catalog cannot change after the event log exists")
+        existing = manifest.get(RESOURCE_CATALOG_MANIFEST_KEY)
+        if existing is not None:
+            try:
+                loaded = AdventureResourceCatalog.from_dict(existing)
+            except AdventureResourceError as error:
+                raise AdventureRegistryError("adventure resource catalog is invalid") from error
+            if loaded != catalog:
+                raise AdventureRegistryError("adventure resource catalog is already configured")
+            return loaded
+        manifest[RESOURCE_CATALOG_MANIFEST_KEY] = catalog.to_dict()
+        self._write_json(workspace / MANIFEST_FILENAME, manifest)
+        return catalog
+
+    def _read_workspace_manifest(self, record: AdventureRecord) -> dict[str, object]:
+        if not isinstance(record, AdventureRecord):
+            raise TypeError("adventure record must be an AdventureRecord")
+        try:
+            resolved = self.resolve_title(record.title)
+        except AdventureRegistryError as error:
+            raise AdventureRegistryError("adventure workspace is not registered") from error
+        if resolved != record:
+            raise AdventureRegistryError("adventure record does not match the registry")
+        path = self.workspace_path(record.adventure_id) / MANIFEST_FILENAME
+        try:
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise AdventureRegistryError("adventure manifest cannot be read") from error
+        if (
+            not isinstance(manifest, dict)
+            or manifest.get("schema_version") != ADVENTURE_SCHEMA_VERSION
+            or manifest.get("adventure_id") != record.adventure_id
+            or manifest.get("title") != record.title
+            or not isinstance(manifest.get("storage"), dict)
+        ):
+            raise AdventureRegistryError("adventure manifest is invalid")
+        return manifest
+
     @staticmethod
     def _write_json(path: Path, value: object) -> None:
         path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -189,5 +255,5 @@ class AdventureRegistry:
 __all__ = [
     "ADVENTURE_SCHEMA_VERSION", "AdventureAmbiguousError", "AdventureNotFoundError",
     "AdventureRecord", "AdventureRegistry", "AdventureRegistryError", "MANIFEST_FILENAME",
-    "REGISTRY_FILENAME", "REGISTRY_SCHEMA_VERSION", "normalize_adventure_title",
+    "REGISTRY_FILENAME", "REGISTRY_SCHEMA_VERSION", "RESOURCE_CATALOG_MANIFEST_KEY", "normalize_adventure_title",
 ]

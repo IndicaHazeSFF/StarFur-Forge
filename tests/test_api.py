@@ -1,9 +1,11 @@
 import http.client
 import json
 import sys
+import tempfile
 import threading
 import types
 import unittest
+from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -11,6 +13,9 @@ sys.modules.setdefault("ollama", types.ModuleType("ollama"))
 
 from pipeline.application import AssistantApplication
 
+from pipeline.adventure_events import AdventureEventLog
+from pipeline.adventure_registry import AdventureRegistry
+from pipeline.assistant import AssistantSession
 from pipeline.api import API_MODEL_ID, CONVERSATION_HEADER, DOCUMENT_ANNOTATE_PATH, DOCUMENT_CONTEXT_PATH, DOCUMENT_PREPARE_PATH, DOCUMENT_REVIEW_PATH, DOCUMENT_REVIEWS_PATH, PERSONA_RUNTIME_PATH, StarFurAPI, StarFurHTTPServer
 
 
@@ -579,6 +584,92 @@ class APITests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn("Unknown document-preparation", json.loads(raw)["error"]["message"])
         self.assertEqual(self.session.calls, [])
+
+
+class AdventureAPITests(unittest.TestCase):
+    """Prove the API adapter preserves Core-owned adventure command handling."""
+
+    def setUp(self):
+        self.workspace = tempfile.TemporaryDirectory()
+        self.provider_calls = []
+        config = type("AdventureConfig", (), {
+            "chat_model": "test-model",
+            "domain": "personal",
+            "max_session_messages": 4,
+            "max_memories": 2,
+            "memory_policy": "off",
+            "debug_level": "off",
+        })()
+        registry = AdventureRegistry(
+            self.workspace.name, now=lambda: datetime(2026, 8, 20, tzinfo=UTC),
+        )
+        self.session = AssistantSession(
+            config,
+            "Persona",
+            policy="Policy",
+            adventure_registry=registry,
+            chat=lambda **kwargs: self.provider_calls.append(kwargs) or {"message": {"content": "unexpected"}},
+            memory_loader=lambda **kwargs: [],
+        )
+        self.api = StarFurAPI(AssistantApplication(self.session), api_key="local-test")
+        self.server = StarFurHTTPServer(("127.0.0.1", 0), self.api, quiet=True)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.port = self.server.server_address[1]
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=2)
+        self.workspace.cleanup()
+
+    def chat(self, content, **extensions):
+        connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=3)
+        payload = {"model": API_MODEL_ID, "messages": [{"role": "user", "content": content}]}
+        payload.update(extensions)
+        connection.request(
+            "POST",
+            "/v1/chat/completions",
+            json.dumps(payload),
+            headers={"Authorization": "Bearer local-test", "Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        raw = response.read()
+        connection.close()
+        self.assertEqual(200, response.status)
+        return json.loads(raw)["choices"][0]["message"]["content"]
+
+    def test_api_keeps_adventure_commands_core_owned_and_staging_invisible_until_commit(self):
+        self.assertIn("Created adventure workspace", self.chat("adventure create API Lantern"))
+        self.assertIn("loaded: API Lantern", self.chat("adventure load API Lantern"))
+        self.assertIn("staging started", self.chat("adventure turn begin"))
+        self.assertIn("Staged adventure state", self.chat(
+            "adventure turn stage state current_location: chart room"
+        ))
+        self.assertIn("Unknown or malformed adventure command", self.chat("adventure state nonsense"))
+        self.assertEqual(
+            "No explicit authoritative story state is recorded for the loaded workspace.",
+            self.chat("adventure state"),
+        )
+        record = self.session.adventure_session.record
+        self.assertEqual([], AdventureEventLog(self.session.adventure_registry, record).events())
+        self.assertEqual([], self.provider_calls)
+        self.assertEqual([], self.session.messages)
+
+        self.assertIn("Committed 1 staged adventure event(s)", self.chat("adventure turn commit"))
+        self.assertIn("current_location: chart room", self.chat("adventure state"))
+        self.assertEqual([], self.provider_calls)
+
+    def test_reserved_adventure_command_ignores_stale_document_extensions(self):
+        content = self.chat(
+            "adventure create Document-Safe Lantern",
+            starfur_document_context={"review_id": "DR-" + "f" * 32, "limit": 1},
+            starfur_document_review={"action": "list"},
+        )
+        self.assertIn("Created adventure workspace: Document-Safe Lantern", content)
+        self.assertEqual([], self.provider_calls)
+        self.assertEqual([], self.session.messages)
+
 
 if __name__ == "__main__":
     unittest.main()

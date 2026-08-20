@@ -41,6 +41,12 @@ from pipeline.persona_visibility import (
 from pipeline.roleplay import RoleplaySessionState, detect_casual_roleplay_start
 from pipeline.roleplay_presentation import sanitize_fictional_relationship_memories
 from pipeline.adventure_events import AdventureEventDraft, AdventureEventLog, AdventureEventLogError
+from pipeline.adventure_mutation import (
+    AdventureMutation,
+    MUTATION_KNOWLEDGE_SET,
+    MUTATION_RELATIONSHIP_SET,
+    MUTATION_STATE_SET,
+)
 from pipeline.adventure_registry import AdventureNotFoundError, AdventureRegistry, AdventureRegistryError
 from pipeline.adventure_session import AdventureSessionState
 from pipeline.adventure_turn import AdventureTurnTransaction
@@ -1273,6 +1279,75 @@ class AssistantSession:
             return f"Adventure event was not staged: {error}"
         return f"Staged adventure event [{draft.event_type}]: {draft.summary}"
 
+    def _stage_adventure_mutation(self, mutation, *, summary, label):
+        """Stage one Core-validated structured fact without persisting it."""
+        if not self.adventure_turn.active:
+            return "Adventure turn staging: inactive. Use adventure turn begin first."
+        if not self.adventure_session.active or self.adventure_session.record != self.adventure_turn.record:
+            self.adventure_turn = self.adventure_turn.abort()
+            return "Adventure turn staging was discarded because its workspace is no longer loaded."
+        try:
+            self.adventure_turn = self.adventure_turn.stage_mutation(mutation, summary=summary)
+        except (AdventureEventLogError, ValueError, TypeError) as error:
+            return f"Adventure {label} was not staged: {error}"
+        return f"Staged adventure {label}: {summary}"
+
+    def adventure_turn_stage_state(self, value):
+        if not isinstance(value, str) or ":" not in value:
+            return "Usage: adventure turn stage state <key>: <value>"
+        key, state_value = value.split(":", 1)
+        try:
+            mutation = AdventureMutation(
+                MUTATION_STATE_SET, state_key=key, state_value=state_value,
+            )
+        except ValueError as error:
+            return f"Adventure state was not staged: {error}"
+        summary = f"Set {mutation.state_key} to {mutation.state_value}."
+        return self._stage_adventure_mutation(mutation, summary=summary, label="state")
+
+    def adventure_turn_stage_relationship(self, value):
+        usage = "Usage: adventure turn stage relationship <character> <dimension>: <value>"
+        if not isinstance(value, str) or ":" not in value:
+            return usage
+        identity, relationship_value = value.split(":", 1)
+        parts = identity.split()
+        if len(parts) < 2:
+            return usage
+        try:
+            mutation = AdventureMutation(
+                MUTATION_RELATIONSHIP_SET,
+                relationship_subject=" ".join(parts[:-1]),
+                relationship_dimension=parts[-1],
+                relationship_value=relationship_value,
+            )
+        except ValueError as error:
+            return f"Adventure relationship was not staged: {error}"
+        summary = (
+            f"{mutation.relationship_subject} / {mutation.relationship_dimension}: "
+            f"{mutation.relationship_value}."
+        )
+        return self._stage_adventure_mutation(mutation, summary=summary, label="relationship")
+
+    def adventure_turn_stage_knowledge(self, value):
+        usage = "Usage: adventure turn stage knowledge <character> <knows|believes|uncertain>: <fact>"
+        if not isinstance(value, str) or ":" not in value:
+            return usage
+        identity, fact = value.split(":", 1)
+        parts = identity.split()
+        if len(parts) < 2:
+            return usage
+        try:
+            mutation = AdventureMutation(
+                MUTATION_KNOWLEDGE_SET,
+                knowledge_subject=" ".join(parts[:-1]),
+                knowledge_status=parts[-1],
+                knowledge_fact=fact,
+            )
+        except ValueError as error:
+            return f"Character knowledge was not staged: {error}"
+        summary = f"{mutation.knowledge_subject} {mutation.knowledge_status}: {mutation.knowledge_fact}."
+        return self._stage_adventure_mutation(mutation, summary=summary, label="character knowledge")
+
     def adventure_turn_commit(self):
         if not self.adventure_turn.active:
             return "Adventure turn staging: inactive."
@@ -1341,6 +1416,12 @@ class AssistantSession:
             return self.adventure_turn_begin()
         if lowered in {"adventure turn status", "adventure turn"}:
             return self.adventure_turn_status()
+        if lowered == "adventure turn stage state" or lowered.startswith("adventure turn stage state "):
+            return self.adventure_turn_stage_state(text.strip()[len("adventure turn stage state"):])
+        if lowered == "adventure turn stage relationship" or lowered.startswith("adventure turn stage relationship "):
+            return self.adventure_turn_stage_relationship(text.strip()[len("adventure turn stage relationship"):])
+        if lowered == "adventure turn stage knowledge" or lowered.startswith("adventure turn stage knowledge "):
+            return self.adventure_turn_stage_knowledge(text.strip()[len("adventure turn stage knowledge"):])
         if lowered == "adventure turn stage" or lowered.startswith("adventure turn stage "):
             return self.adventure_turn_stage(text.strip()[len("adventure turn stage"):])
         if lowered == "adventure turn commit":
@@ -1357,6 +1438,15 @@ class AssistantSession:
             return self.adventure_unload()
         if lowered in {"adventure status", "what is loaded", "what is loaded?", "what's loaded", "what's loaded?"}:
             return self.adventure_status()
+        # ``adventure`` is a reserved Core command namespace.  After all
+        # documented forms above have had a chance to dispatch, keep malformed
+        # variants inside Core rather than letting a model interpret a typo as
+        # ordinary conversation or a request to create a proposal.
+        if lowered == "adventure" or lowered.startswith("adventure "):
+            return (
+                "Unknown or malformed adventure command. Use adventure list, "
+                "adventure status, adventure turn status, or ask how to manage adventures."
+            )
         if lowered == "persona inspect":
             return self.persona_inspect()
         if lowered in {"persona list", "list personas"}:

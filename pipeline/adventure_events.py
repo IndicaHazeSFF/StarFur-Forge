@@ -19,6 +19,10 @@ from typing import Callable, Iterator
 
 from pipeline.adventure_mutation import AdventureEventEnvelope, AdventureMutation, AdventureMutationError
 from pipeline.adventure_registry import AdventureRecord, AdventureRegistry, AdventureRegistryError, MANIFEST_FILENAME
+from pipeline.adventure_resource_state import (
+    AdventureResourceOperation, AdventureResourceState, AdventureResourceStateError,
+    derive_adventure_resource_state,
+)
 
 try:  # POSIX production (including WSL); Windows uses the standard-library fallback below.
     import fcntl
@@ -35,6 +39,7 @@ EVENT_SOURCE_CORE_EXPLICIT = "core_explicit"
 EVENT_TYPES = frozenset({
     "choice", "discovery", "promise", "lie", "relationship_change", "emotional_transition",
     "state_change", "unresolved_hook", "character_knowledge", "inventory_change", "location_change",
+    "resource_change",
 })
 _MAX_SUMMARY_LENGTH = 500
 _MAX_DETAILS_LENGTH = 4_000
@@ -111,6 +116,15 @@ def normalize_event_request_id(value: object) -> str:
     return request_id
 
 
+def _resource_json_value(value: object) -> object:
+    """Keep v1 resource-event payloads bounded to JSON-safe data only."""
+    try:
+        normalized = json.loads(json.dumps(value, separators=(",", ":")))
+    except (TypeError, ValueError) as error:
+        raise AdventureEventLogError("resource value must be JSON-compatible") from error
+    return normalized
+
+
 @dataclass(frozen=True)
 class AdventureEvent:
     """One authoritative, replayable story fact in sequence order."""
@@ -129,6 +143,9 @@ class AdventureEvent:
     knowledge_subject: str | None = None
     knowledge_status: str | None = None
     knowledge_fact: str | None = None
+    resource_id: str | None = None
+    resource_operation: str | None = None
+    resource_value: object = None
     request_id: str | None = None
     supersedes_event_id: str | None = None
     mutation: AdventureMutation | None = None
@@ -154,6 +171,10 @@ class AdventureEvent:
             self.supersedes_event_id is not None or self.mutation is not None
         ):
             raise AdventureEventLogError("schema-v1 events cannot contain a mutation envelope")
+        if self.schema_version == EVENT_LOG_SCHEMA_V2 and any(
+            value is not None for value in (self.resource_id, self.resource_operation, self.resource_value)
+        ):
+            raise AdventureEventLogError("schema-v2 resource events are not supported yet")
         if self.supersedes_event_id is not None:
             if not isinstance(self.supersedes_event_id, str) or not re.fullmatch(r"AE-[0-9]{6}", self.supersedes_event_id):
                 raise AdventureEventLogError("superseded event identifier is invalid")
@@ -204,6 +225,23 @@ class AdventureEvent:
             object.__setattr__(self, "knowledge_fact", _required_text(
                 self.knowledge_fact, field="knowledge fact", maximum=_MAX_KNOWLEDGE_FACT_LENGTH, collapse=True
             ))
+        if self.resource_id is None and self.resource_operation is None:
+            if self.resource_value is not None:
+                raise AdventureEventLogError("resource change requires identifier and operation")
+        elif self.resource_id is None or self.resource_operation is None:
+            raise AdventureEventLogError("resource change requires identifier and operation")
+        elif self.event_type != "resource_change":
+            raise AdventureEventLogError("structured resource data is allowed only for resource_change events")
+        else:
+            try:
+                operation = AdventureResourceOperation(
+                    self.resource_id, self.resource_operation, _resource_json_value(self.resource_value),
+                )
+            except AdventureResourceStateError as error:
+                raise AdventureEventLogError("resource change is invalid") from error
+            object.__setattr__(self, "resource_id", operation.resource_id)
+            object.__setattr__(self, "resource_operation", operation.operation)
+            object.__setattr__(self, "resource_value", operation.value)
         if self.request_id is not None:
             object.__setattr__(self, "request_id", normalize_event_request_id(self.request_id))
         if not isinstance(self.recorded_at, str) or not self.recorded_at:
@@ -272,6 +310,8 @@ class AdventureEvent:
                 relationship_dimension=value.get("relationship_dimension"), relationship_value=value.get("relationship_value"),
                 knowledge_subject=value.get("knowledge_subject"), knowledge_status=value.get("knowledge_status"),
                 knowledge_fact=value.get("knowledge_fact"),
+                resource_id=value.get("resource_id"), resource_operation=value.get("resource_operation"),
+                resource_value=value.get("resource_value"),
                 request_id=value.get("request_id"),
                 supersedes_event_id=value.get("supersedes_event_id"),
                 mutation=None if mutation_value is None else AdventureMutation.from_dict(mutation_value),
@@ -307,6 +347,9 @@ class AdventureEvent:
             "knowledge_subject": self.knowledge_subject,
             "knowledge_status": self.knowledge_status,
             "knowledge_fact": self.knowledge_fact,
+            "resource_id": self.resource_id,
+            "resource_operation": self.resource_operation,
+            "resource_value": self.resource_value,
         })
         return value
 
@@ -326,6 +369,9 @@ class AdventureEventDraft:
     knowledge_subject: str | None = None
     knowledge_status: str | None = None
     knowledge_fact: str | None = None
+    resource_id: str | None = None
+    resource_operation: str | None = None
+    resource_value: object = None
 
     def __post_init__(self) -> None:
         # Reuse the authoritative field validation while deliberately omitting
@@ -338,11 +384,14 @@ class AdventureEventDraft:
             relationship_value=self.relationship_value,
             knowledge_subject=self.knowledge_subject, knowledge_status=self.knowledge_status,
             knowledge_fact=self.knowledge_fact,
+            resource_id=self.resource_id, resource_operation=self.resource_operation,
+            resource_value=self.resource_value,
         )
         for field_name in (
             "event_type", "summary", "details", "state_key", "state_value",
             "relationship_subject", "relationship_dimension", "relationship_value",
             "knowledge_subject", "knowledge_status", "knowledge_fact",
+            "resource_id", "resource_operation", "resource_value",
         ):
             object.__setattr__(self, field_name, getattr(validated, field_name))
 
@@ -384,7 +433,9 @@ class AdventureEventLog:
         """Return the validated log without creating files or derived state."""
         if not self.path.exists():
             return []
-        return self._read_events(self.path)
+        events = self._read_events(self.path)
+        self._validate_resource_events(events)
+        return events
 
     @staticmethod
     def _read_events(path: Path) -> list[AdventureEvent]:
@@ -415,6 +466,7 @@ class AdventureEventLog:
         state_key: object = None, state_value: object = None,
         relationship_subject: object = None, relationship_dimension: object = None, relationship_value: object = None,
         knowledge_subject: object = None, knowledge_status: object = None, knowledge_fact: object = None,
+        resource_id: object = None, resource_operation: object = None, resource_value: object = None,
         request_id: object = None,
     ) -> AdventureEvent:
         """Append one Core-authored event through the same atomic batch path."""
@@ -424,6 +476,7 @@ class AdventureEventLog:
             relationship_subject=relationship_subject, relationship_dimension=relationship_dimension,
             relationship_value=relationship_value,
             knowledge_subject=knowledge_subject, knowledge_status=knowledge_status, knowledge_fact=knowledge_fact,
+            resource_id=resource_id, resource_operation=resource_operation, resource_value=resource_value,
         )
         return self.append_many((draft,), request_id=request_id)[0]
 
@@ -445,6 +498,7 @@ class AdventureEventLog:
                 if not self._request_matches_drafts(prior, drafts):
                     raise AdventureEventLogError("event request identifier was already used for different events")
                 return prior
+            self._validate_resource_events((*existing, *drafts))
             recorded_at = self._now().astimezone(UTC).isoformat()
             events = [
                 AdventureEvent(
@@ -455,6 +509,8 @@ class AdventureEventLog:
                     relationship_value=draft.relationship_value,
                     knowledge_subject=draft.knowledge_subject, knowledge_status=draft.knowledge_status,
                     knowledge_fact=draft.knowledge_fact, request_id=normalized_request_id,
+                    resource_id=draft.resource_id, resource_operation=draft.resource_operation,
+                    resource_value=draft.resource_value,
                 )
                 for index, draft in enumerate(drafts, start=1)
             ]
@@ -533,11 +589,23 @@ class AdventureEventLog:
             "event_type", "summary", "details", "state_key", "state_value",
             "relationship_subject", "relationship_dimension", "relationship_value",
             "knowledge_subject", "knowledge_status", "knowledge_fact",
+            "resource_id", "resource_operation", "resource_value",
         )
         return all(
             all(getattr(event, field) == getattr(draft, field) for field in fields)
             for event, draft in zip(events, drafts)
         )
+
+    def _validate_resource_events(self, events: object) -> AdventureResourceState:
+        """Replay resource operations against the workspace's immutable catalog."""
+        if not isinstance(events, (list, tuple)) or not all(
+            isinstance(event, (AdventureEvent, AdventureEventDraft)) for event in events
+        ):
+            raise TypeError("resource validation requires adventure events or drafts")
+        try:
+            return derive_adventure_resource_state(self._registry.resource_catalog(self._record), events)
+        except (AdventureRegistryError, AdventureResourceStateError) as error:
+            raise AdventureEventLogError("resource event is invalid for this adventure catalog") from error
 
     def _replace_log(self, existing: list[AdventureEvent], events: list[AdventureEvent]) -> None:
         try:

@@ -434,6 +434,12 @@ class StarFurAPI:
             limit=selection.get("limit", 3),
         )
 
+    @staticmethod
+    def _is_reserved_adventure_command(user_text):
+        """Keep the Core-owned adventure namespace ahead of UI extensions."""
+        lowered = user_text.casefold()
+        return lowered == "adventure" or lowered.startswith("adventure ")
+
     def complete(self, payload, *, stream_writer=None, conversation_id=None):
         if not isinstance(payload, dict):
             raise ValueError("Request body must be a JSON object.")
@@ -450,12 +456,21 @@ class StarFurAPI:
         if requested_model not in (None, self.model_id):
             raise ValueError(f"Unknown StarFur model: {requested_model}")
         resolved_conversation = _conversation_id_from_request(payload, conversation_id)
+        # A UI can retain a stale document-review/context extension after the
+        # user changes their actual message. The reserved Core namespace must
+        # still receive that message without review lookup, document retrieval,
+        # or a controlled document action taking precedence.
+        reserved_adventure_command = self._is_reserved_adventure_command(user_text)
         review_command = payload.get("starfur_document_review")
-        if review_command is not None:
+        if review_command is not None and not reserved_adventure_command:
             content = self.document_review_command(review_command)
             active = self.application.active_model_for(resolved_conversation)
             return {"content": content, "model": active}
-        document_context = self._chat_document_context(payload, user_text, resolved_conversation)
+        document_context = (
+            None
+            if reserved_adventure_command
+            else self._chat_document_context(payload, user_text, resolved_conversation)
+        )
         content = self.application.respond(
             user_text,
             stream_writer=stream_writer,

@@ -1,3 +1,31 @@
+## 2026-08-20 - Add initial deterministic adventure integrity evaluation
+
+- Behavior: `python starfur.py adventure-eval` runs checked-in `adventure-integrity-v1` fixtures covering event-backed state/relationship/knowledge projections, bounded replay selection, context-limit separation, and repeatability.
+- Constraints: evaluation is entirely in-memory and provider-free. It does not open a runtime workspace, read production memory, call a model, or append experiment-ledger data.
+- Verification: focused fixture tests reject malformed schema and verify deterministic passing results.
+
+## 2026-08-20 - Keep stale OpenWebUI document metadata out of adventure commands
+
+- Behavior: when the actual latest user message is in the reserved `adventure` namespace, the API bypasses any stale `starfur_document_context` or `starfur_document_review` extension. The Core command therefore runs without document lookup, retrieval, or review action taking precedence.
+- Verification: focused API coverage sends both stale extension types with an exact adventure command and confirms the workspace action succeeds without a provider call or chat-history mutation.
+
+## 2026-08-20 - Cover Core-owned adventure staging through the local API
+
+- Verification: the OpenAI-compatible `/v1/chat/completions` adapter now has a focused temporary-workspace regression test proving exact adventure commands retain Core ownership, a staged state fact stays invisible before commit, malformed adventure syntax does not call the provider, and the committed fact rebuilds through normal inspection.
+- Constraints: this is adapter coverage only. It adds no endpoint, provider behavior, OpenWebUI dependency, model authority, or adventure-storage policy.
+
+## 2026-08-20 - Stage structured adventure facts atomically with a turn
+
+- Behavior: exact `adventure turn stage state`, `adventure turn stage relationship`, and `adventure turn stage knowledge` controls now validate and stage typed structured facts alongside ordinary event drafts. One commit appends the complete batch using the existing request ID, then refreshes authoritative projections.
+- Constraints: staged facts are session-local and remain absent from the event log, prompt context, and inspection until commit. No model extraction, provider authority, automatic narration capture, schema-v2 event writer, or change to direct immediate-write controls was added.
+- Verification: focused adventure-command coverage exercises one mixed ordinary/state/relationship/knowledge batch, pre-commit invisibility, atomic commit, rebuilt projections, shared request ID, and malformed staged input.
+
+## 2026-08-20 - Fail closed for malformed adventure commands
+
+- Behavior: `adventure` is now a reserved Core namespace. After exact documented adventure controls are checked, malformed, unknown, and near-miss `adventure ...` input returns deterministic Core guidance instead of reaching normal model generation.
+- Constraints: malformed adventure input does not call a provider, create a proposal, mutate recent chat history, or write an adventure event. This does not add typed staged-mutation command syntax, automatic extraction, or provider authority.
+- Verification: focused adventure-command coverage uses a fake chat provider and temporary adventure workspace to prove malformed namespace variants leave provider calls, proposals, messages, and event history unchanged.
+
 ## 2026-08-18 - Add explicit atomic adventure-turn staging
 
 - Behavior: Loaded adventures now support `adventure turn begin/status/stage/commit/abort`. Staged validated ordinary event drafts stay session-local until one `append_many` commit writes the complete batch; abort and mount changes discard them without event-log mutation.
