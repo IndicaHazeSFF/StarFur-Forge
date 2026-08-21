@@ -25,6 +25,13 @@ from pipeline.adventure_state import (
     select_adventure_state_context,
 )
 from pipeline.adventure_registry import AdventureRecord
+from pipeline.adventure_resources import AdventureResourceCatalog
+from pipeline.adventure_resource_state import (
+    AdventureResourceFact,
+    MAX_CONTEXT_RESOURCE_FACTS,
+    derive_adventure_resource_facts,
+    select_adventure_resource_context,
+)
 
 
 MAX_CONTEXT_EVENTS = DEFAULT_REPLAY_SPINE_LIMIT
@@ -43,6 +50,9 @@ class AdventureSessionState:
     context_relationship_facts: tuple[AdventureRelationshipFact, ...] = ()
     knowledge_facts: tuple[AdventureKnowledgeFact, ...] = ()
     context_knowledge_facts: tuple[AdventureKnowledgeFact, ...] = ()
+    resource_catalog: AdventureResourceCatalog = AdventureResourceCatalog(())
+    resource_facts: tuple[AdventureResourceFact, ...] = ()
+    context_resource_facts: tuple[AdventureResourceFact, ...] = ()
 
     def __post_init__(self) -> None:
         if self.record is not None and not isinstance(self.record, AdventureRecord):
@@ -63,6 +73,12 @@ class AdventureSessionState:
             raise TypeError("mounted adventure knowledge facts must be AdventureKnowledgeFacts")
         if not isinstance(self.context_knowledge_facts, tuple) or not all(isinstance(fact, AdventureKnowledgeFact) for fact in self.context_knowledge_facts):
             raise TypeError("mounted adventure context knowledge facts must be AdventureKnowledgeFacts")
+        if not isinstance(self.resource_catalog, AdventureResourceCatalog):
+            raise TypeError("mounted adventure resource catalog must be an AdventureResourceCatalog")
+        if not isinstance(self.resource_facts, tuple) or not all(isinstance(fact, AdventureResourceFact) for fact in self.resource_facts):
+            raise TypeError("mounted adventure resource facts must be AdventureResourceFacts")
+        if not isinstance(self.context_resource_facts, tuple) or not all(isinstance(fact, AdventureResourceFact) for fact in self.context_resource_facts):
+            raise TypeError("mounted adventure context resource facts must be AdventureResourceFacts")
         if len(self.context_events) > MAX_CONTEXT_EVENTS:
             raise ValueError("mounted adventure context event limit exceeded")
         if len(self.context_state_facts) > MAX_CONTEXT_STATE_FACTS:
@@ -71,10 +87,13 @@ class AdventureSessionState:
             raise ValueError("mounted adventure context relationship fact limit exceeded")
         if len(self.context_knowledge_facts) > MAX_CONTEXT_KNOWLEDGE_FACTS:
             raise ValueError("mounted adventure context knowledge fact limit exceeded")
+        if len(self.context_resource_facts) > MAX_CONTEXT_RESOURCE_FACTS:
+            raise ValueError("mounted adventure context resource fact limit exceeded")
         if self.record is None and (
             self.event_count or self.context_events or self.state_facts or self.context_state_facts
             or self.relationship_facts or self.context_relationship_facts or self.knowledge_facts
-            or self.context_knowledge_facts
+            or self.context_knowledge_facts or self.resource_catalog.definitions
+            or self.resource_facts or self.context_resource_facts
         ):
             raise ValueError("unmounted adventure state cannot contain events")
         if self.event_count < len(self.context_events):
@@ -88,14 +107,22 @@ class AdventureSessionState:
     def active(self) -> bool:
         return self.record is not None
 
-    def mount(self, record: AdventureRecord, events: list[AdventureEvent] | tuple[AdventureEvent, ...] = ()) -> "AdventureSessionState":
+    def mount(
+        self, record: AdventureRecord, events: list[AdventureEvent] | tuple[AdventureEvent, ...] = (),
+        *, resource_catalog: AdventureResourceCatalog | None = None,
+    ) -> "AdventureSessionState":
         """Mount only a bounded selection of validated events; never write them."""
         if not isinstance(events, (list, tuple)) or not all(isinstance(event, AdventureEvent) for event in events):
             raise TypeError("mounted adventure events must be AdventureEvents")
         total = len(events)
+        if resource_catalog is None:
+            resource_catalog = self.resource_catalog if self.record == record else AdventureResourceCatalog(())
+        if not isinstance(resource_catalog, AdventureResourceCatalog):
+            raise TypeError("mounted adventure resource catalog must be an AdventureResourceCatalog")
         state_facts = derive_adventure_state(events)
         relationship_facts = derive_adventure_relationships(events)
         knowledge_facts = derive_adventure_knowledge(events)
+        resource_facts = derive_adventure_resource_facts(resource_catalog, events)
         return type(self)(
             record=record,
             event_count=total,
@@ -106,6 +133,9 @@ class AdventureSessionState:
             context_relationship_facts=select_adventure_relationship_context(relationship_facts),
             knowledge_facts=knowledge_facts,
             context_knowledge_facts=select_adventure_knowledge_context(knowledge_facts),
+            resource_catalog=resource_catalog,
+            resource_facts=resource_facts,
+            context_resource_facts=select_adventure_resource_context(resource_facts),
         )
 
     def unmount(self) -> "AdventureSessionState":
@@ -127,6 +157,8 @@ class AdventureSessionState:
             "context_relationship_fact_count": len(self.context_relationship_facts),
             "knowledge_fact_count": len(self.knowledge_facts),
             "context_knowledge_fact_count": len(self.context_knowledge_facts),
+            "resource_fact_count": len(self.resource_facts),
+            "context_resource_fact_count": len(self.context_resource_facts),
             "storage": "session_ephemeral",
         }
 
@@ -139,13 +171,6 @@ class AdventureSessionState:
             f"Title: {self.record.title}\n"
             f"ID: {self.record.adventure_id}\n"
         )
-        if not self.context_events:
-            return header + (
-                "This workspace has no recorded authoritative adventure events. Do not invent prior story events, "
-                "characters, relationships, replay history, or hidden narrative state. Keep ordinary assistant "
-                "memory and real-world claims separate.\n"
-                "END MOUNTED ADVENTURE WORKSPACE"
-            )
         events = "\n".join(f"- [{event.event_type}] {event.summary}" for event in self.context_events)
         state = ""
         if self.context_state_facts:
@@ -180,12 +205,32 @@ class AdventureSessionState:
                 f"{knowledge_lines}\n"
                 "END CHARACTER KNOWLEDGE AND BELIEFS\n"
             )
+        resources = ""
+        if self.context_resource_facts:
+            resource_lines = "\n".join(
+                f"- {fact.resource_id} ({fact.label}): {fact.value}"
+                for fact in self.context_resource_facts
+            )
+            resources = (
+                "CURRENT PUBLIC ADVENTURE RESOURCES (core-provided):\n"
+                f"{len(self.resource_facts)} declared resource(s); {len(self.context_resource_facts)} public fact(s) selected for bounded context.\n"
+                f"{resource_lines}\nEND CURRENT PUBLIC ADVENTURE RESOURCES\n"
+            )
+        if not self.context_events:
+            return header + (
+                "This workspace has no recorded authoritative adventure events. Do not invent prior story events, "
+                "characters, relationships, replay history, or hidden narrative state. Keep ordinary assistant "
+                "memory and real-world claims separate.\n"
+                f"{resources}"
+                "END MOUNTED ADVENTURE WORKSPACE"
+            )
         return header + (
             f"Authoritative event log: {self.event_count} event(s); {len(self.context_events)} replay-spine facts are supplied below.\n"
             "These are established story facts, not user memories. Do not invent omitted events, details, or values.\n"
             f"{state}"
             f"{relationships}"
             f"{knowledge}"
+            f"{resources}"
             "RECENT AUTHORITATIVE ADVENTURE EVENTS:\n"
             f"{events}\n"
             "END MOUNTED ADVENTURE WORKSPACE"

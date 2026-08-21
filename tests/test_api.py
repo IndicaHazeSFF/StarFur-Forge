@@ -7,6 +7,7 @@ import types
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.modules.setdefault("ollama", types.ModuleType("ollama"))
@@ -51,6 +52,17 @@ class APITests(unittest.TestCase):
         self.sessions = [self.session]
         self.annotation_chunks = []
         self.proposal_writes = []
+        # Document-review handoff tests inject proposal IDs instead of writing
+        # proposals.  Keep public-reference rendering independent from any
+        # developer's real assistant database, where an injected numeric ID
+        # could coincidentally already exist with a different public ordinal.
+        self.public_id_patch = patch(
+            "pipeline.api.assistant_public_id",
+            side_effect=lambda kind, record_id, domain="personal": (
+                f"{'M' if kind == 'memory' else 'P'}-{int(record_id):03d}"
+            ),
+        )
+        self.public_id_patch.start()
 
         def session_factory():
             session = FakeSession()
@@ -100,6 +112,7 @@ class APITests(unittest.TestCase):
         self.server.shutdown()
         self.server.server_close()
         self.thread.join(timeout=2)
+        self.public_id_patch.stop()
 
     def request(self, method, path, body=None, *, auth=True, extra_headers=None):
         connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=3)

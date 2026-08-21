@@ -11,6 +11,7 @@ sys.modules.setdefault("ollama", types.ModuleType("ollama"))
 
 from pipeline.adventure_registry import AdventureRegistry
 from pipeline.adventure_events import AdventureEventLog
+from pipeline.adventure_resources import AdventureResourceCatalog, AdventureResourceDefinition
 from pipeline.assistant import AssistantSession
 from pipeline.command_help import detect_command_help
 
@@ -127,7 +128,7 @@ class AdventureCommandTests(unittest.TestCase):
             self.assertNotIn("clue 1", system_prompt)
             self.assertNotIn("Private event detail", system_prompt)
             self.assertIn(
-                "10 authoritative event(s), 8 in bounded replay context; 0 authoritative state fact(s), 0 selected for context; 0 authoritative relationship fact(s), 0 selected for context; 0 authoritative character-knowledge fact(s), 0 selected for context; session-local mount",
+                "10 authoritative event(s), 8 in bounded replay context; 0 authoritative state fact(s), 0 selected for context; 0 authoritative relationship fact(s), 0 selected for context; 0 authoritative character-knowledge fact(s), 0 selected for context; 0 declared resource(s), 0 public resource fact(s) selected for context; session-local mount",
                 session.context_stats(),
             )
 
@@ -199,6 +200,75 @@ class AdventureCommandTests(unittest.TestCase):
             self.assertIn("location: engine room", prompt)
             self.assertNotIn("location: bridge\n", prompt)
             self.assertIn("1 authoritative state fact(s), 1 selected for context", session.context_stats())
+
+    def test_mounted_resources_keep_complete_values_but_only_public_values_reach_core_context(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(directory, calls)
+            session.respond("adventure create Quiet Ember")
+            record = session.adventure_registry.resolve_title("Quiet Ember")
+            catalog = AdventureResourceCatalog((
+                AdventureResourceDefinition("fuel", "Fuel", "integer", minimum=0, maximum=100),
+                AdventureResourceDefinition("primary_slot", "Primary slot", "equipment", visibility="hidden"),
+            ))
+            session.adventure_registry.configure_resource_catalog(record, catalog)
+            log = AdventureEventLog(session.adventure_registry, record)
+            log.append(
+                "resource_change", "Fuel reserve increases.",
+                resource_id="fuel", resource_operation="increment", resource_value=20,
+            )
+            log.append(
+                "resource_change", "A brass key is equipped.",
+                resource_id="primary_slot", resource_operation="equip", resource_value="brass key",
+            )
+
+            session.respond("adventure load Quiet Ember")
+            listed = session.respond("adventure resources")
+            self.assertIn("fuel (Fuel): 20", listed)
+            self.assertNotIn("primary_slot", listed)
+            self.assertIn("2 declared resource(s), 1 public resource fact(s)", session.respond("adventure status"))
+            self.assertEqual("unexpected", session.respond("What resources are available?"))
+            prompt = calls[-1]["messages"][0]["content"]
+            self.assertIn("CURRENT PUBLIC ADVENTURE RESOURCES", prompt)
+            self.assertIn("fuel (Fuel): 20", prompt)
+            self.assertNotIn("primary_slot", prompt)
+            self.assertIn("2 declared resource(s), 1 public resource fact(s)", session.context_stats())
+
+    def test_explicit_resource_controls_validate_catalog_and_stage_atomically_without_hidden_leaks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(directory, calls)
+            session.respond("adventure create Quiet Ember")
+            record = session.adventure_registry.resolve_title("Quiet Ember")
+            session.adventure_registry.configure_resource_catalog(record, AdventureResourceCatalog((
+                AdventureResourceDefinition("fuel", "Fuel", "integer", minimum=0, maximum=100),
+                AdventureResourceDefinition("primary_slot", "Primary slot", "equipment", visibility="hidden"),
+            )))
+            session.respond("adventure load Quiet Ember")
+
+            self.assertIn("fuel (Fuel)", session.respond("adventure resource fuel increment: 20"))
+            self.assertIn("fuel (Fuel): 20", session.respond("adventure resources"))
+            self.assertIn("outside declared bounds", session.respond("adventure resource fuel decrement: 21"))
+            self.assertIn("fuel (Fuel): 20", session.respond("adventure resources"))
+
+            self.assertIn("Adventure turn staging started", session.respond("adventure turn begin"))
+            # Stage the public and hidden operations; both remain invisible
+            # until the transaction commits.
+            self.assertIn("Staged adventure resource fuel", session.respond("adventure turn stage resource fuel increment: 10"))
+            self.assertEqual("Staged a hidden adventure resource change.", session.respond(
+                "adventure turn stage resource primary_slot equip: brass key",
+            ))
+            self.assertIn("fuel (Fuel): 20", session.respond("adventure resources"))
+            self.assertIn("Committed 2 staged adventure event(s)", session.respond("adventure turn commit"))
+            self.assertIn("fuel (Fuel): 30", session.respond("adventure resources"))
+            self.assertNotIn("primary_slot", session.respond("adventure resources"))
+
+            self.assertEqual("unexpected", session.respond("What resources are available?"))
+            prompt = calls[-1]["messages"][0]["content"]
+            self.assertIn("fuel (Fuel): 30", prompt)
+            self.assertNotIn("primary_slot", prompt)
+            self.assertNotIn("brass key", prompt)
+            self.assertEqual([], session.proposals)
 
     def test_full_state_inspection_survives_bounded_prompt_context_and_reload(self):
         with tempfile.TemporaryDirectory() as directory:

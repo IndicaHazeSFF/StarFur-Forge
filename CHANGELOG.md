@@ -1,3 +1,33 @@
+## 2026-08-20 - Mount bounded public adventure resource projections
+
+- Behavior: mounted adventure sessions now rebuild complete catalog-validated resource state from events, report resource counts in status, inject only a bounded public projection, and expose it through the read-only `adventure resources` control.
+- Constraints: hidden resources stay outside normal inspection and model context. No resource mutation command, configuration UI, provider extraction, simulation, or game-specific rule was added.
+- Verification: focused command tests cover complete mounted projection, public-only inspection/prompt context, hidden-resource exclusion, and existing adventure behavior.
+
+## 2026-08-20 - Add catalog-validated authoritative resource events
+
+- Behavior: added a closed schema-v1 `resource_change` event representation. The event log validates the full resource-operation history against its immutable workspace catalog before reading or appending, while the pure reducer rebuilds complete values from valid events.
+- Constraints: no user command, mounted session projection, prompt/UI context, provider extraction, or game-specific behavior was introduced. Schema-v2 resource envelopes remain intentionally unsupported until a dedicated migration policy exists.
+- Verification: focused event-log tests cover valid numeric/inventory replay, absent-catalog rejection, bounds failure without write, and preservation of existing v1/v2 compatibility behavior.
+
+## 2026-08-20 - Persist immutable declared resource catalogs per adventure workspace
+
+- Behavior: an isolated adventure manifest may now store one JSON-safe, validated generic resource catalog before its event log exists. Existing workspaces load as an empty catalog; repeated matching configuration is idempotent and a conflicting replacement fails.
+- Constraints: this internal package/Core setup boundary does not add resource values, events, commands, prompt context, providers, model extraction, or game-specific fields.
+- Verification: focused registry/catalog tests cover round-trip serialization, decimal bounds, legacy empty catalogs, idempotent setup, conflict rejection, and the no-reconfiguration-after-event-log guard.
+
+## 2026-08-20 - Add pure catalog-validated adventure resource values
+
+- Behavior: added an immutable in-memory resource-state reducer with deterministic defaults and validated generic operations for flags, enums, bounded numbers, inventory, equipment, objectives, locations, and clocks.
+- Constraints: it is not connected to manifests, event logs, commands, prompts, UI, providers, or model-generated actions. Failed operations leave the prior immutable state intact.
+- Verification: focused tests cover defaults, hidden/public projection, arithmetic bounds, enum validation, inventory underflow, unsupported operations, and complete-state validation.
+
+## 2026-08-20 - Add scenario-declared adventure resource definitions
+
+- Behavior: added a pure, bounded catalog for generic adventure resource declarations: flags, enums, bounded integers/decimals, inventory, equipment, objectives, locations, and clocks. Scenario packages may supply stable IDs, labels, visibility, bounds/enum values, and kind-valid operation metadata without teaching Core any game-specific resource name.
+- Constraints: this is metadata only. It creates no resource values, workspace manifests, commands, event records, prompt context, model authority, or game rules.
+- Verification: focused resource-definition tests cover closed-schema validation, arithmetic-bound metadata, operation compatibility, unique IDs, hidden/public metadata, and unknown-resource rejection.
+
 ## 2026-08-20 - Add initial deterministic adventure integrity evaluation
 
 - Behavior: `python starfur.py adventure-eval` runs checked-in `adventure-integrity-v1` fixtures covering event-backed state/relationship/knowledge projections, bounded replay selection, context-limit separation, and repeatability.
@@ -1135,3 +1165,17 @@
 - Behavior: Adventure event writes now acquire a workspace-scoped fail-closed lock sentinel. Beginning a staged adventure turn creates a validated opaque request ID, stored on its committed events; retrying the same matching batch returns its original events without duplication, while conflicting reuse fails.
 - Constraints: stale-lock recovery, manifest/event-log crash reconciliation, typed mutation envelopes, automatic extraction, and cross-process recovery injection remain future A2 work. No new user command, provider call, model extraction, or shared-memory mutation was added.
 - Verification: focused event-log and turn tests cover request-ID retries, conflict rejection, and two independent event-log handles contending for one workspace lock.
+## 2026-08-20 - Plan portable adventure packages
+
+- Roadmap: add a future data-only `.starfur-adventure` format for Workshop/distribution, centered on a validated manifest plus `details.md` or structured state and optional conversation/transcript/assets.
+- Boundary: imports reuse canonical chunking, annotation, provenance, review, and adventure-namespace controls; packages execute no code, grant no permissions, and never silently merge into personal memory. Runtime event/state saves remain separate from immutable distributed content.
+## 2026-08-21 - Add explicit catalog-validated adventure resource controls
+
+- Behavior: `adventure resource <resource-id> <operation>[: <value>]` now appends one Core-validated generic resource operation; `adventure turn stage resource ...` validates against authoritative plus already-staged resource state and commits only with its enclosing turn.
+- Boundary: Core repeats validation under the event-log write lock. Public resources retain their bounded projection; hidden values and resource-event summaries are excluded from normal prompt context and read-only resource inspection.
+- Verification: focused command/turn tests cover immediate update, invalid arithmetic rejection, staged atomic commit, and hidden-resource non-leakage.
+## 2026-08-21 - Extend provider-free adventure evaluation with resource boundaries
+
+- Behavior: versioned `adventure-integrity-v2` fixtures now cover valid generic resource projections, public-only context, replay isolation of resource summaries, and deterministic rejection of invalid authoritative resource operations.
+- Constraints: evaluation remains in-memory and provider-free; it opens no runtime workspace or production memory and writes no experiment-ledger record.
+- Verification: focused fixture tests prove deterministic four-case evaluation and the expected public/hidden resource result shape.

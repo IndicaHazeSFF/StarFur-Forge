@@ -9,6 +9,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pipeline.adventure_events import AdventureEventDraft, AdventureEventLog
 from pipeline.adventure_mutation import AdventureMutation, MUTATION_KNOWLEDGE_SET, MUTATION_RELATIONSHIP_SET, MUTATION_STATE_SET
 from pipeline.adventure_registry import AdventureRegistry
+from pipeline.adventure_resources import AdventureResourceCatalog, AdventureResourceDefinition
+from pipeline.adventure_resource_state import AdventureResourceOperation
 from pipeline.adventure_turn import AdventureTurnTransaction
 
 
@@ -78,6 +80,27 @@ class AdventureTurnTests(unittest.TestCase):
             self.assertEqual("cautious", written[2].relationship_value)
             self.assertEqual("the hatch is trapped", written[3].knowledge_fact)
             self.assertEqual(4, len(log.events()))
+
+    def test_resource_operation_stages_as_one_validated_v1_resource_event(self):
+        with tempfile.TemporaryDirectory() as directory:
+            registry = AdventureRegistry(directory, now=lambda: datetime(2026, 8, 18, tzinfo=UTC))
+            record = registry.create("Quiet Ember")
+            registry.configure_resource_catalog(record, AdventureResourceCatalog((
+                AdventureResourceDefinition("fuel", "Fuel", "integer", minimum=0, maximum=100),
+            )))
+            transaction = AdventureTurnTransaction.inactive().begin(record).stage_resource(
+                AdventureResourceOperation("fuel", "increment", 20),
+                summary="Fuel changed.",
+            )
+            self.assertEqual(1, len(transaction.drafts))
+            self.assertEqual(0, len(transaction.mutations))
+            written = AdventureEventLog(registry, record).append_many(
+                transaction.drafts, request_id=transaction.request_id,
+            )
+            self.assertEqual("resource_change", written[0].event_type)
+            self.assertEqual("fuel", written[0].resource_id)
+            self.assertEqual("increment", written[0].resource_operation)
+            self.assertEqual(20, written[0].resource_value)
 
 
 if __name__ == "__main__":

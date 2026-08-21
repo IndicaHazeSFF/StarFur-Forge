@@ -23,6 +23,21 @@ class AdventureResourceStateError(ValueError):
     """Raised when a resource value or operation is invalid for its catalog."""
 
 
+MAX_CONTEXT_RESOURCE_FACTS = 12
+
+
+@dataclass(frozen=True)
+class AdventureResourceFact:
+    """One complete current resource value with its latest event provenance."""
+
+    resource_id: str
+    label: str
+    kind: str
+    value: object
+    visibility: str
+    source_event_id: str | None = None
+
+
 def _text(value: object, *, field: str, maximum: int = 96) -> str:
     if not isinstance(value, str):
         raise AdventureResourceStateError(f"{field} must be text")
@@ -236,6 +251,45 @@ def derive_adventure_resource_state(
     return state
 
 
+def derive_adventure_resource_facts(
+    catalog: AdventureResourceCatalog, events: Iterable[object],
+) -> tuple[AdventureResourceFact, ...]:
+    """Rebuild complete declared resource facts without applying a prompt limit."""
+    values = tuple(events)
+    state = derive_adventure_resource_state(catalog, values)
+    source_ids: dict[str, str] = {}
+    for event in values:
+        if getattr(event, "event_type", None) == "resource_change":
+            resource_id = getattr(event, "resource_id", None)
+            event_id = getattr(event, "event_id", None)
+            if isinstance(resource_id, str) and isinstance(event_id, str):
+                source_ids[resource_id] = event_id
+    current = dict(state.values)
+    return tuple(
+        AdventureResourceFact(
+            resource_id=definition.resource_id,
+            label=definition.label,
+            kind=definition.kind,
+            value=current[definition.resource_id],
+            visibility=definition.visibility,
+            source_event_id=source_ids.get(definition.resource_id),
+        )
+        for definition in catalog.definitions
+    )
+
+
+def select_adventure_resource_context(
+    facts: Iterable[AdventureResourceFact], *, limit: int = MAX_CONTEXT_RESOURCE_FACTS,
+) -> tuple[AdventureResourceFact, ...]:
+    """Expose only public declared values in a bounded deterministic prompt view."""
+    if not isinstance(limit, int) or not 1 <= limit <= MAX_CONTEXT_RESOURCE_FACTS:
+        raise ValueError(f"resource fact limit must be between 1 and {MAX_CONTEXT_RESOURCE_FACTS}")
+    values = tuple(facts)
+    if not all(isinstance(fact, AdventureResourceFact) for fact in values):
+        raise TypeError("resource facts must be AdventureResourceFacts")
+    return tuple(fact for fact in values if fact.visibility == "public")[:limit]
+
+
 def _apply(
     definition: AdventureResourceDefinition, current: object, operation: AdventureResourceOperation,
 ) -> object:
@@ -298,5 +352,6 @@ def _apply(
 
 __all__ = [
     "AdventureResourceOperation", "AdventureResourceState", "AdventureResourceStateError",
-    "derive_adventure_resource_state",
+    "AdventureResourceFact", "MAX_CONTEXT_RESOURCE_FACTS", "derive_adventure_resource_facts",
+    "derive_adventure_resource_state", "select_adventure_resource_context",
 ]

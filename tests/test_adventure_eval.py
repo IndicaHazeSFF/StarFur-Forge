@@ -19,11 +19,13 @@ class AdventureIntegrityEvalTests(unittest.TestCase):
         result = run_adventure_integrity_benchmark()
 
         self.assertEqual(BENCHMARK_VERSION, result["benchmark_version"])
-        self.assertEqual(2, result["cases"])
+        self.assertEqual(4, result["cases"])
         self.assertTrue(result["passed"])
         self.assertTrue(result["repeatability"])
         self.assertEqual([], result["failures"])
-        self.assertIn("Projection/replay:  PASS", format_adventure_integrity_result(result))
+        self.assertIn("Projections/replay/resources:  PASS", format_adventure_integrity_result(result))
+        resource_result = next(item for item in result["results"] if item["name"] == "resource_projection_hides_private_values_from_replay_and_context")
+        self.assertEqual(2, resource_result["actual_counts"]["resources"])
 
     def test_malformed_or_unknown_fixture_schema_fails_closed(self):
         with tempfile.TemporaryDirectory() as directory:

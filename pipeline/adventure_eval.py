@@ -15,18 +15,26 @@ from pipeline.adventure_events import AdventureEvent
 from pipeline.adventure_knowledge import derive_adventure_knowledge, select_adventure_knowledge_context
 from pipeline.adventure_relationship import derive_adventure_relationships, select_adventure_relationship_context
 from pipeline.adventure_replay import select_replay_spine
+from pipeline.adventure_resources import AdventureResourceCatalog
+from pipeline.adventure_resource_state import (
+    AdventureResourceStateError,
+    derive_adventure_resource_facts,
+    select_adventure_resource_context,
+)
 from pipeline.adventure_state import derive_adventure_state, select_adventure_state_context
 
 
 FIXTURE_ROOT = Path(__file__).resolve().parent.parent / "tests" / "fixtures"
-BENCHMARK_VERSION = "adventure-integrity-v1"
+BENCHMARK_VERSION = "adventure-integrity-v2"
 _EVENT_FIELDS = {
     "event_type", "summary", "details", "state_key", "state_value",
     "relationship_subject", "relationship_dimension", "relationship_value",
     "knowledge_subject", "knowledge_status", "knowledge_fact",
+    "resource_id", "resource_operation", "resource_value",
 }
 _EXPECTATION_FIELDS = {
-    "state", "relationships", "knowledge", "replay_event_ids", "context_counts",
+    "state", "relationships", "knowledge", "resources", "resource_context",
+    "resource_error", "replay_event_ids", "context_counts",
 }
 
 
@@ -45,7 +53,7 @@ def load_adventure_cases(path=FIXTURE_ROOT / "adventure_integrity_cases.json"):
         raise ValueError("Adventure benchmark fixture must contain 1-100 cases")
     names = set()
     for case in cases:
-        if not isinstance(case, dict) or set(case) != {"name", "events", "expect"}:
+        if not isinstance(case, dict) or set(case) - {"name", "events", "expect", "resource_catalog"}:
             raise ValueError("Adventure benchmark case schema is invalid")
         if not isinstance(case["name"], str) or not case["name"].strip() or len(case["name"]) > 128:
             raise ValueError("Adventure benchmark case name is invalid")
@@ -59,12 +67,19 @@ def load_adventure_cases(path=FIXTURE_ROOT / "adventure_integrity_cases.json"):
                 raise ValueError("Adventure benchmark event schema is invalid")
             if not isinstance(event.get("event_type"), str) or not isinstance(event.get("summary"), str):
                 raise ValueError("Adventure benchmark events require event_type and summary")
+        if "resource_catalog" in case:
+            try:
+                AdventureResourceCatalog.from_dict(case["resource_catalog"])
+            except (TypeError, ValueError) as error:
+                raise ValueError("Adventure benchmark resource catalog is invalid") from error
         expectation = case["expect"]
         if not isinstance(expectation, dict) or set(expectation) - _EXPECTATION_FIELDS:
             raise ValueError("Adventure benchmark expectation schema is invalid")
-        for field in ("state", "relationships", "knowledge", "replay_event_ids"):
+        for field in ("state", "relationships", "knowledge", "resources", "resource_context", "replay_event_ids"):
             if field not in expectation or not isinstance(expectation[field], list):
                 raise ValueError(f"Adventure benchmark expectation requires {field}")
+        if "resource_error" not in expectation or not isinstance(expectation["resource_error"], (str, type(None))):
+            raise ValueError("Adventure benchmark expectation requires resource_error")
         if "context_counts" not in expectation or not isinstance(expectation["context_counts"], dict):
             raise ValueError("Adventure benchmark expectation requires context_counts")
     return cases
@@ -114,21 +129,54 @@ def _knowledge_payload(facts):
     ]
 
 
+def _resource_payload(facts):
+    return [
+        {
+            "resource_id": fact.resource_id,
+            "label": fact.label,
+            "kind": fact.kind,
+            "value": fact.value,
+            "visibility": fact.visibility,
+            "source_event_id": fact.source_event_id,
+        }
+        for fact in facts
+    ]
+
+
 def _evaluate_case(case):
     events = _events_from_case(case)
     state = derive_adventure_state(events)
     relationships = derive_adventure_relationships(events)
     knowledge = derive_adventure_knowledge(events)
-    replay = select_replay_spine(events, limit=min(8, len(events)))
+    # Resource values reach a separate public/hidden projection. Never put a
+    # resource event's free-form summary into replay/prompt benchmark context.
+    replay = select_replay_spine(
+        tuple(event for event in events if event.event_type != "resource_change"),
+        limit=min(8, len(events)),
+    )
+    catalog = AdventureResourceCatalog.from_dict(case["resource_catalog"]) if "resource_catalog" in case else AdventureResourceCatalog(())
+    resource_error = None
+    try:
+        resources = derive_adventure_resource_facts(catalog, events)
+        resource_context = select_adventure_resource_context(resources)
+    except AdventureResourceStateError as error:
+        resources = ()
+        resource_context = ()
+        resource_error = str(error)
     actual = {
         "state": _state_payload(state),
         "relationships": _relationship_payload(relationships),
         "knowledge": _knowledge_payload(knowledge),
+        "resources": _resource_payload(resources),
+        "resource_context": _resource_payload(resource_context),
+        "resource_error": resource_error,
         "replay_event_ids": [event.event_id for event in replay],
         "context_counts": {
             "state": len(select_adventure_state_context(state)),
             "relationships": len(select_adventure_relationship_context(relationships)),
             "knowledge": len(select_adventure_knowledge_context(knowledge)),
+            "resources": len(resources),
+            "resource_context": len(resource_context),
         },
     }
     checks = {field: actual[field] == case["expect"][field] for field in _EXPECTATION_FIELDS}
@@ -141,6 +189,7 @@ def _evaluate_case(case):
             "state": len(state),
             "relationships": len(relationships),
             "knowledge": len(knowledge),
+            "resources": len(resources),
             "replay": len(replay),
         },
     }
@@ -169,7 +218,7 @@ def format_adventure_integrity_result(result):
         "------------------------------",
         f"Benchmark:          {result['benchmark_version']}",
         f"Cases:              {result['cases']}",
-        f"Projection/replay:  {'PASS' if result['passed'] else 'FAIL'}",
+        f"Projections/replay/resources:  {'PASS' if result['passed'] else 'FAIL'}",
         f"Repeatability:      {'PASS' if result['repeatability'] else 'FAIL'}",
     ]
     if result["failures"]:

@@ -48,6 +48,12 @@ from pipeline.adventure_mutation import (
     MUTATION_STATE_SET,
 )
 from pipeline.adventure_registry import AdventureNotFoundError, AdventureRegistry, AdventureRegistryError
+from pipeline.adventure_resources import AdventureResourceError
+from pipeline.adventure_resource_state import (
+    AdventureResourceOperation,
+    AdventureResourceStateError,
+    derive_adventure_resource_state,
+)
 from pipeline.adventure_session import AdventureSessionState
 from pipeline.adventure_turn import AdventureTurnTransaction
 from pipeline.document_review import DEFAULT_REVIEW_TTL_SECONDS
@@ -450,6 +456,8 @@ class AssistantSession:
                 f"{snapshot['adventure_session'].get('context_relationship_fact_count', 0)} selected for context; "
                 f"{snapshot['adventure_session'].get('knowledge_fact_count', 0)} authoritative character-knowledge fact(s), "
                 f"{snapshot['adventure_session'].get('context_knowledge_fact_count', 0)} selected for context; "
+                f"{snapshot['adventure_session'].get('resource_fact_count', 0)} declared resource(s), "
+                f"{snapshot['adventure_session'].get('context_resource_fact_count', 0)} public resource fact(s) selected for context; "
                 "session-local mount)"
                 if snapshot.get("adventure_session", {}).get("mounted") else "none loaded"
             ),
@@ -1041,9 +1049,10 @@ class AssistantSession:
             return f"Adventure workspace is already loaded: {record.title}."
         try:
             events = AdventureEventLog(self.adventure_registry, record).events()
-        except AdventureEventLogError as error:
+            resource_catalog = self.adventure_registry.resource_catalog(record)
+        except (AdventureEventLogError, AdventureRegistryError) as error:
             return f"Adventure event log error: {error}"
-        self._set_adventure_session(self.adventure_session.mount(record, events))
+        self._set_adventure_session(self.adventure_session.mount(record, events, resource_catalog=resource_catalog))
         event_note = "No authoritative events are recorded yet."
         if events:
             event_note = f"Loaded {len(events)} authoritative event(s) as bounded replay context."
@@ -1105,8 +1114,99 @@ class AssistantSession:
             f"{len(self.adventure_session.relationship_facts)} authoritative relationship fact(s), "
             f"{len(self.adventure_session.context_relationship_facts)} selected for context; "
             f"{len(self.adventure_session.knowledge_facts)} authoritative character-knowledge fact(s), "
-            f"{len(self.adventure_session.context_knowledge_facts)} selected for context; session-local mount)."
+            f"{len(self.adventure_session.context_knowledge_facts)} selected for context; "
+            f"{len(self.adventure_session.resource_facts)} declared resource(s), "
+            f"{len(self.adventure_session.context_resource_facts)} public resource fact(s) selected for context; "
+            "session-local mount)."
         )
+
+    def adventure_resources(self):
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded."
+        if not self.adventure_session.resource_facts:
+            return "No declared adventure resources are configured for the loaded workspace."
+        visible = self.adventure_session.context_resource_facts
+        if not visible:
+            return "Adventure resources are declared, but none are public for normal inspection."
+        lines = [f"Public adventure resources for {self.adventure_session.record.title}:"]
+        lines.extend(
+            f"{fact.resource_id} ({fact.label}): {fact.value}"
+            + (f" ({fact.source_event_id})" if fact.source_event_id else " (declared default)")
+            for fact in visible
+        )
+        return "\n".join(lines)
+
+    @staticmethod
+    def _parse_adventure_resource_operation(value):
+        """Parse one narrow Core command without treating prose as authority."""
+        usage = "Usage: adventure resource <resource-id> <operation>[: <value>]"
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(usage)
+        head, separator, raw_value = value.strip().partition(":")
+        parts = head.split()
+        if len(parts) != 2:
+            raise ValueError(usage)
+        parsed_value = None
+        if separator:
+            raw_value = raw_value.strip()
+            if not raw_value:
+                raise ValueError(usage)
+            try:
+                parsed_value = json.loads(raw_value)
+            except json.JSONDecodeError:
+                # Plain text remains valid for enum, equipment, location, and
+                # other scenario-declared text values. JSON is optional, but
+                # required when a structured inventory tuple/list is needed.
+                parsed_value = raw_value
+        return AdventureResourceOperation(parts[0], parts[1], parsed_value)
+
+    @staticmethod
+    def _resource_event_summary(definition):
+        return (
+            "A hidden adventure resource changed."
+            if definition.visibility == "hidden"
+            else f"{definition.label} changed."
+        )
+
+    def _resolved_adventure_resource_operation(self, value, *, staged_drafts=()):
+        operation = self._parse_adventure_resource_operation(value)
+        if not self.adventure_session.active:
+            raise AdventureResourceStateError("Adventure workspace: none loaded. Load an adventure before changing resources.")
+        try:
+            definition = self.adventure_session.resource_catalog.resolve(operation.resource_id)
+        except AdventureResourceError as error:
+            raise AdventureResourceStateError(str(error)) from error
+        # Validate against the current authoritative state and, for a staged
+        # turn, earlier resource drafts in that same proposed atomic batch.
+        # The event log repeats this check under its write lock before commit.
+        log = AdventureEventLog(self.adventure_registry, self.adventure_session.record)
+        state = derive_adventure_resource_state(
+            self.adventure_session.resource_catalog,
+            (*log.events(), *tuple(staged_drafts)),
+        )
+        state.apply(operation)
+        return operation, definition
+
+    def adventure_resource_change(self, value):
+        """Append one explicit catalog-validated resource operation."""
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded. Load an adventure before changing resources."
+        try:
+            operation, definition = self._resolved_adventure_resource_operation(value)
+            log = AdventureEventLog(self.adventure_registry, self.adventure_session.record)
+            event = log.append(
+                "resource_change", self._resource_event_summary(definition),
+                resource_id=operation.resource_id,
+                resource_operation=operation.operation,
+                resource_value=operation.value,
+            )
+            events = log.events()
+        except (AdventureEventLogError, AdventureResourceStateError, ValueError, TypeError) as error:
+            return f"Adventure resource was not changed: {error}"
+        self.adventure_session = self.adventure_session.mount(self.adventure_session.record, events)
+        if definition.visibility == "hidden":
+            return f"Changed a hidden adventure resource ({event.event_id})."
+        return f"Changed adventure resource {definition.resource_id} ({definition.label}) ({event.event_id})."
 
     def adventure_events(self):
         """Render only the bounded Core-provided event summaries for this mount."""
@@ -1348,6 +1448,25 @@ class AssistantSession:
         summary = f"{mutation.knowledge_subject} {mutation.knowledge_status}: {mutation.knowledge_fact}."
         return self._stage_adventure_mutation(mutation, summary=summary, label="character knowledge")
 
+    def adventure_turn_stage_resource(self, value):
+        if not self.adventure_turn.active:
+            return "Adventure turn staging: inactive. Use adventure turn begin first."
+        if not self.adventure_session.active or self.adventure_session.record != self.adventure_turn.record:
+            self.adventure_turn = self.adventure_turn.abort()
+            return "Adventure turn staging was discarded because its workspace is no longer loaded."
+        try:
+            operation, definition = self._resolved_adventure_resource_operation(
+                value, staged_drafts=self.adventure_turn.drafts,
+            )
+            self.adventure_turn = self.adventure_turn.stage_resource(
+                operation, summary=self._resource_event_summary(definition),
+            )
+        except (AdventureEventLogError, AdventureResourceStateError, ValueError, TypeError) as error:
+            return f"Adventure resource was not staged: {error}"
+        if definition.visibility == "hidden":
+            return "Staged a hidden adventure resource change."
+        return f"Staged adventure resource {definition.resource_id} ({definition.label})."
+
     def adventure_turn_commit(self):
         if not self.adventure_turn.active:
             return "Adventure turn staging: inactive."
@@ -1412,6 +1531,10 @@ class AssistantSession:
             return self.adventure_knowledge_set(text.strip()[len("adventure knowledge set"):])
         if lowered in {"adventure knowledge", "adventure beliefs"}:
             return self.adventure_knowledge()
+        if lowered in {"adventure resources", "adventure resource list"}:
+            return self.adventure_resources()
+        if lowered == "adventure resource" or lowered.startswith("adventure resource "):
+            return self.adventure_resource_change(text.strip()[len("adventure resource"):])
         if lowered == "adventure turn begin":
             return self.adventure_turn_begin()
         if lowered in {"adventure turn status", "adventure turn"}:
@@ -1422,6 +1545,8 @@ class AssistantSession:
             return self.adventure_turn_stage_relationship(text.strip()[len("adventure turn stage relationship"):])
         if lowered == "adventure turn stage knowledge" or lowered.startswith("adventure turn stage knowledge "):
             return self.adventure_turn_stage_knowledge(text.strip()[len("adventure turn stage knowledge"):])
+        if lowered == "adventure turn stage resource" or lowered.startswith("adventure turn stage resource "):
+            return self.adventure_turn_stage_resource(text.strip()[len("adventure turn stage resource"):])
         if lowered == "adventure turn stage" or lowered.startswith("adventure turn stage "):
             return self.adventure_turn_stage(text.strip()[len("adventure turn stage"):])
         if lowered == "adventure turn commit":

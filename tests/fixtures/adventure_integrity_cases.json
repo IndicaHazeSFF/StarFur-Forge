@@ -1,5 +1,5 @@
 {
-  "benchmark_version": "adventure-integrity-v1",
+  "benchmark_version": "adventure-integrity-v2",
   "cases": [
     {
       "name": "latest_structured_facts_and_replay_spine",
@@ -17,8 +17,11 @@
         "state": [{"key": "current_location", "value": "engine room", "source_event_id": "AE-000006"}],
         "relationships": [{"subject": "Vespera", "dimension": "trust", "value": "earned", "source_event_id": "AE-000007"}],
         "knowledge": [{"subject": "Rook", "status": "believes", "fact": "the hatch is trapped", "source_event_id": "AE-000008"}],
+        "resources": [],
+        "resource_context": [],
+        "resource_error": null,
         "replay_event_ids": ["AE-000001", "AE-000002", "AE-000003", "AE-000004", "AE-000005", "AE-000006", "AE-000007", "AE-000008"],
-        "context_counts": {"state": 1, "relationships": 1, "knowledge": 1}
+        "context_counts": {"state": 1, "relationships": 1, "knowledge": 1, "resources": 0, "resource_context": 0}
       }
     },
     {
@@ -56,8 +59,64 @@
         ],
         "relationships": [],
         "knowledge": [],
+        "resources": [],
+        "resource_context": [],
+        "resource_error": null,
         "replay_event_ids": ["AE-000001", "AE-000007", "AE-000008", "AE-000009", "AE-000010", "AE-000011", "AE-000012", "AE-000013"],
-        "context_counts": {"state": 12, "relationships": 0, "knowledge": 0}
+        "context_counts": {"state": 12, "relationships": 0, "knowledge": 0, "resources": 0, "resource_context": 0}
+      }
+    },
+    {
+      "name": "resource_projection_hides_private_values_from_replay_and_context",
+      "resource_catalog": {
+        "schema_version": 1,
+        "definitions": [
+          {"id": "fuel", "label": "Fuel", "kind": "integer", "visibility": "public", "minimum": 0, "maximum": 100, "allowed_values": null, "permitted_operations": ["decrement", "increment", "set"]},
+          {"id": "primary_slot", "label": "Primary slot", "kind": "equipment", "visibility": "hidden", "minimum": null, "maximum": null, "allowed_values": null, "permitted_operations": ["equip", "unequip"]}
+        ]
+      },
+      "events": [
+        {"event_type": "discovery", "summary": "The crew finds a sealed hatch."},
+        {"event_type": "resource_change", "summary": "Fuel changed.", "resource_id": "fuel", "resource_operation": "increment", "resource_value": 20},
+        {"event_type": "resource_change", "summary": "A brass key is equipped.", "resource_id": "primary_slot", "resource_operation": "equip", "resource_value": "brass key"},
+        {"event_type": "resource_change", "summary": "Fuel changed again.", "resource_id": "fuel", "resource_operation": "increment", "resource_value": 5}
+      ],
+      "expect": {
+        "state": [],
+        "relationships": [],
+        "knowledge": [],
+        "resources": [
+          {"resource_id": "fuel", "label": "Fuel", "kind": "integer", "value": 25, "visibility": "public", "source_event_id": "AE-000004"},
+          {"resource_id": "primary_slot", "label": "Primary slot", "kind": "equipment", "value": "brass key", "visibility": "hidden", "source_event_id": "AE-000003"}
+        ],
+        "resource_context": [
+          {"resource_id": "fuel", "label": "Fuel", "kind": "integer", "value": 25, "visibility": "public", "source_event_id": "AE-000004"}
+        ],
+        "resource_error": null,
+        "replay_event_ids": ["AE-000001"],
+        "context_counts": {"state": 0, "relationships": 0, "knowledge": 0, "resources": 2, "resource_context": 1}
+      }
+    },
+    {
+      "name": "resource_bounds_reject_invalid_authoritative_projection",
+      "resource_catalog": {
+        "schema_version": 1,
+        "definitions": [
+          {"id": "fuel", "label": "Fuel", "kind": "integer", "visibility": "public", "minimum": 0, "maximum": 10, "allowed_values": null, "permitted_operations": ["decrement", "increment", "set"]}
+        ]
+      },
+      "events": [
+        {"event_type": "resource_change", "summary": "Fuel changed.", "resource_id": "fuel", "resource_operation": "increment", "resource_value": 11}
+      ],
+      "expect": {
+        "state": [],
+        "relationships": [],
+        "knowledge": [],
+        "resources": [],
+        "resource_context": [],
+        "resource_error": "integer resource value is outside declared bounds",
+        "replay_event_ids": [],
+        "context_counts": {"state": 0, "relationships": 0, "knowledge": 0, "resources": 0, "resource_context": 0}
       }
     }
   ]

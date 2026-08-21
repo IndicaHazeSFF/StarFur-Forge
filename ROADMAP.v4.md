@@ -182,6 +182,8 @@ This is a functional prototype, not yet a durable simulation system. The impleme
 
 **Completed initial resource-event slice:** Schema-v1 now supports a closed `resource_change` event with generic resource identifier, operation, and JSON-safe value. The event log validates the entire resource-operation sequence against the workspace's immutable catalog before reading or appending, and the pure reducer rebuilds complete values from validated events. There are still no resource commands, mounted-session/prompt/UI projections, provider extraction, or game-specific behavior.
 
+**Completed initial resource-projection slice:** A mounted session now retains complete resource values derived from its authoritative event history while supplying at most twelve public declared values to normal model context and read-only `adventure resources` inspection. Hidden values do not enter either surface. There are still no resource-mutation commands, package-configuration UI, provider extraction, simulation, or game-specific mechanics.
+
 - Core supplies a small closed set of generic kinds: boolean/enum flag, bounded integer/decimal resource, inventory item/count, equipment slot, objective, location, and clock/time marker.
 - Adventure packages declare stable IDs, labels, type, bounds, visibility, and permitted operations.
 - Core validates operations such as set, increment/decrement, add/remove, equip/unequip, activate, complete, and fail.
@@ -238,7 +240,7 @@ This is a functional prototype, not yet a durable simulation system. The impleme
 
 ### Stage D — Continuous behavioral evaluation (START ALONGSIDE STAGE A)
 
-**Completed initial fixture slice:** checked-in `adventure-integrity-v1` now evaluates validated in-memory event streams for complete structured projections, bounded replay selection, context-limit separation, and repeatability. The `adventure-eval` CLI is provider-free and cannot open runtime workspaces, production memory, or a ledger. Remaining fixtures must add command/lifecycle, corruption/recovery, relationship consistency, restart, and later resources; ledger integration needs a dedicated bounded adventure-result schema.
+**Completed fixture slices:** checked-in `adventure-integrity-v1` evaluates validated in-memory event streams for complete structured projections, bounded replay selection, context-limit separation, and repeatability. `adventure-integrity-v2` adds generic resource projection, public-only resource context, resource-summary replay isolation, and invalid-operation rejection. The `adventure-eval` CLI is provider-free and cannot open runtime workspaces, production memory, or a ledger. Remaining fixtures must add command/lifecycle, corruption/recovery, relationship consistency, and restart; ledger integration needs a dedicated bounded adventure-result schema.
 
 1. Add adventure fixtures for replay, state projection, correction, relationship consistency, knowledge isolation, resources, interruption, corruption, restart, and branching.
 2. Record retrieval success separately from whether the model used retrieved facts correctly.
@@ -351,6 +353,8 @@ Define declarative package types for persona, sprite/asset pack, apartment theme
 - normalized relative paths, file sizes, hashes, and bounded package totals;
 - optional fallback assets and upgrade/migration metadata.
 
+Adventure packages should be useful before a full asset ecosystem exists. The first portable unit may be a small `.starfur-adventure` archive containing a validated manifest, an entry `details.md` or structured state document, and optionally a downloaded conversation/transcript; later versions may add bounded assets. Import must use the canonical prechunk/annotation/provenance path, mount content into the adventure namespace, and never silently promote imported facts into shared personal memory. Packages are declarative data only, replayable across compatible Core versions, reject invalid or incompatible members safely, and cannot execute code or grant permissions.
+
 #### I2. Safe installer and local package registry
 
 - Validate in quarantine, prevent traversal/symlinks/oversized archives, reject executable content by default, and activate atomically.
@@ -363,6 +367,7 @@ Define declarative package types for persona, sprite/asset pack, apartment theme
 - Treat Steam Workshop as a distribution adapter over the same local package validator.
 - Never make Core depend on Steam APIs for local packages.
 - Add content reporting/tagging hooks, attribution display, package conflict handling, and deterministic load order.
+- Make Workshop distribution of the small adventure package a first low-overhead milestone: manifest + story/state documents can be shared without requiring custom runtime code. Keep package content immutable and keep adventure event/state saves, persona-local learning, and shared user memory outside the distributed archive.
 
 #### I4. Release engineering
 
