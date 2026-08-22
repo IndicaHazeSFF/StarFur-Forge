@@ -1179,3 +1179,110 @@
 - Behavior: versioned `adventure-integrity-v2` fixtures now cover valid generic resource projections, public-only context, replay isolation of resource summaries, and deterministic rejection of invalid authoritative resource operations.
 - Constraints: evaluation remains in-memory and provider-free; it opens no runtime workspace or production memory and writes no experiment-ledger record.
 - Verification: focused fixture tests prove deterministic four-case evaluation and the expected public/hidden resource result shape.
+
+## 2026-08-21 - Add append-only adventure supersession activity foundation
+
+- Behavior: added a pure resolver for schema-v2 `supersedes_event_id` chains. It returns explicit active/inactive activity records and the active event tip(s), while retaining the full original event history for audit.
+- Constraints: unknown, forward, self, and competing corrections fail closed. No event writer, command, current state projection, provider path, or automatic narrative extraction changed.
+- Verification: focused tests cover unchanged histories, chained corrections, and invalid supersession references.
+
+## 2026-08-21 - Apply adventure supersession to current-state projection
+
+- Behavior: `derive_adventure_state()` now projects only active event records, so a valid schema-v2 state correction replaces the former current value without deleting the original event.
+- Constraints: relationship, knowledge, resource, retraction, contradiction, command, writer, provider, and narrative-extraction behavior are unchanged.
+
+## 2026-08-22 - Apply adventure supersession to relationship projection
+
+- Behavior: `derive_adventure_relationships()` now projects only active event records, so a valid schema-v2 relationship correction replaces the former current value without deleting the original event.
+- Constraints: knowledge, resource, retraction, contradiction, command, writer, provider, and narrative-extraction behavior are unchanged.
+- Verification: focused relationship tests cover complete projection behavior, bounded context selection, and preservation of superseded history.
+
+## 2026-08-22 - Apply adventure supersession to character-knowledge projection
+
+- Behavior: `derive_adventure_knowledge()` now projects only active event records, so a valid schema-v2 character-knowledge correction replaces the former current stance without deleting the original event.
+- Constraints: resource, retraction, contradiction, command, writer, provider, and narrative-extraction behavior are unchanged.
+- Verification: focused character-knowledge tests cover complete projection behavior, bounded context selection, and preservation of superseded history.
+
+## 2026-08-22 - Apply adventure supersession to resource projection
+
+- Behavior: schema-v2 envelopes can now carry a generic JSON-safe resource operation. Resource state and provenance resolve only active persisted events, while sequence-free drafts remain outside supersession during atomic pre-commit validation.
+- Constraints: Core commands still write schema-v1 resource events. This adds no correction writer, retraction, contradiction resolver, provider authority, automatic extraction, or game-specific resource rules.
+- Verification: focused adventure tests cover schema-v2 resource-envelope round trips, corrected resource state/provenance, and unchanged staged-batch validation.
+
+## 2026-08-22 - Add read-only adventure correction inspection
+
+- Behavior: exact `adventure corrections` renders the active/superseded event IDs involved in a loaded adventure's valid correction chains.
+- Constraints: the audit reads the append-only log without a provider call, memory proposal, session-context update, correction writer, retraction, or contradiction resolution.
+- Verification: focused Core-command coverage proves corrected history is rendered without writing, prompting, or changing stored events.
+
+## 2026-08-22 - Add explicit typed adventure correction writers
+
+- Behavior: exact `adventure correct state|relationship|knowledge|resource` controls append one schema-v2 replacement for the currently active event they name, then refresh the mounted authoritative projections.
+- Constraints: corrections preserve all original records, reject missing/inactive/type-mismatched targets and correction forks, and cannot be inferred from prose. Ordinary narrative events, turn staging, retractions, and contradiction resolution remain unsupported.
+- Verification: focused event-log and Core-command tests cover v2 append behavior, active-tip gating, corrected projection values, audit visibility, and no provider call.
+- Verification: focused state regression proves a superseded bridge location remains auditable while the engine-room correction becomes current.
+
+## 2026-08-22 - Add explicit append-only adventure retractions
+
+- Behavior: exact `adventure retract <AE-######>: <reason>` appends one Core-owned schema-v2 no-mutation audit event and refreshes the mounted projections.
+- Constraints: the original event remains inspectable, retracted facts are excluded from prompt replay, retractions cannot be staged or retracted, and inactive targets fail without forking history.
+- Verification: focused event-log, replay, command, and help tests cover projection removal, audit rendering, active-target gating, and provider-free behavior.
+
+## 2026-08-22 - Add immutable adventure checkpoint references
+
+- Behavior: exact `adventure checkpoint <label>` names the current authoritative event-log prefix; `adventure checkpoints` lists those references.
+- Constraints: each checkpoint is verified by event count, last ID, and deterministic prefix fingerprint under the existing workspace lock. It is not a snapshot, rewind, restore, fork, branch, or provider feature.
+- Verification: focused event-log, Core-command, and command-help tests cover stable prefix verification, duplicate-label rejection, and provider-free behavior.
+
+## 2026-08-22 - Add read-only adventure checkpoint inspection
+
+- Behavior: exact `adventure checkpoint inspect <checkpoint-id|label>` resolves a checkpoint's verified event prefix and reports derived state, relationship, and character-knowledge counts.
+- Constraints: inspection does not change session context, canonical events, checkpoint data, a branch, or model input.
+- Verification: focused event-log, Core-command, and command-help tests cover exact ID/label resolution and read-only behavior.
+
+## 2026-08-22 - Add isolated fresh adventure restart
+
+- Behavior: exact `adventure restart fresh <new title>` creates and mounts a new isolated workspace while preserving the previous adventure.
+- Constraints: it carries no prior events, derived state, checkpoints, conversation, or roleplay session forward and does not implement checkpoint restore or branching.
+- Verification: focused Core-command and command-help tests cover isolation, preserved prior history, roleplay exit, and provider-free behavior.
+
+## 2026-08-22 - Add checkpoint-backed established-premise adventure restart
+
+- Behavior: exact `adventure restart established <checkpoint-id|label>: <new title>` creates and mounts a separate child workspace from the loaded adventure's verified checkpoint prefix.
+- Constraints: only the verified prefix and immutable resource catalog are copied; the child records immutable origin metadata, later parent history/checkpoints are excluded, and neither source nor child is restored, rewound, or merged.
+- Verification: focused event-log, Core-command, and command-help tests cover prefix-only lineage, source preservation, child isolation, roleplay exit, and provider-free behavior.
+
+## 2026-08-22 - Add provider-free checkpoint branch-integrity benchmark
+
+- Behavior: `adventure-integrity-v3` evaluates source projections alongside a declared checkpoint child prefix.
+- Constraints: it operates only on in-memory fixture events; it proves later source facts do not enter child state, knowledge, or replay and does not open a workspace, call a provider, or record an experiment.
+- Verification: focused benchmark tests cover fixture validation, deterministic repeated evaluation, and prefix isolation.
+
+## 2026-08-22 - Add explicit adventure story-session entry
+
+- Behavior: exact `adventure begin <title>` loads an existing workspace and starts session-local roleplay in one Core operation.
+- Constraints: no workspace or event is created; staged turns must be committed or aborted first, and ordinary prose cannot trigger this boundary.
+- Verification: focused adventure-command tests cover the loaded/roleplay binding, no-write guarantee, malformed usage, and provider-free behavior.
+
+## 2026-08-22 - Add read-only adventure session-binding inspection
+
+- Behavior: exact `adventure session` reports the active persona, mounted workspace, roleplay label, turn-staging status, and branch origin where applicable.
+- Constraints: inspection is Core-owned and read-only; it exposes no prompt text, event prose, or private persona runtime state.
+- Verification: focused adventure-command tests cover unbound/root-workspace bindings and provider-free behavior.
+
+## 2026-08-21 - Add governed adventure participant initiative contracts
+
+- Design foundation: added bounded contracts for persona/NPC participants, adventure-local memory namespaces, initiative triggers, allowed actions, cooldowns, per-turn limits, and explainable Core eligibility decisions.
+- Boundary: initiative is disabled by default. No provider call, scheduler, event write, NPC memory persistence, TTS/STT path, or apartment behavior was added.
+- Verification: focused tests cover namespace isolation, disabled/cooldown decisions, and bounded eligibility.
+
+## 2026-08-22 - Clarify dependency-ordered resident and adventure roadmap
+
+- Roadmap: established the current path as adventure integrity -> replay/restart -> bound story lifecycle -> reviewed adventure import -> read-only apartment prototype -> routing/permissions/media -> durable zero-provider continuity and productization.
+- Clarification: NPC/party-member memory is a bounded adventure-local derived view, not hidden unrestricted chat or shared personal memory. Voice interaction now explicitly includes transcript confidence and barge-in rules; a low-confidence transcript cannot commit a mutation.
+- Scope: documentation and ordering only; no runtime behavior changed.
+## 2026-08-22 - Add opt-in terminal progress for document annotation
+
+- Behavior: `POST /v1/starfur/documents/annotate?stream=terminal` emits only completed/total chunk progress suitable for `curl -N`, then writes the normal final review JSON. The default annotation endpoint keeps its existing JSON response contract for OpenWebUI and other clients.
+- Constraints: progress never exposes source text, candidates, model output, provider diagnostics, or persistence state. Annotation remains synchronous and review-only; cancellation or a disconnected terminal does not auto-persist anything.
+- Verification: focused API tests cover terminal framing/final result and query-parameter rejection. No migration or runtime-data change.

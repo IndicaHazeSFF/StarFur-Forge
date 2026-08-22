@@ -12,6 +12,7 @@ from decimal import Decimal, InvalidOperation
 import re
 from typing import Iterable, Mapping
 
+from pipeline.adventure_correction import resolve_active_adventure_events
 from pipeline.adventure_resources import AdventureResourceCatalog, AdventureResourceDefinition, AdventureResourceError
 
 
@@ -239,8 +240,10 @@ def derive_adventure_resource_state(
     The adapter intentionally needs only the three resource attributes, which
     keeps this pure reducer independent from event-log storage and schemas.
     """
+    values = tuple(events)
+    active_values = _active_resource_inputs(values)
     state = AdventureResourceState.initial(catalog)
-    for event in events:
+    for event in active_values:
         if getattr(event, "event_type", None) != "resource_change":
             continue
         state = state.apply(AdventureResourceOperation(
@@ -258,7 +261,7 @@ def derive_adventure_resource_facts(
     values = tuple(events)
     state = derive_adventure_resource_state(catalog, values)
     source_ids: dict[str, str] = {}
-    for event in values:
+    for event in _active_resource_inputs(values):
         if getattr(event, "event_type", None) == "resource_change":
             resource_id = getattr(event, "resource_id", None)
             event_id = getattr(event, "event_id", None)
@@ -288,6 +291,24 @@ def select_adventure_resource_context(
     if not all(isinstance(fact, AdventureResourceFact) for fact in values):
         raise TypeError("resource facts must be AdventureResourceFacts")
     return tuple(fact for fact in values if fact.visibility == "public")[:limit]
+
+
+def _active_resource_inputs(events: tuple[object, ...]) -> tuple[object, ...]:
+    """Resolve persisted corrections without assigning history to staged drafts.
+
+    Event-log validation passes existing authoritative events followed by
+    sequence-free drafts.  Only persisted event-shaped records may participate
+    in supersession; the drafts still apply afterward so catalog validation
+    remains atomic before a batch receives its final sequence identifiers.
+    """
+    authoritative: list[object] = []
+    drafts: list[object] = []
+    for event in events:
+        if all(hasattr(event, attribute) for attribute in ("sequence", "event_id", "supersedes_event_id")):
+            authoritative.append(event)
+        else:
+            drafts.append(event)
+    return (*resolve_active_adventure_events(tuple(authoritative)).active_events, *drafts)
 
 
 def _apply(

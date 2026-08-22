@@ -161,12 +161,16 @@ class StarFurAPI:
             ],
         }
 
-    def annotate_document(self, payload):
-        """Return reviewable candidates plus bounded per-chunk failures."""
+    def annotate_document(self, payload, *, progress=None, log_progress=True):
+        """Return reviewable candidates plus bounded per-chunk failures.
+
+        ``progress`` is a presentation callback for one explicit caller.  It
+        carries only completed/total chunk counts, never chunk text, model
+        output, candidates, or provider diagnostics.  Normal requests retain
+        the serve-terminal bar; streaming callers can render their own view.
+        """
         document = self._prepared_document(payload)
-        def progress(done, total):
-            # Keep progress out of the JSON response; show it in the terminal
-            # running `starfur.py serve` during long annotations.
+        def terminal_progress(done, total):
             width = 24
             filled = width if not total else int(width * done / total)
             bar = "#" * filled + "-" * (width - filled)
@@ -174,8 +178,15 @@ class StarFurAPI:
             if done == total:
                 sys.stderr.write("\n")
             sys.stderr.flush()
+
+        def report_progress(done, total):
+            if log_progress:
+                terminal_progress(done, total)
+            if progress is not None:
+                progress(done, total)
+
         annotation = self.application.annotate_document(
-            document, annotator=self.document_annotator, progress=progress,
+            document, annotator=self.document_annotator, progress=report_progress,
         )
         candidates = annotation.candidates
         review = self.document_review_store.create(document, candidates)
@@ -501,6 +512,51 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_terminal_annotation(self, payload):
+        """Stream one opt-in terminal-progress annotation response.
+
+        The normal endpoint remains a single JSON response.  This transport is
+        intentionally opt-in because it writes carriage-return progress lines
+        followed by one final JSON result, which is friendly to ``curl -N`` but
+        not a replacement for structured UI transports.
+        """
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("X-Accel-Buffering", "no")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        disconnected = False
+
+        def write(value):
+            nonlocal disconnected
+            if disconnected:
+                return
+            try:
+                self.wfile.write(value)
+                self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                disconnected = True
+
+        def progress(done, total):
+            width = 24
+            filled = width if not total else int(width * done / total)
+            bar = "#" * filled + "-" * (width - filled)
+            write(f"\rStarFur annotation: [{bar}] {done}/{total} chunks".encode("utf-8"))
+
+        try:
+            result = self.api.annotate_document(payload, progress=progress, log_progress=False)
+        except DocumentReviewError as error:
+            result = {"error": {"message": str(error), "type": "document_review_not_found"}}
+        except DocumentAnnotationError as error:
+            result = {"error": {"message": str(error), "type": "document_annotation_error"}}
+        except (ValueError, DocumentIntakeError, DocumentContextError) as error:
+            result = {"error": {"message": str(error), "type": "invalid_request_error"}}
+        except RuntimeError as error:
+            result = {"error": {"message": str(error), "type": "provider_unavailable"}}
+        write(b"\n")
+        write(_json_bytes(result) + b"\n")
+
     def _authorized(self):
         if self.api.authenticate(self.headers):
             return True
@@ -561,27 +617,37 @@ class _Handler(BaseHTTPRequestHandler):
     def do_POST(self):  # noqa: N802
         if not self._authorized():
             return
-        if self.path not in {"/v1/chat/completions", DOCUMENT_PREPARE_PATH, DOCUMENT_ANNOTATE_PATH, DOCUMENT_REVIEW_PATH, DOCUMENT_CONTEXT_PATH}:
+        parsed = urlsplit(self.path)
+        path = parsed.path
+        query = parse_qs(parsed.query, keep_blank_values=True)
+        if path not in {"/v1/chat/completions", DOCUMENT_PREPARE_PATH, DOCUMENT_ANNOTATE_PATH, DOCUMENT_REVIEW_PATH, DOCUMENT_CONTEXT_PATH}:
             self._send_json(404, {"error": {"message": "Not found", "type": "invalid_request_error"}})
+            return
+        terminal_progress = path == DOCUMENT_ANNOTATE_PATH and query.get("stream") == ["terminal"]
+        if query and not terminal_progress:
+            self._send_json(400, {"error": {"message": "Unsupported query parameter.", "type": "invalid_request_error"}})
             return
         try:
             length = int(self.headers.get("Content-Length", "0"))
             if length < 0:
                 raise ValueError("Content-Length must not be negative.")
-            if self.path in {DOCUMENT_PREPARE_PATH, DOCUMENT_ANNOTATE_PATH} and length > MAX_DOCUMENT_REQUEST_BYTES:
+            if path in {DOCUMENT_PREPARE_PATH, DOCUMENT_ANNOTATE_PATH} and length > MAX_DOCUMENT_REQUEST_BYTES:
                 self._send_json(413, {"error": {"message": "Document request exceeds the intake transport limit.", "type": "invalid_request_error"}})
                 return
             payload = json.loads(self.rfile.read(length))
         except (ValueError, json.JSONDecodeError) as error:
             self._send_json(400, {"error": {"message": f"Invalid JSON request: {error}", "type": "invalid_request_error"}})
             return
-        if self.path in {DOCUMENT_PREPARE_PATH, DOCUMENT_ANNOTATE_PATH, DOCUMENT_REVIEW_PATH, DOCUMENT_CONTEXT_PATH}:
+        if terminal_progress:
+            self._send_terminal_annotation(payload)
+            return
+        if path in {DOCUMENT_PREPARE_PATH, DOCUMENT_ANNOTATE_PATH, DOCUMENT_REVIEW_PATH, DOCUMENT_CONTEXT_PATH}:
             try:
-                if self.path == DOCUMENT_PREPARE_PATH:
+                if path == DOCUMENT_PREPARE_PATH:
                     result = self.api.prepare_document(payload)
-                elif self.path == DOCUMENT_ANNOTATE_PATH:
+                elif path == DOCUMENT_ANNOTATE_PATH:
                     result = self.api.annotate_document(payload)
-                elif self.path == DOCUMENT_CONTEXT_PATH:
+                elif path == DOCUMENT_CONTEXT_PATH:
                     result = self.api.document_context(payload)
                 elif payload.get("confirm") == "reject document candidates":
                     result = self.api.reject_document_review_candidates(payload)

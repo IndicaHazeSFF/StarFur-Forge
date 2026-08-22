@@ -40,15 +40,20 @@ from pipeline.persona_visibility import (
 )
 from pipeline.roleplay import RoleplaySessionState, detect_casual_roleplay_start
 from pipeline.roleplay_presentation import sanitize_fictional_relationship_memories
+from pipeline.adventure_correction import AdventureCorrectionError, resolve_active_adventure_events
 from pipeline.adventure_events import AdventureEventDraft, AdventureEventLog, AdventureEventLogError
 from pipeline.adventure_mutation import (
     AdventureMutation,
     MUTATION_KNOWLEDGE_SET,
     MUTATION_RELATIONSHIP_SET,
+    MUTATION_RESOURCE_CHANGE,
     MUTATION_STATE_SET,
 )
 from pipeline.adventure_registry import AdventureNotFoundError, AdventureRegistry, AdventureRegistryError
 from pipeline.adventure_resources import AdventureResourceError
+from pipeline.adventure_state import derive_adventure_state
+from pipeline.adventure_relationship import derive_adventure_relationships
+from pipeline.adventure_knowledge import derive_adventure_knowledge
 from pipeline.adventure_resource_state import (
     AdventureResourceOperation,
     AdventureResourceStateError,
@@ -1016,18 +1021,27 @@ class AssistantSession:
             return f"Adventure registry error: {error}"
         try:
             events = AdventureEventLog(self.adventure_registry, record).events()
+            origin = self.adventure_registry.branch_origin(record)
         except AdventureEventLogError as error:
             return f"Adventure event log error: {error}"
+        except AdventureRegistryError as error:
+            return f"Adventure registry error: {error}"
         storage = "manifest only; no story event log, database, semantic index, or mounted session"
         if events:
             storage = f"validated event log with {len(events)} event(s); no database, semantic index, or mounted session"
-        return "\n".join((
+        lines = [
             f"Adventure workspace: {record.title}",
             f"ID: {record.adventure_id}",
             f"Created: {record.created_at}",
             f"Status: {record.status}",
             f"Storage: {storage}.",
-        ))
+        ]
+        if origin is not None:
+            lines.append(
+                f"Branch origin: {origin['parent_adventure_id']} / {origin['parent_checkpoint_id']} "
+                f"({origin['parent_event_count']} copied authoritative event(s))."
+            )
+        return "\n".join(lines)
 
     def _set_adventure_session(self, state):
         self.adventure_session = state
@@ -1074,6 +1088,95 @@ class AssistantSession:
             return "Usage: adventure resume <title>"
         return self.adventure_load(title)
 
+    def adventure_begin(self, title):
+        """Explicitly bind one loaded workspace to this session's roleplay mode.
+
+        This is a lifecycle convenience boundary, not narration or event
+        capture. It does not create a workspace, write an event, or infer a
+        story from the requested title.
+        """
+        if not isinstance(title, str) or not title.strip():
+            return "Usage: adventure begin <title>"
+        if self.adventure_turn.active:
+            return "Adventure start is unavailable while turn staging is active. Commit or abort the turn first."
+        loaded = self.adventure_load(title)
+        if not (
+            loaded.startswith("Adventure workspace loaded:")
+            or loaded.startswith("Adventure workspace is already loaded:")
+        ):
+            return loaded
+        record = self.adventure_session.record
+        self._set_roleplay_state(self.roleplay_state.begin(record.title))
+        return (
+            f"Adventure story session started: {record.title}. "
+            "The workspace is loaded and roleplay mode is active; no events were created."
+        )
+
+    def adventure_restart_fresh(self, title):
+        """Create and mount a wholly new isolated workspace without touching history."""
+        if not isinstance(title, str) or not title.strip():
+            return "Usage: adventure restart fresh <new title>"
+        previous_title = self.adventure_session.record.title if self.adventure_session.active else None
+        created = self.adventure_create(title)
+        if not created.startswith("Created adventure workspace:"):
+            return created
+        loaded = self.adventure_load(title)
+        if not loaded.startswith("Adventure workspace loaded:"):
+            return f"Fresh adventure workspace was created but could not be loaded: {loaded}"
+        if self.roleplay_state.active:
+            self.roleplay_state = self.roleplay_state.end()
+        prior = f" Previous adventure preserved: {previous_title}." if previous_title else ""
+        return f"Fresh adventure started: {title.strip()}.{prior} No prior events, state, checkpoint, or roleplay session was carried over."
+
+    def adventure_restart_established(self, value):
+        """Fork a new workspace from the loaded adventure's verified checkpoint.
+
+        Checkpoint resolution happens before any child workspace is created, so
+        an invalid identifier cannot produce an accidental empty adventure.
+        The parent remains immutable; the child owns its copied prefix and all
+        later event history.
+        """
+        usage = "Usage: adventure restart established <checkpoint-id|label>: <new title>"
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded. Load an adventure before restarting from a checkpoint."
+        if self.adventure_turn.active:
+            return "Established-premise restart is unavailable while turn staging is active. Commit or abort the turn first."
+        if not isinstance(value, str) or ":" not in value:
+            return usage
+        identifier, _, title = value.partition(":")
+        if not identifier.strip() or not title.strip():
+            return usage
+        parent = self.adventure_session.record
+        parent_log = AdventureEventLog(self.adventure_registry, parent)
+        try:
+            checkpoint, prefix = parent_log.checkpoint_events(identifier)
+            catalog = self.adventure_registry.resource_catalog(parent)
+        except (AdventureEventLogError, AdventureRegistryError) as error:
+            return f"Established-premise restart was not created: {error}"
+        try:
+            child = self.adventure_registry.create(title)
+            self.adventure_registry.configure_resource_catalog(child, catalog)
+            self.adventure_registry.configure_branch_origin(
+                child,
+                parent_adventure_id=parent.adventure_id,
+                parent_checkpoint_id=checkpoint.checkpoint_id,
+                parent_event_count=checkpoint.event_count,
+                parent_event_fingerprint=checkpoint.event_fingerprint,
+            )
+            AdventureEventLog(self.adventure_registry, child).initialize_from_verified_prefix(prefix)
+        except (AdventureRegistryError, AdventureEventLogError, TypeError) as error:
+            return f"Established-premise restart could not be provisioned: {error}"
+        loaded = self.adventure_load(child.title)
+        if not loaded.startswith("Adventure workspace loaded:"):
+            return f"Established-premise workspace was created but could not be loaded: {loaded}"
+        if self.roleplay_state.active:
+            self.roleplay_state = self.roleplay_state.end()
+        return (
+            f"Established-premise adventure started: {child.title}. Forked from {parent.title} / "
+            f"{checkpoint.checkpoint_id}; copied {len(prefix)} authoritative event(s). "
+            "Later parent events, checkpoints, and roleplay context were not carried over."
+        )
+
     def adventure_pause(self):
         """Leave the mounted story cleanly while preserving its immutable event log."""
         if not self.adventure_session.active:
@@ -1119,6 +1222,41 @@ class AssistantSession:
             f"{len(self.adventure_session.context_resource_facts)} public resource fact(s) selected for context; "
             "session-local mount)."
         )
+
+    def adventure_session_status(self):
+        """Render the current Core-owned adventure/persona/roleplay binding.
+
+        This is intentionally presentation-safe: it reports only lifecycle
+        identities and local mount state, never prompt text, source events, or
+        private persona/runtime data.
+        """
+        persona = f"{self.persona_state.persona_id} ({self.persona_state.display_name})"
+        roleplay = "inactive"
+        if self.roleplay_state.active:
+            roleplay = f"active ({self.roleplay_state.title or 'unnamed'})"
+        lines = [
+            "Adventure session binding:",
+            f"Persona: {persona}",
+            f"Roleplay: {roleplay} (session-ephemeral)",
+            f"Turn staging: {'active' if self.adventure_turn.active else 'inactive'}",
+        ]
+        if not self.adventure_session.active:
+            lines.insert(1, "Workspace: none loaded")
+            return "\n".join(lines)
+        record = self.adventure_session.record
+        lines.insert(1, f"Workspace: {record.title} ({record.adventure_id})")
+        try:
+            origin = self.adventure_registry.branch_origin(record)
+        except AdventureRegistryError as error:
+            return f"Adventure session binding could not be inspected: {error}"
+        if origin is None:
+            lines.append("Branch: root workspace")
+        else:
+            lines.append(
+                f"Branch: child of {origin['parent_adventure_id']} / {origin['parent_checkpoint_id']} "
+                f"({origin['parent_event_count']} copied authoritative event(s))"
+            )
+        return "\n".join(lines)
 
     def adventure_resources(self):
         if not self.adventure_session.active:
@@ -1208,6 +1346,27 @@ class AssistantSession:
             return f"Changed a hidden adventure resource ({event.event_id})."
         return f"Changed adventure resource {definition.resource_id} ({definition.label}) ({event.event_id})."
 
+    def adventure_correct_resource(self, value):
+        usage = "Usage: adventure correct resource <AE-######> <resource-id> <operation>[: <value>]"
+        try:
+            target_event_id, payload = self._correction_target_and_payload(value, usage)
+            operation = self._parse_adventure_resource_operation(payload)
+            if not self.adventure_session.active:
+                return "Adventure workspace: none loaded. Load an adventure before correcting a resource."
+            definition = self.adventure_session.resource_catalog.resolve(operation.resource_id)
+            mutation = AdventureMutation(
+                MUTATION_RESOURCE_CHANGE,
+                resource_id=operation.resource_id, resource_operation=operation.operation, resource_value=operation.value,
+            )
+        except (AdventureResourceError, ValueError, TypeError) as error:
+            return f"Adventure resource was not corrected: {error}"
+        result = self._append_adventure_correction(
+            target_event_id, mutation, summary=self._resource_event_summary(definition), label="resource",
+        )
+        if result.startswith("Corrected adventure resource") and definition.visibility == "hidden":
+            return result.replace("Corrected adventure resource", "Corrected a hidden adventure resource", 1)
+        return result
+
     def adventure_events(self):
         """Render only the bounded Core-provided event summaries for this mount."""
         if not self.adventure_session.active:
@@ -1224,6 +1383,100 @@ class AssistantSession:
                 f"Showing {len(self.adventure_session.context_events)} replay-spine facts selected from "
                 f"{self.adventure_session.event_count} authoritative events."
             )
+        return "\n".join(lines)
+
+    def adventure_checkpoints(self):
+        """List immutable event-prefix references without changing the workspace."""
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded."
+        try:
+            checkpoints = AdventureEventLog(self.adventure_registry, self.adventure_session.record).checkpoints()
+        except AdventureEventLogError as error:
+            return f"Adventure checkpoints could not be inspected: {error}"
+        if not checkpoints:
+            return f"No adventure checkpoints are recorded for {self.adventure_session.record.title}."
+        lines = [f"Adventure checkpoints for {self.adventure_session.record.title}:"]
+        lines.extend(
+            f"{item.checkpoint_id} {item.label} ({item.event_count} authoritative event(s); {item.last_event_id or 'empty prefix'})"
+            for item in checkpoints
+        )
+        return "\n".join(lines)
+
+    def adventure_checkpoint_create(self, label):
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded. Load an adventure before creating a checkpoint."
+        if self.adventure_turn.active:
+            return "Adventure checkpoint creation is unavailable while turn staging is active. Commit or abort the turn first."
+        try:
+            checkpoint = AdventureEventLog(self.adventure_registry, self.adventure_session.record).create_checkpoint(label)
+        except AdventureEventLogError as error:
+            return f"Adventure checkpoint was not created: {error}"
+        return (
+            f"Created adventure checkpoint {checkpoint.checkpoint_id}: {checkpoint.label} "
+            f"({checkpoint.event_count} authoritative event(s); {checkpoint.last_event_id or 'empty prefix'})."
+        )
+
+    def adventure_checkpoint_inspect(self, identifier):
+        usage = "Usage: adventure checkpoint inspect <checkpoint-id|label>"
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded."
+        if not isinstance(identifier, str) or not identifier.strip():
+            return usage
+        try:
+            checkpoint, events = AdventureEventLog(
+                self.adventure_registry, self.adventure_session.record,
+            ).checkpoint_events(identifier)
+        except AdventureEventLogError as error:
+            return f"Adventure checkpoint could not be inspected: {error}"
+        state_facts = derive_adventure_state(events)
+        relationship_facts = derive_adventure_relationships(events)
+        knowledge_facts = derive_adventure_knowledge(events)
+        lines = [
+            f"Adventure checkpoint {checkpoint.checkpoint_id}: {checkpoint.label}",
+            f"Authoritative prefix: {checkpoint.event_count} event(s); {checkpoint.last_event_id or 'empty prefix'}.",
+            f"Projected state: {len(state_facts)} fact(s); relationships: {len(relationship_facts)}; character knowledge: {len(knowledge_facts)}.",
+            "Read-only checkpoint inspection; no session state, event history, restore, or branch changed.",
+        ]
+        return "\n".join(lines)
+
+    def adventure_corrections(self):
+        """Render correction activity without changing event history or projections."""
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded."
+        try:
+            events = AdventureEventLog(self.adventure_registry, self.adventure_session.record).events()
+            projection = resolve_active_adventure_events(events)
+        except (AdventureEventLogError, AdventureCorrectionError) as error:
+            return f"Adventure corrections could not be inspected: {error}"
+        if not events:
+            return "No authoritative adventure events are recorded for the loaded workspace."
+
+        activity_by_id = {activity.event_id: activity for activity in projection.activities}
+        correction_ids = {event.supersedes_event_id for event in events if event.supersedes_event_id is not None}
+        superseding_by_target = {
+            event.supersedes_event_id: event for event in events if event.supersedes_event_id is not None
+        }
+        involved = tuple(
+            event for event in events
+            if event.event_id in correction_ids or event.supersedes_event_id is not None
+        )
+        if not involved:
+            return f"No adventure events have been superseded for {self.adventure_session.record.title}."
+
+        lines = [f"Adventure correction audit for {self.adventure_session.record.title}:"]
+        for event in involved:
+            activity = activity_by_id[event.event_id]
+            if activity.active:
+                lines.append(f"{event.event_id} [{event.event_type}] active")
+            else:
+                superseding = superseding_by_target[event.event_id]
+                if superseding.event_type == "retraction":
+                    lines.append(f"{event.event_id} [{event.event_type}] retracted by {activity.superseded_by_event_id}")
+                    continue
+                lines.append(
+                    f"{event.event_id} [{event.event_type}] superseded by {activity.superseded_by_event_id}"
+                )
+        lines.append("Read-only audit: explicit correction and retraction writing are available; contradiction resolution is not.")
         return "\n".join(lines)
 
     def adventure_state(self):
@@ -1252,6 +1505,65 @@ class AssistantSession:
             return f"Adventure state was not set: {error}"
         self.adventure_session = self.adventure_session.mount(self.adventure_session.record, events)
         return f"Set adventure state {event.state_key}: {event.state_value} ({event.event_id})."
+
+    @staticmethod
+    def _correction_target_and_payload(value, usage):
+        if not isinstance(value, str):
+            raise ValueError(usage)
+        target_event_id, separator, payload = value.strip().partition(" ")
+        if not separator or not payload.strip():
+            raise ValueError(usage)
+        return target_event_id.upper(), payload.strip()
+
+    def _append_adventure_correction(self, target_event_id, mutation, *, summary, label):
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded. Load an adventure before correcting an event."
+        if self.adventure_turn.active:
+            return "Adventure correction is unavailable while turn staging is active. Commit or abort the turn first."
+        try:
+            log = AdventureEventLog(self.adventure_registry, self.adventure_session.record)
+            event = log.append_correction(target_event_id, summary, mutation)
+            events = log.events()
+        except (AdventureEventLogError, ValueError, TypeError) as error:
+            return f"Adventure {label} was not corrected: {error}"
+        self.adventure_session = self.adventure_session.mount(self.adventure_session.record, events)
+        return f"Corrected adventure {label} with {event.event_id}, superseding {target_event_id}."
+
+    def adventure_retract(self, value):
+        usage = "Usage: adventure retract <AE-######>: <reason>"
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded. Load an adventure before retracting an event."
+        if self.adventure_turn.active:
+            return "Adventure retraction is unavailable while turn staging is active. Commit or abort the turn first."
+        if not isinstance(value, str) or ":" not in value:
+            return usage
+        target_event_id, reason = value.split(":", 1)
+        target_event_id = target_event_id.strip().upper()
+        if not target_event_id or not reason.strip():
+            return usage
+        try:
+            log = AdventureEventLog(self.adventure_registry, self.adventure_session.record)
+            event = log.append_retraction(target_event_id, reason)
+            events = log.events()
+        except (AdventureEventLogError, ValueError, TypeError) as error:
+            return f"Adventure event was not retracted: {error}"
+        self.adventure_session = self.adventure_session.mount(self.adventure_session.record, events)
+        return f"Retracted adventure event {target_event_id} with {event.event_id}."
+
+    def adventure_correct_state(self, value):
+        usage = "Usage: adventure correct state <AE-######> <key>: <value>"
+        try:
+            target_event_id, payload = self._correction_target_and_payload(value, usage)
+            if ":" not in payload:
+                raise ValueError(usage)
+            key, state_value = payload.split(":", 1)
+            mutation = AdventureMutation(MUTATION_STATE_SET, state_key=key, state_value=state_value)
+        except ValueError as error:
+            return f"Adventure state was not corrected: {error}"
+        return self._append_adventure_correction(
+            target_event_id, mutation,
+            summary=f"Corrected {mutation.state_key} to {mutation.state_value}.", label="state",
+        )
 
     def adventure_relationships(self):
         if not self.adventure_session.active:
@@ -1292,6 +1604,30 @@ class AssistantSession:
             f"{event.relationship_dimension}: {event.relationship_value} ({event.event_id})."
         )
 
+    def adventure_correct_relationship(self, value):
+        usage = "Usage: adventure correct relationship <AE-######> <character> <dimension>: <value>"
+        try:
+            target_event_id, payload = self._correction_target_and_payload(value, usage)
+            if ":" not in payload:
+                raise ValueError(usage)
+            identity, relationship_value = payload.split(":", 1)
+            parts = identity.split()
+            if len(parts) < 2:
+                raise ValueError(usage)
+            mutation = AdventureMutation(
+                MUTATION_RELATIONSHIP_SET,
+                relationship_subject=" ".join(parts[:-1]), relationship_dimension=parts[-1],
+                relationship_value=relationship_value,
+            )
+        except ValueError as error:
+            return f"Adventure relationship was not corrected: {error}"
+        return self._append_adventure_correction(
+            target_event_id, mutation,
+            summary=(f"Corrected {mutation.relationship_subject} / {mutation.relationship_dimension}: "
+                     f"{mutation.relationship_value}."),
+            label="relationship",
+        )
+
     def adventure_knowledge(self):
         if not self.adventure_session.active:
             return "Adventure workspace: none loaded."
@@ -1327,6 +1663,28 @@ class AssistantSession:
         self.adventure_session = self.adventure_session.mount(self.adventure_session.record, events)
         return f"Set character knowledge {event.knowledge_subject} {event.knowledge_status}: {event.knowledge_fact} ({event.event_id})."
 
+    def adventure_correct_knowledge(self, value):
+        usage = "Usage: adventure correct knowledge <AE-######> <character> <knows|believes|uncertain>: <fact>"
+        try:
+            target_event_id, payload = self._correction_target_and_payload(value, usage)
+            if ":" not in payload:
+                raise ValueError(usage)
+            identity, fact = payload.split(":", 1)
+            parts = identity.split()
+            if len(parts) < 2:
+                raise ValueError(usage)
+            mutation = AdventureMutation(
+                MUTATION_KNOWLEDGE_SET,
+                knowledge_subject=" ".join(parts[:-1]), knowledge_status=parts[-1], knowledge_fact=fact,
+            )
+        except ValueError as error:
+            return f"Character knowledge was not corrected: {error}"
+        return self._append_adventure_correction(
+            target_event_id, mutation,
+            summary=f"Corrected {mutation.knowledge_subject} {mutation.knowledge_status}: {mutation.knowledge_fact}.",
+            label="character knowledge",
+        )
+
     def adventure_record(self, value):
         """Append one explicit user-authorized canonical event to the loaded world."""
         if not self.adventure_session.active:
@@ -1335,6 +1693,8 @@ class AssistantSession:
             return "Usage: adventure record <event-type>: <summary>"
         event_type, summary = value.split(":", 1)
         event_type = event_type.strip().casefold()
+        if event_type == "retraction":
+            return "Retraction events require `adventure retract <AE-######>: <reason>`."
         try:
             log = AdventureEventLog(self.adventure_registry, self.adventure_session.record)
             event = log.append(event_type, summary)
@@ -1517,24 +1877,50 @@ class AssistantSession:
             return self.adventure_load(text.strip()[len("adventure load"):])
         if lowered == "adventure resume" or lowered.startswith("adventure resume "):
             return self.adventure_resume(text.strip()[len("adventure resume"):])
+        if lowered == "adventure begin" or lowered.startswith("adventure begin "):
+            return self.adventure_begin(text.strip()[len("adventure begin"):])
+        if lowered == "adventure restart fresh" or lowered.startswith("adventure restart fresh "):
+            return self.adventure_restart_fresh(text.strip()[len("adventure restart fresh"):])
+        if lowered == "adventure restart established" or lowered.startswith("adventure restart established "):
+            return self.adventure_restart_established(text.strip()[len("adventure restart established"):])
+        if lowered in {"adventure session", "adventure session status"}:
+            return self.adventure_session_status()
         if lowered in {"adventure events", "adventure event list"}:
             return self.adventure_events()
+        if lowered in {"adventure checkpoints", "adventure checkpoint list"}:
+            return self.adventure_checkpoints()
+        if lowered == "adventure checkpoint inspect" or lowered.startswith("adventure checkpoint inspect "):
+            return self.adventure_checkpoint_inspect(text.strip()[len("adventure checkpoint inspect"):])
+        if lowered == "adventure checkpoint" or lowered.startswith("adventure checkpoint "):
+            return self.adventure_checkpoint_create(text.strip()[len("adventure checkpoint"):])
+        if lowered in {"adventure corrections", "adventure correction audit"}:
+            return self.adventure_corrections()
+        if lowered == "adventure retract" or lowered.startswith("adventure retract "):
+            return self.adventure_retract(text.strip()[len("adventure retract"):])
+        if lowered == "adventure correct state" or lowered.startswith("adventure correct state "):
+            return self.adventure_correct_state(text.strip()[len("adventure correct state"):])
         if lowered == "adventure state set" or lowered.startswith("adventure state set "):
             return self.adventure_state_set(text.strip()[len("adventure state set"):])
         if lowered in {"adventure state", "adventure state list"}:
             return self.adventure_state()
         if lowered == "adventure relationship set" or lowered.startswith("adventure relationship set "):
             return self.adventure_relationship_set(text.strip()[len("adventure relationship set"):])
+        if lowered == "adventure correct relationship" or lowered.startswith("adventure correct relationship "):
+            return self.adventure_correct_relationship(text.strip()[len("adventure correct relationship"):])
         if lowered in {"adventure relationship", "adventure relationships"}:
             return self.adventure_relationships()
         if lowered == "adventure knowledge set" or lowered.startswith("adventure knowledge set "):
             return self.adventure_knowledge_set(text.strip()[len("adventure knowledge set"):])
+        if lowered == "adventure correct knowledge" or lowered.startswith("adventure correct knowledge "):
+            return self.adventure_correct_knowledge(text.strip()[len("adventure correct knowledge"):])
         if lowered in {"adventure knowledge", "adventure beliefs"}:
             return self.adventure_knowledge()
         if lowered in {"adventure resources", "adventure resource list"}:
             return self.adventure_resources()
         if lowered == "adventure resource" or lowered.startswith("adventure resource "):
             return self.adventure_resource_change(text.strip()[len("adventure resource"):])
+        if lowered == "adventure correct resource" or lowered.startswith("adventure correct resource "):
+            return self.adventure_correct_resource(text.strip()[len("adventure correct resource"):])
         if lowered == "adventure turn begin":
             return self.adventure_turn_begin()
         if lowered in {"adventure turn status", "adventure turn"}:
@@ -1877,7 +2263,7 @@ def run_interactive(config_path=DEFAULT_CONFIG_PATH, input_fn=input, output_fn=p
         stream_writer=stream_writer,
     )
     session = application.session
-    output_fn("StarFur Assistant (model list/current/use, persona list/current/use/inspect, roleplay begin/end/status, adventure list/create/inspect/load/resume/status/events/state/relationships/knowledge/turn/pause/end/unload, remember/forget, memory list/search/inspect/scope, proposal list/inspect/approve/reject/approve all/scope, context stats; quit to exit)")
+    output_fn("StarFur Assistant (model list/current/use, persona list/current/use/inspect, roleplay begin/end/status, adventure list/create/inspect/load/resume/restart/status/events/checkpoints/corrections/correct/retract/state/relationships/knowledge/turn/pause/end/unload, remember/forget, memory list/search/inspect/scope, proposal list/inspect/approve/reject/approve all/scope, context stats; quit to exit)")
     while True:
         try:
             user_text = input_fn("You: ")

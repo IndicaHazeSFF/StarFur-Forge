@@ -202,6 +202,22 @@ Profiles are `assistant_note` (legacy behavior), `technical_document`, `adventur
 
 `/v1/starfur/documents/annotate` accepts the same validated request body, sends each prepared chunk to the currently active configured provider through the shared application facade, and returns reviewable candidate proposals with source/chunk provenance. Annotation itself does not create pending proposals, write SQLite/Chroma, approve anything, or inject document text into chat. The response includes a short-lived `review.id`, display candidate IDs such as `C-001`, and a content-derived candidate identity; invalid model output returns HTTP 422.
 
+For a long annotation launched from a terminal, add `?stream=terminal` and use `curl -N`. This opt-in text transport prints a completed-chunk progress bar followed by the final JSON result; the normal endpoint remains the standard one-response JSON API for OpenWebUI and other clients:
+
+    FILE="$HOME/StarFur-Forge/story.md"
+    jq -n \
+      --arg filename "$(basename "$FILE")" \
+      --arg content "$(cat "$FILE")" \
+      --arg domain "personal" \
+      '{filename:$filename, content:$content, domain:$domain}' |
+    curl -sN -X POST \
+      -H "Authorization: Bearer starfur-local" \
+      -H "Content-Type: application/json" \
+      'http://127.0.0.1:8001/v1/starfur/documents/annotate?stream=terminal' \
+      --data-binary @-
+
+Terminal progress exposes only `completed/total` chunk counts. It does not stream source text, candidate content, provider output, or diagnostics; cancellation/disconnection never changes the review-only persistence rules.
+
 To deliberately add one reviewed candidate to the existing pending-proposal workflow, call `/v1/starfur/documents/review` with only its returned `review_id`, `candidate_id`, and exact confirmation:
 
     {"review_id":"DR-...","candidate_id":"C-001","confirm":"create pending proposal"}
@@ -390,20 +406,36 @@ Prepare or inspect isolated CYOA workspace metadata with exact Core commands:
     adventure inspect <title>
     adventure load <title>
     adventure resume <title>
+    adventure begin <title>
+    adventure restart fresh <new title>
+    adventure restart established <checkpoint-id|label>: <new title>
+    adventure session
     adventure status
     adventure events
+    adventure checkpoint <label>
+    adventure checkpoints
+    adventure checkpoint inspect <checkpoint-id|label>
+    adventure corrections
+    adventure retract <AE-######>: <reason>
     adventure state
     adventure state set <key>: <value>
+    adventure correct state <AE-######> <key>: <value>
     adventure relationships
     adventure relationship set <character> <dimension>: <value>
+    adventure correct relationship <AE-######> <character> <dimension>: <value>
     adventure knowledge
     adventure knowledge set <character> <knows|believes|uncertain>: <fact>
+    adventure correct knowledge <AE-######> <character> <knows|believes|uncertain>: <fact>
+    adventure resources
+    adventure resource <resource-id> <operation>[: <value>]
+    adventure correct resource <AE-######> <resource-id> <operation>[: <value>]
     adventure turn begin
     adventure turn status
     adventure turn stage <event-type>: <summary>
     adventure turn stage state <key>: <value>
     adventure turn stage relationship <character> <dimension>: <value>
     adventure turn stage knowledge <character> <knows|believes|uncertain>: <fact>
+    adventure turn stage resource <resource-id> <operation>[: <value>]
     adventure turn commit
     adventure turn abort
     adventure record <event-type>: <summary>
@@ -419,7 +451,30 @@ current conversation, clears its recent chat context, and reads at most eight
 validated authoritative event summaries when its event log already exists. The
 selection preserves the opening event plus high-value continuity facts and
 recent state in chronological order; it is not necessarily the last eight.
+`adventure restart fresh <new title>` creates and mounts a fully isolated new
+workspace. It preserves the previously loaded adventure unchanged and carries no
+events, state, checkpoints, recent conversation, or roleplay session into the new one.
+`adventure restart established <checkpoint-id|label>: <new title>` creates and mounts
+an isolated child workspace from one verified checkpoint of the currently loaded
+adventure. It copies only that authoritative event prefix and immutable resource
+catalog, records its parent/checkpoint origin, and excludes later parent history,
+parent checkpoints, recent conversation, and roleplay context. It is not a restore,
+rewind, or mutation of the source workspace.
 `adventure events` displays those bounded stored summaries without a model call.
+`adventure checkpoint <label>` creates a named immutable reference to the current
+authoritative event-log prefix; `adventure checkpoints` lists those references; and
+`adventure checkpoint inspect <checkpoint-id|label>` recomputes the verified prefix's
+derived facts without changing the mounted session. A checkpoint is not yet a snapshot,
+rewind, restore, or branch and cannot change story state.
+`adventure corrections` is a read-only audit of active, superseded, and retracted event IDs.
+It never calls a model. `adventure retract <AE-######>: <reason>` appends one explicit
+Core-owned audit event that makes a currently active event stop affecting authoritative
+projections; it never deletes history and cannot retract a retraction.
+The four explicit `adventure correct` forms append one schema-v2 typed replacement for a
+currently active state, relationship, character-knowledge, or resource event. They never edit
+or delete history, infer corrections from narration, correct ordinary prose events, or resolve
+contradictions. A correction must target the current active tip; use
+`adventure corrections` to inspect its ID first.
 `adventure state` displays the complete current authoritative state projected from
 explicit state-change records. Prompt context uses a separate deterministic bounded
 selection, so context limits never discard state. `adventure state set <key>: <value>` writes one
@@ -439,12 +494,12 @@ uncertainty is not automatically objective world truth; Core never derives it
 from narration or a provider response.
 `adventure turn` provides an explicit staged-event transaction for future
 generated adventure turns. `adventure turn stage` keeps one ordinary validated
-event draft in session memory only; the `state`, `relationship`, and `knowledge`
+event draft in session memory only; the `state`, `relationship`, `knowledge`, and `resource`
 variants stage one Core-validated structured fact. None alter prompt context or
 the event log until `adventure turn commit` atomically appends the full batch;
 the opaque Core request ID makes a matching completed-commit retry idempotent.
 `adventure turn abort` discards staging, and a mount change also discards it.
-The direct state, relationship, and knowledge commands remain documented
+The direct state, relationship, knowledge, and resource commands remain documented
 immediate-write alternatives.
 `adventure` is a reserved Core command namespace. Exact documented forms run as
 shown; malformed or unknown `adventure ...` input returns deterministic Core
@@ -452,15 +507,16 @@ guidance and never falls through to model generation, memory proposals, chat
 history changes, or adventure writes.
 `python starfur.py adventure-eval` runs only checked-in, deterministic adventure
 integrity fixtures. It opens no provider, production memory, or live adventure
-workspace; the initial suite measures event-backed projections, bounded replay,
-and repeatability.
-Generic adventure resource declarations are currently a package/Core validation
-foundation. Core also has an internal, test-owned in-memory reducer for declared
-values and legal operations, plus a one-time pre-event-log workspace manifest
-declaration. There are still no resource-value, inventory, equipment, currency,
-or stat commands. Core can now store internal catalog-validated resource events,
-but user-facing inspection and mutation wait for the mounted-projection/control
-slice.
+workspace; the current suite measures event-backed projections, generic resource
+boundaries, bounded replay, and repeatability.
+Generic adventure resource declarations remain scenario/package data. With a
+declared catalog, `adventure resource <resource-id> <operation>[: <value>]`
+explicitly validates and appends one generic resource operation; its `adventure
+turn stage resource ...` counterpart remains session-local until commit. Plain
+text values are accepted for text-like resources; use JSON for booleans, numbers,
+or structured inventory values such as `["brass_key", 1]`. `adventure resources`
+displays only public values. Hidden values and their event summaries never enter
+normal model context or read-only inspection.
 While a workspace is mounted, numeric relationship-meter wording in retrieved
 `relationship_context` memories is redacted before normal narration unless the
 user explicitly asks for a meter, score, or internal diagnostic. This changes
@@ -475,6 +531,14 @@ automatically. `adventure pause` ends the mounted adventure/active roleplay
 session while preserving its stored event log. `adventure end` does the same
 immediately; `end story now` is its exact Core-owned alias. Neither deletes,
 archives, resets, or changes an adventure workspace.
+`adventure begin <title>` is the explicit story-session entry point: it loads
+one existing workspace and starts roleplay with that workspace title as its
+session label. It creates no workspace or event and cannot infer a story from
+ordinary chat.
+`adventure session` is a read-only lifecycle view showing the active persona,
+loaded workspace, session-local roleplay label, branch origin when present, and
+whether a turn is staged. It does not reveal prompts, narrative event text, or
+private persona runtime data.
 This slice never captures narration, automatically creates events, starts
 roleplay, writes shared assistant memory, runs a replay engine, or creates an
 adventure database/index. A duplicate normalized title is rejected; future

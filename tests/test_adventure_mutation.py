@@ -9,6 +9,7 @@ from pipeline.adventure_mutation import (
     AdventureMutation,
     AdventureMutationError,
     MUTATION_RELATIONSHIP_SET,
+    MUTATION_RESOURCE_CHANGE,
     MUTATION_STATE_SET,
 )
 
@@ -48,6 +49,28 @@ class AdventureMutationTests(unittest.TestCase):
                 state_key="location",
                 state_value="deck",
             )
+
+    def test_resource_mutation_round_trips_as_json_safe_generic_operation(self):
+        mutation = AdventureMutation(
+            MUTATION_RESOURCE_CHANGE,
+            resource_id="Fuel",
+            resource_operation="increment",
+            resource_value=20,
+        )
+        envelope = AdventureEventEnvelope(
+            sequence=2,
+            event_id="AE-000002",
+            event_type="resource_change",
+            recorded_at="2026-08-22T12:00:00+00:00",
+            summary="Fuel reserve increases.",
+            details=None,
+            supersedes_event_id="AE-000001",
+            mutation=mutation,
+        )
+
+        self.assertEqual("fuel", mutation.resource_id)
+        self.assertEqual("increment", mutation.resource_operation)
+        self.assertEqual(envelope, AdventureEventEnvelope.from_dict(envelope.to_dict()))
 
     def test_envelope_rejects_model_authored_authority_and_invalid_supersession(self):
         with self.assertRaisesRegex(AdventureMutationError, "source is not permitted"):

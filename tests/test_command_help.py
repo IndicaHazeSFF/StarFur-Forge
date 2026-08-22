@@ -42,6 +42,33 @@ class CommandHelpTests(unittest.TestCase):
         self.assertIn("adventure state set <key>: <value>", rendered)
         self.assertIn("current_location", rendered)
 
+    def test_adventure_retraction_help_returns_exact_core_command(self):
+        payload = detect_command_help("How do I retract an adventure event?")
+        self.assertEqual(payload.intent, "adventure_registry")
+        self.assertIn("adventure retract <AE-######>: <reason>", payload.render())
+
+    def test_adventure_checkpoint_help_returns_exact_core_commands(self):
+        payload = detect_command_help("How do I create an adventure checkpoint?")
+        self.assertEqual(payload.intent, "adventure_registry")
+        self.assertIn("adventure checkpoint <label>", payload.render())
+        self.assertIn("adventure checkpoints", payload.render())
+        self.assertIn("adventure checkpoint inspect <checkpoint-id|label>", payload.render())
+
+    def test_fresh_restart_help_returns_exact_core_command(self):
+        payload = detect_command_help("How do I start a fresh adventure?")
+        self.assertEqual(payload.intent, "adventure_registry")
+        self.assertIn("adventure restart fresh <new title>", payload.render())
+
+    def test_established_restart_help_returns_exact_core_command(self):
+        payload = detect_command_help("How do I restart an adventure from a checkpoint?")
+        self.assertEqual(payload.intent, "adventure_registry")
+        self.assertIn("adventure restart established <checkpoint-id|label>: <new title>", payload.render())
+
+    def test_existing_adventure_start_help_returns_exact_core_command(self):
+        payload = detect_command_help("How do I begin a saved adventure?")
+        self.assertEqual(payload.intent, "adventure_registry")
+        self.assertIn("adventure begin <title>", payload.render())
+
     def test_adventure_relationship_help_returns_exact_core_commands(self):
         payload = detect_command_help("How do I set adventure relationships?")
         self.assertEqual(payload.intent, "adventure_registry")

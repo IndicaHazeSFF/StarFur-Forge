@@ -9,7 +9,10 @@ adapter belongs to a later A3 slice.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 import re
+
+from pipeline.adventure_resource_state import AdventureResourceOperation, AdventureResourceStateError
 
 
 EVENT_ENVELOPE_SCHEMA_VERSION = 2
@@ -17,10 +20,12 @@ EVENT_SOURCE_CORE_EXPLICIT = "core_explicit"
 MUTATION_STATE_SET = "state_set"
 MUTATION_RELATIONSHIP_SET = "relationship_set"
 MUTATION_KNOWLEDGE_SET = "knowledge_set"
+MUTATION_RESOURCE_CHANGE = "resource_change"
 MUTATION_KINDS = frozenset({
     MUTATION_STATE_SET,
     MUTATION_RELATIONSHIP_SET,
     MUTATION_KNOWLEDGE_SET,
+    MUTATION_RESOURCE_CHANGE,
 })
 
 _EVENT_ID_PATTERN = re.compile(r"^AE-[0-9]{6}$")
@@ -59,6 +64,14 @@ def _event_id(value: object, *, field: str) -> str:
     return value
 
 
+def _resource_value(value: object) -> object:
+    """Keep a schema-v2 resource payload JSON-safe before catalog validation."""
+    try:
+        return json.loads(json.dumps(value, separators=(",", ":")))
+    except (TypeError, ValueError) as error:
+        raise AdventureMutationError("resource value must be JSON-compatible") from error
+
+
 @dataclass(frozen=True)
 class AdventureMutation:
     """One explicit structured state change, independent of narrative prose."""
@@ -72,6 +85,9 @@ class AdventureMutation:
     knowledge_subject: str | None = None
     knowledge_status: str | None = None
     knowledge_fact: str | None = None
+    resource_id: str | None = None
+    resource_operation: str | None = None
+    resource_value: object = None
 
     def __post_init__(self) -> None:
         if self.kind not in MUTATION_KINDS:
@@ -79,8 +95,9 @@ class AdventureMutation:
         state_values = (self.state_key, self.state_value)
         relationship_values = (self.relationship_subject, self.relationship_dimension, self.relationship_value)
         knowledge_values = (self.knowledge_subject, self.knowledge_status, self.knowledge_fact)
+        resource_values = (self.resource_id, self.resource_operation, self.resource_value)
         if self.kind == MUTATION_STATE_SET:
-            if any(value is not None for value in (*relationship_values, *knowledge_values)):
+            if any(value is not None for value in (*relationship_values, *knowledge_values, *resource_values)):
                 raise AdventureMutationError("state mutation cannot contain another mutation payload")
             if any(value is None for value in state_values):
                 raise AdventureMutationError("state mutation requires key and value")
@@ -93,7 +110,7 @@ class AdventureMutation:
             ))
             return
         if self.kind == MUTATION_RELATIONSHIP_SET:
-            if any(value is not None for value in (*state_values, *knowledge_values)):
+            if any(value is not None for value in (*state_values, *knowledge_values, *resource_values)):
                 raise AdventureMutationError("relationship mutation cannot contain another mutation payload")
             if any(value is None for value in relationship_values):
                 raise AdventureMutationError("relationship mutation requires subject, dimension, and value")
@@ -108,20 +125,36 @@ class AdventureMutation:
                 self.relationship_value, field="relationship value", maximum=_MAX_VALUE_LENGTH, collapse=True
             ))
             return
-        if any(value is not None for value in (*state_values, *relationship_values)):
-            raise AdventureMutationError("knowledge mutation cannot contain another mutation payload")
-        if any(value is None for value in knowledge_values):
-            raise AdventureMutationError("knowledge mutation requires subject, status, and fact")
-        object.__setattr__(self, "knowledge_subject", _text(
-            self.knowledge_subject, field="knowledge subject", maximum=_MAX_SUBJECT_LENGTH, collapse=True
-        ))
-        status = _text(self.knowledge_status, field="knowledge status", maximum=32).casefold()
-        if status not in _KNOWLEDGE_STATUSES:
-            raise AdventureMutationError("knowledge status is unsupported")
-        object.__setattr__(self, "knowledge_status", status)
-        object.__setattr__(self, "knowledge_fact", _text(
-            self.knowledge_fact, field="knowledge fact", maximum=_MAX_VALUE_LENGTH, collapse=True
-        ))
+        if self.kind == MUTATION_KNOWLEDGE_SET:
+            if any(value is not None for value in (*state_values, *relationship_values, *resource_values)):
+                raise AdventureMutationError("knowledge mutation cannot contain another mutation payload")
+            if any(value is None for value in knowledge_values):
+                raise AdventureMutationError("knowledge mutation requires subject, status, and fact")
+            object.__setattr__(self, "knowledge_subject", _text(
+                self.knowledge_subject, field="knowledge subject", maximum=_MAX_SUBJECT_LENGTH, collapse=True
+            ))
+            status = _text(self.knowledge_status, field="knowledge status", maximum=32).casefold()
+            if status not in _KNOWLEDGE_STATUSES:
+                raise AdventureMutationError("knowledge status is unsupported")
+            object.__setattr__(self, "knowledge_status", status)
+            object.__setattr__(self, "knowledge_fact", _text(
+                self.knowledge_fact, field="knowledge fact", maximum=_MAX_VALUE_LENGTH, collapse=True
+            ))
+            return
+        if any(value is not None for value in (*state_values, *relationship_values, *knowledge_values)):
+            raise AdventureMutationError("resource mutation cannot contain another mutation payload")
+        if self.resource_id is None or self.resource_operation is None:
+            raise AdventureMutationError("resource mutation requires identifier and operation")
+        try:
+            operation = AdventureResourceOperation(
+                self.resource_id, self.resource_operation, _resource_value(self.resource_value)
+            )
+        except AdventureResourceStateError as error:
+            raise AdventureMutationError("resource mutation is invalid") from error
+        object.__setattr__(self, "resource_id", operation.resource_id)
+        object.__setattr__(self, "resource_operation", operation.operation)
+        object.__setattr__(self, "resource_value", operation.value)
+        return
 
     def to_dict(self) -> dict[str, object]:
         if self.kind == MUTATION_STATE_SET:
@@ -133,11 +166,18 @@ class AdventureMutation:
                 "dimension": self.relationship_dimension,
                 "value": self.relationship_value,
             }
+        if self.kind == MUTATION_KNOWLEDGE_SET:
+            return {
+                "kind": self.kind,
+                "subject": self.knowledge_subject,
+                "status": self.knowledge_status,
+                "fact": self.knowledge_fact,
+            }
         return {
             "kind": self.kind,
-            "subject": self.knowledge_subject,
-            "status": self.knowledge_status,
-            "fact": self.knowledge_fact,
+            "id": self.resource_id,
+            "operation": self.resource_operation,
+            "value": self.resource_value,
         }
 
     @classmethod
@@ -160,6 +200,13 @@ class AdventureMutation:
                 knowledge_subject=value.get("subject"),
                 knowledge_status=value.get("status"),
                 knowledge_fact=value.get("fact"),
+            )
+        if kind == MUTATION_RESOURCE_CHANGE:
+            return cls(
+                kind=kind,
+                resource_id=value.get("id"),
+                resource_operation=value.get("operation"),
+                resource_value=value.get("value"),
             )
         raise AdventureMutationError("mutation kind is unsupported")
 
@@ -253,5 +300,6 @@ class AdventureEventEnvelope:
 __all__ = [
     "AdventureEventEnvelope", "AdventureMutation", "AdventureMutationError",
     "EVENT_ENVELOPE_SCHEMA_VERSION", "EVENT_SOURCE_CORE_EXPLICIT",
-    "MUTATION_KINDS", "MUTATION_KNOWLEDGE_SET", "MUTATION_RELATIONSHIP_SET", "MUTATION_STATE_SET",
+    "MUTATION_KINDS", "MUTATION_KNOWLEDGE_SET", "MUTATION_RELATIONSHIP_SET", "MUTATION_RESOURCE_CHANGE",
+    "MUTATION_STATE_SET",
 ]

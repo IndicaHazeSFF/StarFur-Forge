@@ -2,6 +2,7 @@ import unittest
 
 from pipeline.adventure_events import AdventureEvent
 from pipeline.adventure_knowledge import derive_adventure_knowledge, select_adventure_knowledge_context
+from pipeline.adventure_mutation import AdventureEventEnvelope, AdventureMutation, MUTATION_KNOWLEDGE_SET
 
 
 def event(sequence, event_type, *, subject=None, status=None, fact=None):
@@ -50,6 +51,33 @@ class AdventureKnowledgeTests(unittest.TestCase):
         self.assertNotIn("Character 12", [fact.subject for fact in select_adventure_knowledge_context(facts)])
         self.assertEqual((facts[0],), select_adventure_knowledge_context(facts, limit=1))
         self.assertEqual(13, len(facts))
+
+    def test_superseded_knowledge_event_remains_in_history_but_not_current_projection(self):
+        original = AdventureEvent.from_dict(AdventureEventEnvelope(
+            sequence=1, event_id="AE-000001", event_type="character_knowledge",
+            recorded_at="2026-08-21T00:00:00+00:00", summary="Rook believes the hatch is trapped.", details=None,
+            mutation=AdventureMutation(
+                MUTATION_KNOWLEDGE_SET, knowledge_subject="Rook", knowledge_status="believes",
+                knowledge_fact="the hatch is trapped",
+            ),
+        ).to_dict())
+        correction = AdventureEvent.from_dict(AdventureEventEnvelope(
+            sequence=2, event_id="AE-000002", event_type="character_knowledge",
+            recorded_at="2026-08-21T00:01:00+00:00", summary="Rook knows the hatch is trapped.", details=None,
+            supersedes_event_id="AE-000001",
+            mutation=AdventureMutation(
+                MUTATION_KNOWLEDGE_SET, knowledge_subject="Rook", knowledge_status="knows",
+                knowledge_fact="the hatch is trapped",
+            ),
+        ).to_dict())
+
+        facts = derive_adventure_knowledge((original, correction))
+
+        self.assertEqual(
+            [("Rook", "knows", "the hatch is trapped", "AE-000002")],
+            [(fact.subject, fact.status, fact.fact, fact.source_event_id) for fact in facts],
+        )
+        self.assertEqual("believes", original.knowledge_status)
 
 
 if __name__ == "__main__":

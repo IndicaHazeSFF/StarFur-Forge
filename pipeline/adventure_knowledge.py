@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+from pipeline.adventure_correction import resolve_active_adventure_events
 from pipeline.adventure_events import AdventureEvent
 
 
@@ -22,12 +23,13 @@ class AdventureKnowledgeFact:
 
 
 def derive_adventure_knowledge(events: Iterable[AdventureEvent]) -> tuple[AdventureKnowledgeFact, ...]:
-    """Rebuild complete character-scoped knowledge from event history."""
+    """Rebuild character-scoped knowledge from active events without deleting history."""
     values = tuple(events)
     if not all(isinstance(event, AdventureEvent) for event in values):
         raise TypeError("adventure knowledge events must be AdventureEvents")
     latest: dict[tuple[str, str], AdventureKnowledgeFact] = {}
-    for event in sorted(values, key=lambda item: item.sequence):
+    active_events = resolve_active_adventure_events(values).active_events
+    for event in sorted(active_events, key=lambda item: item.sequence):
         if event.event_type != "character_knowledge" or event.knowledge_subject is None:
             continue
         key = (event.knowledge_subject.casefold(), event.knowledge_fact.casefold())

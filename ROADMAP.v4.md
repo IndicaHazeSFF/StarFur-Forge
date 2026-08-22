@@ -1,5 +1,7 @@
 # StarFur Forge Roadmap v4 — Expanded Successor Proposal
 
+**Roadmap review updated:** 2026-08-22
+
 **Status:** comparison document; not yet authoritative  
 **Baseline reviewed:** `ROADMAP.md` and repository state on 2026-08-18  
 **Product target:** local-first Resident Intelligence Platform with a Steam-ready companion application and declarative Workshop packages
@@ -136,7 +138,7 @@ This is a functional prototype, not yet a durable simulation system. The impleme
 
 **Completed initial slice:** workspace writes now use a fail-closed cross-process OS advisory lock that releases automatically if its owner exits, so a persistent lock file cannot itself become a stale ownership claim. Staged turn commits persist a validated request ID on their event batch. Matching retries are idempotent; conflicting request-ID reuse fails. Under the lock, a valid `.pending` replacement is recovered only when it extends the authoritative log; exact/redundant artifacts are removed, while malformed or divergent pending data fails closed. A valid nonempty log repairs only its stale `not_created` manifest marker; a manifest that claims an absent log remains an error. Broader failure-injection coverage remains before A2 is complete.
 
-**Completed A3 foundation:** `pipeline.adventure_mutation` now validates and serializes pure schema-v2 envelopes carrying identity, timestamp, Core source, request ID, optional supersession, narrative summary/details, and one typed state/relationship/knowledge mutation. `pipeline.adventure_events` reads and preserves those validated v2 entries beside schema-v1 records, exposing their typed facts through existing projections. Core continues writing v1 until an explicit migration policy is validated.
+**Completed A3 foundation:** `pipeline.adventure_mutation` now validates and serializes pure schema-v2 envelopes carrying identity, timestamp, Core source, request ID, optional supersession, narrative summary/details, and one typed state/relationship/knowledge/resource-operation mutation. `pipeline.adventure_events` reads and preserves those validated v2 entries beside schema-v1 records, exposing their typed facts through existing projections. Core continues writing v1 until an explicit migration policy is validated.
 
 **Completed A4 staging foundation:** `AdventureTurnTransaction` can retain ordinary drafts and typed state/relationship/knowledge mutations together under one request ID. Its explicit commit path writes compatible schema-v1 structured drafts, maintaining storage compatibility while establishing one all-or-nothing transaction boundary.
 
@@ -198,6 +200,22 @@ This is a functional prototype, not yet a durable simulation system. The impleme
 - Rebuild projections from active event semantics without deleting audit history.
 - Distinguish objective facts, character beliefs, disputed facts, and unresolved contradictions.
 
+**Completed initial activity-projection foundation:** a provider-free resolver now interprets the existing schema-v2 optional supersession reference as an inspectable correction chain while retaining every original event. Unknown, forward, duplicate-target, and self references fail closed. It does not yet write correction events, alter existing projections, implement retractions/contradictions, or expose commands.
+
+**Completed initial state-projection integration:** current-story state now resolves from active events, so a superseded schema-v2 state mutation remains available for audit but no longer controls the latest state view. Relationship, knowledge, resource, retraction, contradiction, writer, and command integration remains staged separately.
+
+**Completed initial relationship-projection integration:** qualitative relationship facts now resolve from active events, so a superseded schema-v2 relationship mutation remains available for audit but no longer controls the current relationship view. Knowledge, resource, retraction, contradiction, writer, and command integration remains staged separately.
+
+**Completed initial knowledge-projection integration:** character knowledge and beliefs now resolve from active events, so a superseded schema-v2 knowledge mutation remains available for audit but no longer controls the current character-perspective view. Resource, retraction, contradiction, writer, and command integration remain staged separately.
+
+**Completed initial resource-projection integration:** schema-v2 envelopes now carry a generic resource operation for read-compatible corrected history. The complete resource projection resolves active persisted events before catalog validation, while sequence-free staged drafts remain outside supersession during atomic pre-commit validation. A superseded resource operation remains available for audit but no longer controls the current resource view or provenance. Retraction, contradiction, writer, and command integration remain staged separately.
+
+**Completed initial correction-inspection slice:** exact `adventure corrections` now reports active/superseded IDs in valid correction chains as a read-only Core audit. It reads the append-only log directly, calls no provider, changes no session context, and cannot write a correction, retraction, or contradiction.
+
+**Completed initial correction-writer slice:** exact `adventure correct state|relationship|knowledge|resource` controls append one explicit schema-v2 typed replacement for a currently active event. The writer shares the event-log lock, append-only replacement, catalog validation, and mount-refresh path; missing, inactive, and type-mismatched targets fail without history edits or correction forks. It does not correct ordinary narrative events, infer edits from model prose, support staging, retractions, or contradiction resolution. Distinct retraction/dispute semantics remain later B2 work.
+
+**Completed initial retraction slice:** exact `adventure retract <AE-######>: <reason>` appends a Core-owned no-mutation schema-v2 audit event for one currently active event. It removes the target from complete projections and bounded replay context without deleting its history, cannot be drafted, cannot retract a retraction, and cannot fork an inactive chain. Contradiction/dispute semantics remain later B2 work.
+
 **Acceptance:** correcting a location or belief changes current state while preserving the original event and explanation.  
 **Tests:** correction chains, retractions, conflicting facts, differently worded knowledge claims, deterministic replay.
 
@@ -207,8 +225,32 @@ This is a functional prototype, not yet a durable simulation system. The impleme
 - Preserve stable key events while allowing regenerated connective prose.
 - Keep branch IDs and save state isolated; never infer branch truth from semantic recall.
 
+**Completed initial checkpoint-reference slice:** exact `adventure checkpoint <label>` stores a named immutable reference to the current authoritative event-log prefix under the existing workspace lock. It records only a bounded label, event count/last ID, and deterministic prefix fingerprint; `adventure checkpoints` lists these verified references. It is not a snapshot, restore, rewind, fork, branch, archive, or provider feature.
+
+**Completed initial checkpoint-inspection slice:** exact `adventure checkpoint inspect <checkpoint-id|label>` resolves one verified prefix and recomputes only its derived fact counts. It is read-only and cannot alter the mounted session, event history, restore point, branch, or prompt context.
+
+**Completed initial fresh-restart slice:** exact `adventure restart fresh <new title>` creates and mounts a wholly isolated workspace, preserves a previously loaded workspace unchanged, and ends roleplay. It does not carry forward events, state, checkpoints, or context and must not be represented as established-premise restart, restore, rewind, clone, or branch behavior.
+
+**Completed initial established-premise restart slice:** exact `adventure restart established <checkpoint-id|label>: <new title>` creates and mounts one isolated child workspace from a verified checkpoint of the currently loaded adventure. It copies only the checkpoint's authoritative prefix and immutable resource catalog, records parent/checkpoint provenance, and excludes later parent events, parent checkpoints, conversation, and roleplay context. It is not restore, rewind, merge, or automatic branch selection.
+
+**Completed initial branch-integrity fixture slice:** provider-free `adventure-integrity-v3` evaluates complete source projections and a declared checkpoint-derived child prefix twice. It verifies that later parent facts stay out of child state, knowledge, and bounded replay context; runtime command, storage, and recovery behavior remain separately tested.
+
+**Completed initial C1 story-session entry slice:** exact `adventure begin <title>` loads one existing workspace and starts session-local roleplay in the same Core-owned operation. It refuses to discard a staged turn and does not create a workspace/event or infer story entry from ordinary prose.
+
+**Completed initial C1 session-binding inspection slice:** exact `adventure session` exposes the current Core-owned workspace/persona/roleplay/turn-staging binding and branch origin when present. It is read-only and omits prompts, event prose, and private persona runtime data.
+
 **Acceptance:** the same seed/checkpoint reconstructs the same authoritative state even when narrated prose differs.  
 **Benchmarks:** long-session restart, branch isolation, contradiction rate, key-event retention, recovery from interrupted turns.
+
+#### B4. Governed party-member initiative
+
+- Treat the active persona as a bounded adventure participant, not as an omniscient narrator.
+- Give each persona/NPC an adventure-local, bounded memory and character-knowledge view; the canonical event/state log remains authoritative and participant memories never silently enter shared user memory.
+- Define explicit initiative triggers, allowed action types, cooldowns, per-turn limits, confirmation policy, interruption behavior, and provider-independent eligibility decisions.
+- Let a provider propose an action only after Core supplies the bounded participant view; Core validates and commits typed consequences before narration, TTS, animation, or apartment presentation.
+- NPC/party-member context is normally derived from authoritative event history, that participant's explicit character knowledge, permitted relationships, and allowed resources. It is not an unrestricted chat transcript or a shared user-memory namespace. Any later salience cache must be inspectable, adventure-scoped, and rebuildable or provenance-backed.
+
+**Completed foundation:** `pipeline.adventure_initiative` now validates participant memory namespaces and bounded initiative policy/eligibility contracts. It does not yet schedule turns, call a provider, create NPC memory, or execute actions.
 
 ### Stage C — Safe narrative-to-state loop (AFTER A AND B)
 
@@ -236,11 +278,13 @@ This is a functional prototype, not yet a durable simulation system. The impleme
 - Preserve source/chunk provenance and stage typed candidates before commit.
 - Support multi-file imports, asynchronous progress, resume/retry, and bounded failure reporting.
 
+**Prototype priority:** the reviewed manual import/handoff path may ship before automatic extraction, transcript capture, or autonomous narrative turns. This is the shortest safe route to “import an exported conversation/details file, load the adventure, and continue.”
+
 **Stage C gate:** no automatic extraction until Stage A concurrency/recovery, complete projection separation, typed mutations, and mixed transaction tests pass.
 
 ### Stage D — Continuous behavioral evaluation (START ALONGSIDE STAGE A)
 
-**Completed fixture slices:** checked-in `adventure-integrity-v1` evaluates validated in-memory event streams for complete structured projections, bounded replay selection, context-limit separation, and repeatability. `adventure-integrity-v2` adds generic resource projection, public-only resource context, resource-summary replay isolation, and invalid-operation rejection. The `adventure-eval` CLI is provider-free and cannot open runtime workspaces, production memory, or a ledger. Remaining fixtures must add command/lifecycle, corruption/recovery, relationship consistency, and restart; ledger integration needs a dedicated bounded adventure-result schema.
+**Completed fixture slices:** checked-in `adventure-integrity-v1` evaluates validated in-memory event streams for complete structured projections, bounded replay selection, context-limit separation, and repeatability. `adventure-integrity-v2` adds generic resource projection, public-only resource context, resource-summary replay isolation, and invalid-operation rejection. `adventure-integrity-v3` adds checkpoint-derived child-prefix isolation against later source facts. The `adventure-eval` CLI is provider-free and cannot open runtime workspaces, production memory, or a ledger. Remaining fixtures must add command/lifecycle, corruption/recovery, relationship consistency, and restart; ledger integration needs a dedicated bounded adventure-result schema.
 
 1. Add adventure fixtures for replay, state projection, correction, relationship consistency, knowledge isolation, resources, interruption, corruption, restart, and branching.
 2. Record retrieval success separately from whether the model used retrieved facts correctly.
@@ -273,16 +317,21 @@ This is a functional prototype, not yet a durable simulation system. The impleme
 
 **Gate:** no background tool or Workshop package gains ambient filesystem/network/process authority.
 
-### Stage G — Vision, media, and one-shot perception (LATER)
+### Stage G — Vision, media, and one-shot perception (LATER; after routing and permissions)
 
 1. Add permissioned one-shot screen/window/region/file inspection through `VisionProvider`.
 2. Add `ImageProvider`, TTS, and STT adapters behind the same capability registry and routing metrics.
-3. Keep uploaded/captured media as bounded source objects with provenance; do not silently promote descriptions to memory.
-4. Cache generated images and keep them non-canonical unless a separate structured event references the asset.
+3. Add explicit voice-interaction controls: voice-activity detection, transcript confidence, push-to-talk/always-listen permission state, cancellation, and barge-in/interruption rules. A low-confidence transcript must ask for clarification rather than commit a tool or adventure mutation.
+4. Keep uploaded/captured media as bounded source objects with provenance; do not silently promote descriptions to memory.
+5. Cache generated images and keep them non-canonical unless a separate structured event references the asset.
 
 **Acceptance:** “inspect this window” and “generate this scene” are explicit, cancelable, provider-replaceable operations with no hidden continuous monitoring.
 
 ### Stage H — Apartment/dashboard prototype (LATER; read-only first)
+
+#### H0. Early prototype integration path
+
+This may begin after C4's reviewed adventure-import path and before broad routing/media work. It consumes existing public snapshots only: active persona identity/state, provider lifecycle, loaded adventure/status, safe diagnostics, and permission prompts. Use a simple local surface, placeholder/procedural art, and stable asset slots. It is intentionally not a new authority, memory store, automation engine, or requirement for provider-free persistence.
 
 #### H1. Read-only resident surface
 
@@ -387,14 +436,16 @@ Adventure packages should be useful before a full asset ecosystem exists. The fi
 
 These remain research/future until permissions, benchmarks, recovery, and package boundaries are production-capable.
 
-## Recommended immediate baby-step sequence
+## Recommended current execution sequence
 
-1. Implement A1: complete projections plus bounded selectors.
-2. Implement A2: workspace lock, idempotent commit metadata, and recovery tests.
-3. Implement A3/A4: typed mutation envelope and mixed turn transaction.
-4. Implement A5: fail-closed reserved command namespaces.
-5. Add the Stage D adventure benchmark fixtures for those boundaries.
-6. Only then begin B1 generic resources and C1 bound adventure lifecycle.
+1. Complete B2 active-event projection coverage for relationships, knowledge, and resources; then add correction/retraction inspection and writer policy.
+2. Complete B3 restart/branch semantics and its provider-free integrity fixtures.
+3. Bind C1's loaded-adventure + roleplay + active-persona lifecycle; preserve Core exit/abort guarantees.
+4. Deliver C4's reviewed manual adventure-import handoff before C2/C3 automatic transcript/extraction work.
+5. Start H0/H1's read-only apartment prototype using public snapshots and placeholder assets; do not make the surface authoritative.
+6. Build Stage E routing and Stage F permissions, followed by Stage G one-shot vision/image/speech.
+7. Before H2/H3 polish or Steam release, satisfy durable persona-local continuity and zero-provider resident-runtime gates.
+8. Keep Stage D benchmark fixtures growing alongside every item above; preserve real failures as regression cases.
 
 Each slice should update source, focused tests, `AGENTS.md`, `CHANGELOG.md`, command documentation when user-facing, and this proposed roadmap if it becomes authoritative. Mark a slice completed only after its acceptance tests pass in the authoritative WSL environment.
 

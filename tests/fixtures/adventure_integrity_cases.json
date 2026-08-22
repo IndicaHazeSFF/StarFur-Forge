@@ -1,5 +1,5 @@
 {
-  "benchmark_version": "adventure-integrity-v2",
+  "benchmark_version": "adventure-integrity-v3",
   "cases": [
     {
       "name": "latest_structured_facts_and_replay_spine",
@@ -117,6 +117,37 @@
         "resource_error": "integer resource value is outside declared bounds",
         "replay_event_ids": [],
         "context_counts": {"state": 0, "relationships": 0, "knowledge": 0, "resources": 0, "resource_context": 0}
+      }
+    },
+    {
+      "name": "checkpoint_child_keeps_only_verified_parent_prefix",
+      "branch_prefix_event_count": 3,
+      "events": [
+        {"event_type": "discovery", "summary": "The crew finds a brass key."},
+        {"event_type": "state_change", "summary": "Set current location to chart room.", "state_key": "current_location", "state_value": "chart room"},
+        {"event_type": "relationship_change", "summary": "Vespera / trust: cautious.", "relationship_subject": "Vespera", "relationship_dimension": "trust", "relationship_value": "cautious"},
+        {"event_type": "state_change", "summary": "Set current location to engine room.", "state_key": "current_location", "state_value": "engine room"},
+        {"event_type": "character_knowledge", "summary": "Rook believes: the key opens the hatch.", "knowledge_subject": "Rook", "knowledge_status": "believes", "knowledge_fact": "the key opens the hatch"}
+      ],
+      "expect": {
+        "state": [{"key": "current_location", "value": "engine room", "source_event_id": "AE-000004"}],
+        "relationships": [{"subject": "Vespera", "dimension": "trust", "value": "cautious", "source_event_id": "AE-000003"}],
+        "knowledge": [{"subject": "Rook", "status": "believes", "fact": "the key opens the hatch", "source_event_id": "AE-000005"}],
+        "resources": [],
+        "resource_context": [],
+        "resource_error": null,
+        "replay_event_ids": ["AE-000001", "AE-000002", "AE-000003", "AE-000004", "AE-000005"],
+        "context_counts": {"state": 1, "relationships": 1, "knowledge": 1, "resources": 0, "resource_context": 0},
+        "branch": {
+          "state": [{"key": "current_location", "value": "chart room", "source_event_id": "AE-000002"}],
+          "relationships": [{"subject": "Vespera", "dimension": "trust", "value": "cautious", "source_event_id": "AE-000003"}],
+          "knowledge": [],
+          "resources": [],
+          "resource_context": [],
+          "resource_error": null,
+          "replay_event_ids": ["AE-000001", "AE-000002", "AE-000003"],
+          "context_counts": {"state": 1, "relationships": 1, "knowledge": 0, "resources": 0, "resource_context": 0}
+        }
       }
     }
   ]

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from collections.abc import Iterable
 
+from pipeline.adventure_correction import resolve_active_adventure_events
 from pipeline.adventure_events import AdventureEvent
 
 
@@ -21,12 +22,13 @@ class AdventureStateFact:
 
 
 def derive_adventure_state(events: Iterable[AdventureEvent]) -> tuple[AdventureStateFact, ...]:
-    """Rebuild the complete latest-value state projection from event history."""
+    """Rebuild complete state from active event semantics, never deleting history."""
     values = tuple(events)
     if not all(isinstance(event, AdventureEvent) for event in values):
         raise TypeError("story-state events must be AdventureEvents")
     latest: dict[str, AdventureStateFact] = {}
-    for event in sorted(values, key=lambda item: item.sequence):
+    active_events = resolve_active_adventure_events(values).active_events
+    for event in sorted(active_events, key=lambda item: item.sequence):
         if event.event_type == "state_change" and event.state_key is not None:
             latest[event.state_key] = AdventureStateFact(
                 key=event.state_key, value=event.state_value, source_event_id=event.event_id

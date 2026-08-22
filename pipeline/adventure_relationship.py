@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from collections.abc import Iterable
 
 from pipeline.adventure_events import AdventureEvent
+from pipeline.adventure_correction import resolve_active_adventure_events
 
 
 MAX_CONTEXT_RELATIONSHIP_FACTS = 12
@@ -27,7 +28,8 @@ def derive_adventure_relationships(events: Iterable[AdventureEvent]) -> tuple[Ad
     if not all(isinstance(event, AdventureEvent) for event in values):
         raise TypeError("adventure relationship events must be AdventureEvents")
     latest: dict[tuple[str, str], AdventureRelationshipFact] = {}
-    for event in sorted(values, key=lambda item: item.sequence):
+    active = resolve_active_adventure_events(sorted(values, key=lambda item: item.sequence)).active_events
+    for event in active:
         if event.event_type != "relationship_change" or event.relationship_subject is None:
             continue
         key = (event.relationship_subject.casefold(), event.relationship_dimension)

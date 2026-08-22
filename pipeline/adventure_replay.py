@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+from pipeline.adventure_correction import resolve_active_adventure_events
 from pipeline.adventure_events import AdventureEvent
 
 
@@ -41,12 +42,16 @@ def select_replay_spine(
     """
     if not isinstance(limit, int) or not 1 <= limit <= MAX_REPLAY_SPINE_LIMIT:
         raise ValueError(f"replay spine limit must be between 1 and {MAX_REPLAY_SPINE_LIMIT}")
-    values = tuple(events)
-    if not all(isinstance(event, AdventureEvent) for event in values):
+    raw_events = tuple(events)
+    if not all(isinstance(event, AdventureEvent) for event in raw_events):
         raise TypeError("replay spine events must be AdventureEvents")
-    ordered = tuple(sorted(values, key=lambda event: event.sequence))
-    if len({event.sequence for event in ordered}) != len(ordered):
+    if len({event.sequence for event in raw_events}) != len(raw_events):
         raise ValueError("replay spine event sequences must be unique")
+    values = tuple(
+        event for event in resolve_active_adventure_events(raw_events).active_events
+        if event.event_type != "retraction"
+    )
+    ordered = tuple(sorted(values, key=lambda event: event.sequence))
     if not ordered:
         return ()
 

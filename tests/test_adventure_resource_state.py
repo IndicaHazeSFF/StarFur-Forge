@@ -6,10 +6,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from pipeline.adventure_resources import AdventureResourceCatalog, AdventureResourceDefinition
+from pipeline.adventure_events import AdventureEvent
+from pipeline.adventure_mutation import AdventureEventEnvelope, AdventureMutation, MUTATION_RESOURCE_CHANGE
 from pipeline.adventure_resource_state import (
     AdventureResourceOperation,
     AdventureResourceState,
     AdventureResourceStateError,
+    derive_adventure_resource_facts,
+    derive_adventure_resource_state,
 )
 
 
@@ -94,6 +98,30 @@ class AdventureResourceStateTests(unittest.TestCase):
         values["fuel"] = 101
         with self.assertRaisesRegex(AdventureResourceStateError, "outside declared bounds"):
             AdventureResourceState.from_values(definitions, values)
+
+    def test_superseded_resource_event_remains_in_history_but_not_current_projection(self):
+        original = AdventureEvent.from_dict(AdventureEventEnvelope(
+            sequence=1, event_id="AE-000001", event_type="resource_change",
+            recorded_at="2026-08-22T00:00:00+00:00", summary="Fuel reserve is set.", details=None,
+            mutation=AdventureMutation(
+                MUTATION_RESOURCE_CHANGE, resource_id="fuel", resource_operation="set", resource_value=20,
+            ),
+        ).to_dict())
+        correction = AdventureEvent.from_dict(AdventureEventEnvelope(
+            sequence=2, event_id="AE-000002", event_type="resource_change",
+            recorded_at="2026-08-22T00:01:00+00:00", summary="Fuel reserve is corrected.", details=None,
+            supersedes_event_id="AE-000001",
+            mutation=AdventureMutation(
+                MUTATION_RESOURCE_CHANGE, resource_id="fuel", resource_operation="set", resource_value=40,
+            ),
+        ).to_dict())
+
+        state = derive_adventure_resource_state(catalog(), (original, correction))
+        facts = derive_adventure_resource_facts(catalog(), (original, correction))
+
+        self.assertEqual(40, state.value_for("fuel"))
+        self.assertEqual("AE-000002", next(fact for fact in facts if fact.resource_id == "fuel").source_event_id)
+        self.assertEqual(20, original.resource_value)
 
 
 if __name__ == "__main__":

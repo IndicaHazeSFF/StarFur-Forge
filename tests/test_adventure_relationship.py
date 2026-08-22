@@ -1,6 +1,7 @@
 import unittest
 
 from pipeline.adventure_events import AdventureEvent
+from pipeline.adventure_mutation import AdventureEventEnvelope, AdventureMutation, MUTATION_RELATIONSHIP_SET
 from pipeline.adventure_relationship import (
     derive_adventure_relationships,
     select_adventure_relationship_context,
@@ -53,6 +54,33 @@ class AdventureRelationshipTests(unittest.TestCase):
         self.assertNotIn("Character 12", [fact.subject for fact in select_adventure_relationship_context(facts)])
         self.assertEqual((facts[0],), select_adventure_relationship_context(facts, limit=1))
         self.assertEqual(13, len(facts))
+
+    def test_superseded_relationship_event_remains_in_history_but_not_current_projection(self):
+        original = AdventureEvent.from_dict(AdventureEventEnvelope(
+            sequence=1, event_id="AE-000001", event_type="relationship_change",
+            recorded_at="2026-08-21T00:00:00+00:00", summary="Vespera is guarded.", details=None,
+            mutation=AdventureMutation(
+                MUTATION_RELATIONSHIP_SET, relationship_subject="Vespera",
+                relationship_dimension="trust", relationship_value="guarded",
+            ),
+        ).to_dict())
+        correction = AdventureEvent.from_dict(AdventureEventEnvelope(
+            sequence=2, event_id="AE-000002", event_type="relationship_change",
+            recorded_at="2026-08-21T00:01:00+00:00", summary="Vespera is cautious.", details=None,
+            supersedes_event_id="AE-000001",
+            mutation=AdventureMutation(
+                MUTATION_RELATIONSHIP_SET, relationship_subject="Vespera",
+                relationship_dimension="trust", relationship_value="cautious",
+            ),
+        ).to_dict())
+
+        facts = derive_adventure_relationships((original, correction))
+
+        self.assertEqual(
+            [("Vespera", "trust", "cautious", "AE-000002")],
+            [(fact.subject, fact.dimension, fact.value, fact.source_event_id) for fact in facts],
+        )
+        self.assertEqual("guarded", original.relationship_value)
 
 
 if __name__ == "__main__":

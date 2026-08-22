@@ -1,6 +1,7 @@
 import unittest
 
 from pipeline.adventure_events import AdventureEvent
+from pipeline.adventure_mutation import AdventureEventEnvelope
 from pipeline.adventure_replay import select_replay_spine
 
 
@@ -46,6 +47,16 @@ class AdventureReplayTests(unittest.TestCase):
             select_replay_spine(("not an event",))
         with self.assertRaises(ValueError):
             select_replay_spine((event(1, "discovery"), event(1, "choice")))
+
+    def test_retracted_events_and_their_audit_records_do_not_reach_replay_context(self):
+        original = event(1, "discovery")
+        retraction = AdventureEvent.from_dict(AdventureEventEnvelope(
+            sequence=2, event_id="AE-000002", event_type="retraction",
+            recorded_at="2026-08-17T00:00:00+00:00", summary="Retracted AE-000001: test.", details=None,
+            supersedes_event_id="AE-000001",
+        ).to_dict())
+
+        self.assertEqual((), select_replay_spine((original, retraction)))
 
 
 if __name__ == "__main__":

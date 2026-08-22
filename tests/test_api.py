@@ -308,6 +308,32 @@ class APITests(unittest.TestCase):
         self.assertNotIn("observation_text", candidate["provenance"])
         self.assertEqual(self.session.calls, [])
 
+    def test_document_annotation_terminal_progress_is_opt_in_and_finishes_with_json(self):
+        status, raw = self.request("POST", f"{DOCUMENT_ANNOTATE_PATH}?stream=terminal", {
+            "filename": "notes.md",
+            "content": "Roger is testing document intake.",
+            "domain": "personal",
+        })
+        text = raw.decode("utf-8")
+
+        self.assertEqual(status, 200)
+        self.assertIn("\rStarFur annotation: [", text)
+        self.assertIn("1/1 chunks", text)
+        payload = json.loads(text.strip().splitlines()[-1])
+        self.assertEqual(payload["object"], "starfur.document.annotation")
+        self.assertEqual(payload["source"]["chunk_count"], 1)
+        self.assertEqual(len(payload["candidates"]), 1)
+        self.assertEqual(self.session.calls, [])
+
+    def test_document_annotation_rejects_unsupported_query_parameters(self):
+        status, raw = self.request("POST", f"{DOCUMENT_ANNOTATE_PATH}?stream=events", {
+            "filename": "notes.md",
+            "content": "Roger is testing document intake.",
+        })
+        self.assertEqual(status, 400)
+        self.assertEqual(json.loads(raw)["error"]["message"], "Unsupported query parameter.")
+        self.assertEqual(self.annotation_chunks, [])
+
     def test_document_candidate_handoff_requires_confirmation_and_writes_only_selected_server_candidate(self):
         status, raw = self.request("POST", DOCUMENT_ANNOTATE_PATH, {
             "filename": "notes.md",

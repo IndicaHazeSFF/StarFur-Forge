@@ -126,7 +126,12 @@ class AdventureSessionState:
         return type(self)(
             record=record,
             event_count=total,
-            context_events=select_replay_spine(events),
+            # Resource values have their own public/hidden projection below.
+            # Never let a free-form resource event summary leak a hidden value
+            # through the generic replay-spine channel.
+            context_events=select_replay_spine(
+                tuple(event for event in events if event.event_type != "resource_change"),
+            ),
             state_facts=state_facts,
             context_state_facts=select_adventure_state_context(state_facts),
             relationship_facts=relationship_facts,

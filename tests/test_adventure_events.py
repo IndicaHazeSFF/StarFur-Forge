@@ -12,6 +12,7 @@ from pipeline.adventure_mutation import AdventureEventEnvelope, AdventureMutatio
 from pipeline.adventure_registry import AdventureRegistry
 from pipeline.adventure_resources import AdventureResourceCatalog, AdventureResourceDefinition
 from pipeline.adventure_resource_state import derive_adventure_resource_state
+from pipeline.adventure_state import derive_adventure_state
 
 
 class AdventureEventLogTests(unittest.TestCase):
@@ -274,6 +275,91 @@ class AdventureEventLogTests(unittest.TestCase):
                     resource_id="fuel", resource_operation="decrement", resource_value=21,
                 )
             self.assertEqual(2, len(log.events()))
+
+    def test_explicit_correction_writer_appends_one_v2_active_replacement(self):
+        with tempfile.TemporaryDirectory() as directory:
+            _, _, log = self._log(directory)
+            original = log.append("state_change", "Set location to bridge.", state_key="location", state_value="bridge")
+
+            correction = log.append_correction(
+                original.event_id,
+                "Corrected location to engine room.",
+                AdventureMutation(MUTATION_STATE_SET, state_key="location", state_value="engine room"),
+            )
+
+            self.assertEqual(2, correction.schema_version)
+            self.assertEqual(original.event_id, correction.supersedes_event_id)
+            self.assertEqual(
+                [("location", "engine room", "AE-000002")],
+                [(fact.key, fact.value, fact.source_event_id) for fact in derive_adventure_state(log.events())],
+            )
+            with self.assertRaisesRegex(AdventureEventLogError, "not currently active"):
+                log.append_correction(
+                    original.event_id,
+                    "This must not fork the correction chain.",
+                    AdventureMutation(MUTATION_STATE_SET, state_key="location", state_value="deck"),
+                )
+            self.assertEqual(2, len(log.events()))
+
+    def test_explicit_retraction_removes_an_active_projection_without_deleting_history(self):
+        with tempfile.TemporaryDirectory() as directory:
+            _, _, log = self._log(directory)
+            original = log.append("state_change", "Set location to bridge.", state_key="location", state_value="bridge")
+
+            retraction = log.append_retraction(original.event_id, "The location came from an unreliable note.")
+
+            self.assertEqual("retraction", retraction.event_type)
+            self.assertEqual(2, retraction.schema_version)
+            self.assertEqual(original.event_id, retraction.supersedes_event_id)
+            self.assertEqual((), derive_adventure_state(log.events()))
+            self.assertEqual([original, retraction], log.events())
+            with self.assertRaisesRegex(AdventureEventLogError, "not currently active"):
+                log.append_retraction(original.event_id, "This must not fork the history.")
+            with self.assertRaisesRegex(AdventureEventLogError, "cannot be retracted"):
+                log.append_retraction(retraction.event_id, "This must not reactivate history.")
+            with self.assertRaisesRegex(AdventureEventLogError, "explicit Core retraction writer"):
+                log.append("retraction", "This is not an ordinary event.")
+
+    def test_checkpoint_names_one_verified_immutable_event_prefix(self):
+        with tempfile.TemporaryDirectory() as directory:
+            _, _, log = self._log(directory)
+            first = log.append("discovery", "The crew finds a brass key.")
+            checkpoint = log.create_checkpoint("Before the hatch")
+            log.append("choice", "The crew opens the hatch.")
+
+            self.assertEqual("CP-000001", checkpoint.checkpoint_id)
+            self.assertEqual("Before the hatch", checkpoint.label)
+            self.assertEqual(1, checkpoint.event_count)
+            self.assertEqual(first.event_id, checkpoint.last_event_id)
+            self.assertEqual((checkpoint,), log.checkpoints())
+            with self.assertRaisesRegex(AdventureEventLogError, "already exists"):
+                log.create_checkpoint("before the hatch")
+
+            # The earlier prefix remains verifiable after later append-only events.
+            self.assertEqual(checkpoint.event_fingerprint, log.checkpoints()[0].event_fingerprint)
+            inspected, prefix = log.checkpoint_events("CP-000001")
+            self.assertEqual(checkpoint, inspected)
+            self.assertEqual((first,), prefix)
+            self.assertEqual((checkpoint, prefix), log.checkpoint_events("Before the hatch"))
+
+    def test_verified_checkpoint_prefix_initializes_one_empty_child_log_without_copying_later_history(self):
+        with tempfile.TemporaryDirectory() as directory:
+            registry, parent, parent_log = self._log(directory)
+            first = parent_log.append("discovery", "The crew finds a brass key.")
+            checkpoint = parent_log.create_checkpoint("Established premise")
+            parent_log.append("choice", "The crew opens the hatch.")
+            _, prefix = parent_log.checkpoint_events(checkpoint.checkpoint_id)
+
+            child = registry.create("Forked Ember")
+            child_log = AdventureEventLog(registry, child)
+            initialized = child_log.initialize_from_verified_prefix(prefix)
+
+            self.assertEqual((first,), initialized)
+            self.assertEqual([first], child_log.events())
+            self.assertEqual("AE-000002", child_log.append("choice", "The child takes another route.").event_id)
+            self.assertEqual(2, len(parent_log.events()))
+            with self.assertRaisesRegex(AdventureEventLogError, "already exists"):
+                child_log.initialize_from_verified_prefix(prefix)
 
     def test_resource_event_is_rejected_when_the_workspace_declares_no_catalog(self):
         with tempfile.TemporaryDirectory() as directory:

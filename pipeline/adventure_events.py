@@ -11,12 +11,18 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
+import hashlib
 import json
 import os
 from pathlib import Path
 import re
 from typing import Callable, Iterator
 
+from pipeline.adventure_checkpoint import (
+    AdventureCheckpoint, AdventureCheckpointError, CHECKPOINT_FILENAME, CHECKPOINT_SCHEMA_VERSION,
+    normalize_checkpoint_label,
+)
+from pipeline.adventure_correction import AdventureCorrectionError, resolve_active_adventure_events
 from pipeline.adventure_mutation import AdventureEventEnvelope, AdventureMutation, AdventureMutationError
 from pipeline.adventure_registry import AdventureRecord, AdventureRegistry, AdventureRegistryError, MANIFEST_FILENAME
 from pipeline.adventure_resource_state import (
@@ -40,7 +46,9 @@ EVENT_TYPES = frozenset({
     "choice", "discovery", "promise", "lie", "relationship_change", "emotional_transition",
     "state_change", "unresolved_hook", "character_knowledge", "inventory_change", "location_change",
     "resource_change",
+    "retraction",
 })
+DRAFT_EVENT_TYPES = EVENT_TYPES - {"retraction"}
 _MAX_SUMMARY_LENGTH = 500
 _MAX_DETAILS_LENGTH = 4_000
 _MAX_STATE_VALUE_LENGTH = 500
@@ -174,7 +182,7 @@ class AdventureEvent:
         if self.schema_version == EVENT_LOG_SCHEMA_V2 and any(
             value is not None for value in (self.resource_id, self.resource_operation, self.resource_value)
         ):
-            raise AdventureEventLogError("schema-v2 resource events are not supported yet")
+            raise AdventureEventLogError("schema-v2 mutation fields must not be duplicated")
         if self.supersedes_event_id is not None:
             if not isinstance(self.supersedes_event_id, str) or not re.fullmatch(r"AE-[0-9]{6}", self.supersedes_event_id):
                 raise AdventureEventLogError("superseded event identifier is invalid")
@@ -254,17 +262,19 @@ class AdventureEvent:
             self.state_key, self.state_value,
             self.relationship_subject, self.relationship_dimension, self.relationship_value,
             self.knowledge_subject, self.knowledge_status, self.knowledge_fact,
+            self.resource_id, self.resource_operation, self.resource_value,
         )
         if any(value is not None for value in structured):
             raise AdventureEventLogError("schema-v2 mutation fields must not be duplicated")
         if self.mutation is None:
-            if self.event_type in {"state_change", "relationship_change", "character_knowledge"}:
+            if self.event_type in {"state_change", "relationship_change", "character_knowledge", "resource_change"}:
                 raise AdventureEventLogError("schema-v2 structured event requires a mutation")
             return
         expected_types = {
             "state_set": "state_change",
             "relationship_set": "relationship_change",
             "knowledge_set": "character_knowledge",
+            "resource_change": "resource_change",
         }
         if expected_types[self.mutation.kind] != self.event_type:
             raise AdventureEventLogError("schema-v2 mutation does not match event type")
@@ -279,6 +289,10 @@ class AdventureEvent:
             object.__setattr__(self, "knowledge_subject", self.mutation.knowledge_subject)
             object.__setattr__(self, "knowledge_status", self.mutation.knowledge_status)
             object.__setattr__(self, "knowledge_fact", self.mutation.knowledge_fact)
+        if self.mutation.kind == "resource_change":
+            object.__setattr__(self, "resource_id", self.mutation.resource_id)
+            object.__setattr__(self, "resource_operation", self.mutation.resource_operation)
+            object.__setattr__(self, "resource_value", self.mutation.resource_value)
 
     @classmethod
     def from_dict(cls, value: object) -> "AdventureEvent":
@@ -376,6 +390,8 @@ class AdventureEventDraft:
     def __post_init__(self) -> None:
         # Reuse the authoritative field validation while deliberately omitting
         # sequence/time, which belong to the eventual append operation.
+        if self.event_type == "retraction":
+            raise AdventureEventLogError("retraction events require the explicit Core retraction writer")
         validated = AdventureEvent(
             sequence=1, event_id="AE-000001", event_type=self.event_type, summary=self.summary,
             details=self.details, recorded_at="draft",
@@ -429,6 +445,11 @@ class AdventureEventLog:
         """The recoverable, fully-written replacement candidate for this log."""
         return self.path.with_suffix(".jsonl.pending")
 
+    @property
+    def checkpoint_path(self) -> Path:
+        """The small immutable-checkpoint registry tied to this event log."""
+        return self._workspace / CHECKPOINT_FILENAME
+
     def events(self) -> list[AdventureEvent]:
         """Return the validated log without creating files or derived state."""
         if not self.path.exists():
@@ -479,6 +500,171 @@ class AdventureEventLog:
             resource_id=resource_id, resource_operation=resource_operation, resource_value=resource_value,
         )
         return self.append_many((draft,), request_id=request_id)[0]
+
+    def append_correction(
+        self, target_event_id: object, summary: object, mutation: AdventureMutation,
+    ) -> AdventureEvent:
+        """Append one explicit schema-v2 replacement for one currently active event.
+
+        This is intentionally a one-record Core writer. It never infers a
+        correction from narration, never mutates the target record, and never
+        allows an already-superseded target to fork the active correction tip.
+        """
+        if not isinstance(target_event_id, str) or not re.fullmatch(r"AE-[0-9]{6}", target_event_id):
+            raise AdventureEventLogError("superseded event identifier is invalid")
+        if not isinstance(mutation, AdventureMutation):
+            raise AdventureEventLogError("event mutation is invalid")
+        with self._write_guard():
+            self._recover_pending_log()
+            existing = self.events()
+            self._reconcile_manifest_with_events(existing)
+            try:
+                activity = resolve_active_adventure_events(existing)
+            except AdventureCorrectionError as error:
+                raise AdventureEventLogError("adventure correction history is invalid") from error
+            target = next((event for event in existing if event.event_id == target_event_id), None)
+            if target is None:
+                raise AdventureEventLogError("superseded event was not found")
+            active_ids = {event.event_id for event in activity.active_events}
+            if target.event_id not in active_ids:
+                raise AdventureEventLogError("superseded event is not currently active")
+
+            event = AdventureEvent(
+                sequence=len(existing) + 1,
+                event_id=f"AE-{len(existing) + 1:06d}",
+                event_type=target.event_type,
+                summary=summary,
+                details=None,
+                recorded_at=self._now().astimezone(UTC).isoformat(),
+                supersedes_event_id=target.event_id,
+                mutation=mutation,
+                schema_version=EVENT_LOG_SCHEMA_V2,
+            )
+            self._validate_resource_events((*existing, event))
+            self._replace_log(existing, [event])
+            self._reconcile_manifest_with_events(existing + [event])
+            return event
+
+    def append_retraction(self, target_event_id: object, reason: object) -> AdventureEvent:
+        """Append one explicit v2 retraction for one currently active event.
+
+        A retraction makes the targeted fact inactive without rewriting its
+        history. Retraction records are Core-only audit events: they are not
+        ordinary drafts, cannot themselves be retracted, and carry no typed
+        mutation to accidentally substitute a new current value.
+        """
+        if not isinstance(target_event_id, str) or not re.fullmatch(r"AE-[0-9]{6}", target_event_id):
+            raise AdventureEventLogError("superseded event identifier is invalid")
+        normalized_reason = _required_text(reason, field="retraction reason", maximum=_MAX_SUMMARY_LENGTH, collapse=True)
+        with self._write_guard():
+            self._recover_pending_log()
+            existing = self.events()
+            self._reconcile_manifest_with_events(existing)
+            try:
+                activity = resolve_active_adventure_events(existing)
+            except AdventureCorrectionError as error:
+                raise AdventureEventLogError("adventure correction history is invalid") from error
+            target = next((event for event in existing if event.event_id == target_event_id), None)
+            if target is None:
+                raise AdventureEventLogError("superseded event was not found")
+            if target.event_type == "retraction":
+                raise AdventureEventLogError("a retraction event cannot be retracted")
+            active_ids = {event.event_id for event in activity.active_events}
+            if target.event_id not in active_ids:
+                raise AdventureEventLogError("superseded event is not currently active")
+
+            event = AdventureEvent(
+                sequence=len(existing) + 1,
+                event_id=f"AE-{len(existing) + 1:06d}",
+                event_type="retraction",
+                summary=f"Retracted {target.event_id}: {normalized_reason}",
+                details=None,
+                recorded_at=self._now().astimezone(UTC).isoformat(),
+                supersedes_event_id=target.event_id,
+                schema_version=EVENT_LOG_SCHEMA_V2,
+            )
+            self._validate_resource_events((*existing, event))
+            self._replace_log(existing, [event])
+            self._reconcile_manifest_with_events(existing + [event])
+            return event
+
+    def checkpoints(self) -> tuple[AdventureCheckpoint, ...]:
+        """Return validated checkpoint references without creating or changing one."""
+        events = self.events()
+        return self._read_checkpoints(events)
+
+    def create_checkpoint(self, label: object) -> AdventureCheckpoint:
+        """Name the current immutable event-log prefix under the event-log lock."""
+        try:
+            normalized_label = normalize_checkpoint_label(label)
+        except AdventureCheckpointError as error:
+            raise AdventureEventLogError(str(error)) from error
+        with self._write_guard():
+            self._recover_pending_log()
+            events = self.events()
+            self._reconcile_manifest_with_events(events)
+            checkpoints = self._read_checkpoints(events)
+            if any(item.label.casefold() == normalized_label.casefold() for item in checkpoints):
+                raise AdventureEventLogError("an adventure checkpoint with that label already exists")
+            event_count = len(events)
+            checkpoint = AdventureCheckpoint(
+                checkpoint_id=f"CP-{len(checkpoints) + 1:06d}",
+                label=normalized_label,
+                event_count=event_count,
+                last_event_id=None if event_count == 0 else events[-1].event_id,
+                event_fingerprint=self._event_prefix_fingerprint(events),
+                created_at=self._now().astimezone(UTC).isoformat(),
+            )
+            self._write_checkpoints((*checkpoints, checkpoint))
+            return checkpoint
+
+    def checkpoint_events(self, identifier: object) -> tuple[AdventureCheckpoint, tuple[AdventureEvent, ...]]:
+        """Resolve one exact checkpoint and its still-verified event prefix.
+
+        This is intentionally read-only. A later restore/fork subsystem may
+        consume this verified prefix, but no checkpoint operation changes the
+        mounted session, event history, or current branch in this slice.
+        """
+        if not isinstance(identifier, str) or not identifier.strip():
+            raise AdventureEventLogError("checkpoint identifier or label is required")
+        events = self.events()
+        checkpoints = self._read_checkpoints(events)
+        normalized = identifier.strip()
+        matches = [
+            item for item in checkpoints
+            if item.checkpoint_id.casefold() == normalized.casefold() or item.label.casefold() == normalized.casefold()
+        ]
+        if not matches:
+            raise AdventureEventLogError("adventure checkpoint was not found")
+        if len(matches) != 1:  # Defensive: _read_checkpoints rejects duplicate labels/IDs.
+            raise AdventureEventLogError("adventure checkpoint identifier is ambiguous")
+        checkpoint = matches[0]
+        return checkpoint, tuple(events[:checkpoint.event_count])
+
+    def initialize_from_verified_prefix(self, events: object) -> tuple[AdventureEvent, ...]:
+        """Initialize an empty child log from one already-validated checkpoint prefix.
+
+        The source prefix must already have been verified by ``checkpoint_events``.
+        This destination-only operation preserves event IDs/sequences as a shared
+        history prefix, never copies checkpoint files, and rejects any existing
+        child log rather than merging unrelated histories.
+        """
+        if not isinstance(events, (list, tuple)) or not all(isinstance(event, AdventureEvent) for event in events):
+            raise TypeError("verified adventure event prefix must contain adventure events")
+        prefix = list(events)
+        if [event.sequence for event in prefix] != list(range(1, len(prefix) + 1)):
+            raise AdventureEventLogError("verified adventure event prefix sequence is invalid")
+        if [event.event_id for event in prefix] != [f"AE-{index:06d}" for index in range(1, len(prefix) + 1)]:
+            raise AdventureEventLogError("verified adventure event prefix identifiers are invalid")
+        with self._write_guard():
+            self._recover_pending_log()
+            if self.path.exists():
+                raise AdventureEventLogError("destination adventure event log already exists")
+            self._validate_resource_events(prefix)
+            if prefix:
+                self._replace_log([], prefix)
+            self._reconcile_manifest_with_events(prefix)
+        return tuple(prefix)
 
     def append_many(self, drafts: object, *, request_id: object = None) -> list[AdventureEvent]:
         """Atomically append a bounded already-validated batch of drafts."""
@@ -607,6 +793,54 @@ class AdventureEventLog:
         except (AdventureRegistryError, AdventureResourceStateError) as error:
             raise AdventureEventLogError("resource event is invalid for this adventure catalog") from error
 
+    @staticmethod
+    def _event_prefix_fingerprint(events: list[AdventureEvent] | tuple[AdventureEvent, ...]) -> str:
+        serialized = "\n".join(
+            json.dumps(event.to_dict(), sort_keys=True, separators=(",", ":")) for event in events
+        ).encode("utf-8")
+        return hashlib.sha256(serialized).hexdigest()
+
+    def _read_checkpoints(self, events: list[AdventureEvent]) -> tuple[AdventureCheckpoint, ...]:
+        if not self.checkpoint_path.exists():
+            return ()
+        try:
+            raw = json.loads(self.checkpoint_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise AdventureEventLogError("adventure checkpoints cannot be read") from error
+        if not isinstance(raw, dict) or raw.get("schema_version") != CHECKPOINT_SCHEMA_VERSION:
+            raise AdventureEventLogError("adventure checkpoint schema is unsupported")
+        values = raw.get("checkpoints")
+        if not isinstance(values, list):
+            raise AdventureEventLogError("adventure checkpoints are invalid")
+        try:
+            checkpoints = tuple(AdventureCheckpoint.from_dict(value) for value in values)
+        except AdventureCheckpointError as error:
+            raise AdventureEventLogError("adventure checkpoints are invalid") from error
+        if len({item.checkpoint_id for item in checkpoints}) != len(checkpoints):
+            raise AdventureEventLogError("adventure checkpoints have duplicate identifiers")
+        if len({item.label.casefold() for item in checkpoints}) != len(checkpoints):
+            raise AdventureEventLogError("adventure checkpoints have duplicate labels")
+        for index, checkpoint in enumerate(checkpoints, start=1):
+            if checkpoint.checkpoint_id != f"CP-{index:06d}":
+                raise AdventureEventLogError("adventure checkpoint sequence is invalid")
+            if checkpoint.event_count > len(events):
+                raise AdventureEventLogError("adventure checkpoint exceeds authoritative event history")
+            if checkpoint.event_fingerprint != self._event_prefix_fingerprint(events[:checkpoint.event_count]):
+                raise AdventureEventLogError("adventure checkpoint does not match authoritative event history")
+        return checkpoints
+
+    def _write_checkpoints(self, checkpoints: tuple[AdventureCheckpoint, ...]) -> None:
+        value = {"schema_version": CHECKPOINT_SCHEMA_VERSION, "checkpoints": [item.to_dict() for item in checkpoints]}
+        temporary = self.checkpoint_path.with_suffix(".json.tmp")
+        try:
+            with temporary.open("w", encoding="utf-8", newline="\n") as handle:
+                handle.write(json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, self.checkpoint_path)
+        except OSError as error:
+            raise AdventureEventLogError("adventure checkpoints cannot be written") from error
+
     def _replace_log(self, existing: list[AdventureEvent], events: list[AdventureEvent]) -> None:
         try:
             existing_text = self.path.read_text(encoding="utf-8") if existing else ""
@@ -690,7 +924,7 @@ class AdventureEventLog:
 
 
 __all__ = [
-    "AdventureEvent", "AdventureEventDraft", "AdventureEventLog", "AdventureEventLogError", "EVENT_LOG_FILENAME",
+    "AdventureEvent", "AdventureEventDraft", "AdventureEventLog", "AdventureEventLogError", "DRAFT_EVENT_TYPES", "EVENT_LOG_FILENAME",
     "EVENT_WRITE_LOCK_FILENAME",
     "EVENT_LOG_SCHEMA_VERSION", "EVENT_LOG_SCHEMA_V2", "EVENT_SOURCE_CORE_EXPLICIT", "EVENT_TYPES", "KNOWLEDGE_STATUSES",
     "SUPPORTED_EVENT_LOG_SCHEMA_VERSIONS",

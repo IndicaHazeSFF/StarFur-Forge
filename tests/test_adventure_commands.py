@@ -2,6 +2,7 @@ import sys
 import tempfile
 import types
 import unittest
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -10,7 +11,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.modules.setdefault("ollama", types.ModuleType("ollama"))
 
 from pipeline.adventure_registry import AdventureRegistry
-from pipeline.adventure_events import AdventureEventLog
+from pipeline.adventure_events import AdventureEvent, AdventureEventLog
+from pipeline.adventure_mutation import AdventureEventEnvelope, AdventureMutation, MUTATION_STATE_SET
 from pipeline.adventure_resources import AdventureResourceCatalog, AdventureResourceDefinition
 from pipeline.assistant import AssistantSession
 from pipeline.command_help import detect_command_help
@@ -132,6 +134,38 @@ class AdventureCommandTests(unittest.TestCase):
                 session.context_stats(),
             )
 
+    def test_correction_audit_is_read_only_and_reports_active_and_superseded_history(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(directory, calls)
+            session.respond("adventure create Quiet Ember")
+            session.respond("adventure load Quiet Ember")
+            record = session.adventure_session.record
+            log = AdventureEventLog(session.adventure_registry, record)
+            original = AdventureEvent.from_dict(AdventureEventEnvelope(
+                sequence=1, event_id="AE-000001", event_type="state_change",
+                recorded_at="2026-08-22T00:00:00+00:00", summary="The crew reaches the bridge.", details=None,
+                mutation=AdventureMutation(MUTATION_STATE_SET, state_key="location", state_value="bridge"),
+            ).to_dict())
+            correction = AdventureEvent.from_dict(AdventureEventEnvelope(
+                sequence=2, event_id="AE-000002", event_type="state_change",
+                recorded_at="2026-08-22T00:01:00+00:00", summary="The crew reaches the engine room.", details=None,
+                supersedes_event_id="AE-000001",
+                mutation=AdventureMutation(MUTATION_STATE_SET, state_key="location", state_value="engine room"),
+            ).to_dict())
+            log.path.write_text(
+                "\n".join(json.dumps(event.to_dict()) for event in (original, correction)) + "\n",
+                encoding="utf-8",
+            )
+
+            inspection = session.respond("adventure corrections")
+
+            self.assertIn("AE-000001 [state_change] superseded by AE-000002", inspection)
+            self.assertIn("AE-000002 [state_change] active", inspection)
+            self.assertEqual(2, len(log.events()))
+            self.assertEqual([], calls)
+            self.assertEqual([], session.messages)
+
     def test_explicit_record_isolated_and_ordinary_chat_never_creates_events(self):
         with tempfile.TemporaryDirectory() as directory:
             calls = []
@@ -179,6 +213,44 @@ class AdventureCommandTests(unittest.TestCase):
             self.assertFalse(session.roleplay_state.active)
             self.assertEqual("No active adventure or roleplay session is running.", session.respond("adventure end"))
 
+    def test_begin_binds_one_existing_workspace_to_roleplay_without_writing_events(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(directory, calls)
+            session.respond("adventure create Quiet Ember")
+            record = session.adventure_registry.resolve_title("Quiet Ember")
+            self.assertEqual([], AdventureEventLog(session.adventure_registry, record).events())
+
+            started = session.respond("adventure begin Quiet Ember")
+
+            self.assertIn("Adventure story session started: Quiet Ember.", started)
+            self.assertTrue(session.adventure_session.active)
+            self.assertTrue(session.roleplay_state.active)
+            self.assertEqual("Quiet Ember", session.roleplay_state.title)
+            self.assertEqual([], AdventureEventLog(session.adventure_registry, record).events())
+            self.assertIn("loaded adventure: Quiet Ember", session.respond("roleplay status"))
+            self.assertEqual("Usage: adventure begin <title>", session.respond("adventure begin"))
+            self.assertEqual([], calls)
+
+    def test_session_status_reports_only_the_current_lifecycle_binding(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(directory, calls)
+
+            unbound = session.respond("adventure session")
+
+            self.assertIn("Workspace: none loaded", unbound)
+            self.assertIn("Persona:", unbound)
+            self.assertIn("Roleplay: inactive", unbound)
+            session.respond("adventure create Quiet Ember")
+            session.respond("adventure begin Quiet Ember")
+            bound = session.respond("adventure session status")
+            self.assertIn("Workspace: Quiet Ember", bound)
+            self.assertIn("Roleplay: active (Quiet Ember)", bound)
+            self.assertIn("Branch: root workspace", bound)
+            self.assertNotIn("static identity", bound.casefold())
+            self.assertEqual([], calls)
+
     def test_explicit_story_state_is_event_backed_and_refreshed_in_context(self):
         with tempfile.TemporaryDirectory() as directory:
             calls = []
@@ -200,6 +272,113 @@ class AdventureCommandTests(unittest.TestCase):
             self.assertIn("location: engine room", prompt)
             self.assertNotIn("location: bridge\n", prompt)
             self.assertIn("1 authoritative state fact(s), 1 selected for context", session.context_stats())
+
+    def test_explicit_state_correction_replaces_current_projection_without_deleting_history(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(directory, calls)
+            session.respond("adventure create Quiet Ember")
+            session.respond("adventure load Quiet Ember")
+            session.respond("adventure state set location: bridge")
+
+            corrected = session.respond("adventure correct state AE-000001 location: engine room")
+
+            self.assertIn("Corrected adventure state with AE-000002, superseding AE-000001.", corrected)
+            self.assertIn("location: engine room (AE-000002)", session.respond("adventure state"))
+            audit = session.respond("adventure corrections")
+            self.assertIn("AE-000001 [state_change] superseded by AE-000002", audit)
+            self.assertIn("AE-000002 [state_change] active", audit)
+            self.assertIn("not currently active", session.respond("adventure correct state AE-000001 location: deck"))
+            self.assertEqual([], calls)
+
+    def test_explicit_retraction_removes_current_projection_without_deleting_history(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(directory, calls)
+            session.respond("adventure create Quiet Ember")
+            session.respond("adventure load Quiet Ember")
+            session.respond("adventure state set location: bridge")
+
+            retracted = session.respond("adventure retract AE-000001: Incorrect source note")
+
+            self.assertEqual("Retracted adventure event AE-000001 with AE-000002.", retracted)
+            self.assertEqual(
+                "No explicit authoritative story state is recorded for the loaded workspace.",
+                session.respond("adventure state"),
+            )
+            audit = session.respond("adventure corrections")
+            self.assertIn("AE-000001 [state_change] retracted by AE-000002", audit)
+            self.assertIn("AE-000002 [retraction] active", audit)
+            self.assertIn("not currently active", session.respond("adventure retract AE-000001: Retry"))
+            self.assertIn("require `adventure retract", session.respond("adventure record retraction: no"))
+            self.assertEqual([], calls)
+
+    def test_checkpoint_commands_create_and_inspect_an_immutable_event_prefix(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(directory, calls)
+            session.respond("adventure create Quiet Ember")
+            session.respond("adventure load Quiet Ember")
+            session.respond("adventure record discovery: The crew finds a brass key.")
+
+            created = session.respond("adventure checkpoint Before the hatch")
+
+            self.assertIn("Created adventure checkpoint CP-000001: Before the hatch", created)
+            listed = session.respond("adventure checkpoints")
+            self.assertIn("CP-000001 Before the hatch (1 authoritative event(s); AE-000001)", listed)
+            inspected = session.respond("adventure checkpoint inspect CP-000001")
+            self.assertIn("Adventure checkpoint CP-000001: Before the hatch", inspected)
+            self.assertIn("Authoritative prefix: 1 event(s); AE-000001.", inspected)
+            self.assertIn("no session state, event history, restore, or branch changed", inspected)
+            self.assertIn("already exists", session.respond("adventure checkpoint before the hatch"))
+            self.assertEqual([], calls)
+
+    def test_fresh_restart_creates_and_mounts_an_isolated_workspace_without_deleting_the_previous_one(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(directory, calls)
+            session.respond("adventure create Quiet Ember")
+            session.respond("adventure load Quiet Ember")
+            session.respond("adventure record discovery: The old story remains here.")
+            session.respond("roleplay begin")
+
+            restarted = session.respond("adventure restart fresh New Ember")
+
+            self.assertIn("Fresh adventure started: New Ember.", restarted)
+            self.assertIn("Previous adventure preserved: Quiet Ember.", restarted)
+            self.assertFalse(session.roleplay_state.active)
+            self.assertIn("New Ember", session.respond("adventure status"))
+            self.assertEqual(
+                "No authoritative adventure events are recorded for the loaded workspace.",
+                session.respond("adventure events"),
+            )
+            session.respond("adventure load Quiet Ember")
+            self.assertIn("old story remains", session.respond("adventure events"))
+            self.assertEqual([], calls)
+
+    def test_established_restart_forks_only_the_verified_checkpoint_prefix(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(directory, calls)
+            session.respond("adventure create Quiet Ember")
+            session.respond("adventure load Quiet Ember")
+            session.respond("adventure record discovery: The crew finds a brass key.")
+            session.respond("adventure checkpoint Before the hatch")
+            session.respond("adventure record choice: The parent opens the hatch.")
+            session.respond("roleplay begin")
+
+            restarted = session.respond("adventure restart established CP-000001: Forked Ember")
+
+            self.assertIn("Established-premise adventure started: Forked Ember.", restarted)
+            self.assertIn("copied 1 authoritative event(s)", restarted)
+            self.assertFalse(session.roleplay_state.active)
+            self.assertIn("brass key", session.respond("adventure events"))
+            self.assertNotIn("parent opens", session.respond("adventure events"))
+            self.assertIn("Branch origin:", session.respond("adventure inspect Forked Ember"))
+            session.respond("adventure load Quiet Ember")
+            self.assertIn("parent opens", session.respond("adventure events"))
+            self.assertIn("Usage:", session.respond("adventure restart established CP-000001"))
+            self.assertEqual([], calls)
 
     def test_mounted_resources_keep_complete_values_but_only_public_values_reach_core_context(self):
         with tempfile.TemporaryDirectory() as directory:

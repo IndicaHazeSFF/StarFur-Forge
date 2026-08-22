@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from pipeline.adventure_events import AdventureEventDraft, normalize_event_request_id
 from pipeline.adventure_mutation import AdventureMutation
+from pipeline.adventure_resource_state import AdventureResourceOperation
 from pipeline.adventure_registry import AdventureRecord
 
 
@@ -106,6 +107,27 @@ class AdventureTurnTransaction:
             mutations=(*self.mutations, mutation),
             request_id=self.request_id,
         )
+
+    def stage_resource(
+        self, operation: AdventureResourceOperation, *, summary: object, details: object = None,
+    ) -> "AdventureTurnTransaction":
+        """Stage one already catalog-validated generic resource operation.
+
+        Resource mutations deliberately stay schema-v1 event drafts in this
+        initial slice.  They are not an ``AdventureMutation`` because the
+        schema-v2 envelope has no resource representation yet.
+        """
+        if not self.active:
+            raise ValueError("no adventure turn is active")
+        if not isinstance(operation, AdventureResourceOperation):
+            raise TypeError("staged value must be an AdventureResourceOperation")
+        draft = AdventureEventDraft(
+            "resource_change", summary, details=details,
+            resource_id=operation.resource_id,
+            resource_operation=operation.operation,
+            resource_value=operation.value,
+        )
+        return self.stage(draft)
 
     def abort(self) -> "AdventureTurnTransaction":
         return type(self).inactive()

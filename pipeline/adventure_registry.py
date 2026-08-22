@@ -23,8 +23,11 @@ ADVENTURE_SCHEMA_VERSION = 1
 REGISTRY_FILENAME = "registry.json"
 MANIFEST_FILENAME = "manifest.json"
 RESOURCE_CATALOG_MANIFEST_KEY = "resource_catalog"
+BRANCH_ORIGIN_MANIFEST_KEY = "branch_origin"
 _MAX_TITLE_LENGTH = 120
 _ID_PATTERN = re.compile(r"^[a-z][a-z0-9-]{0,95}$")
+_CHECKPOINT_ID_PATTERN = re.compile(r"^CP-[0-9]{6}$")
+_FINGERPRINT_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 
 class AdventureRegistryError(ValueError):
@@ -223,6 +226,70 @@ class AdventureRegistry:
         self._write_json(workspace / MANIFEST_FILENAME, manifest)
         return catalog
 
+    def configure_branch_origin(
+        self, record: AdventureRecord, *, parent_adventure_id: object,
+        parent_checkpoint_id: object, parent_event_count: object,
+        parent_event_fingerprint: object,
+    ) -> dict[str, object]:
+        """Record one immutable provenance link for a checkpoint-derived workspace.
+
+        This records lineage only.  It never grants the child access to the
+        parent workspace, and it deliberately does not copy a parent's
+        checkpoints or later event history.
+        """
+        origin = self._validated_branch_origin(
+            record, parent_adventure_id, parent_checkpoint_id,
+            parent_event_count, parent_event_fingerprint,
+        )
+        manifest = self._read_workspace_manifest(record)
+        existing = manifest.get(BRANCH_ORIGIN_MANIFEST_KEY)
+        if existing is not None:
+            if existing != origin:
+                raise AdventureRegistryError("adventure branch origin is already configured")
+            return origin
+        manifest[BRANCH_ORIGIN_MANIFEST_KEY] = origin
+        self._write_json(self.workspace_path(record.adventure_id) / MANIFEST_FILENAME, manifest)
+        return origin
+
+    def branch_origin(self, record: AdventureRecord) -> dict[str, object] | None:
+        """Return validated immutable lineage metadata, if this workspace has it."""
+        manifest = self._read_workspace_manifest(record)
+        value = manifest.get(BRANCH_ORIGIN_MANIFEST_KEY)
+        if value is None:
+            return None
+        if not isinstance(value, dict):
+            raise AdventureRegistryError("adventure branch origin is invalid")
+        try:
+            return self._validated_branch_origin(
+                record, value["parent_adventure_id"], value["parent_checkpoint_id"],
+                value["parent_event_count"], value["parent_event_fingerprint"],
+            )
+        except KeyError as error:
+            raise AdventureRegistryError("adventure branch origin is invalid") from error
+
+    @staticmethod
+    def _validated_branch_origin(
+        record: AdventureRecord, parent_adventure_id: object,
+        parent_checkpoint_id: object, parent_event_count: object,
+        parent_event_fingerprint: object,
+    ) -> dict[str, object]:
+        if not isinstance(parent_adventure_id, str) or not _ID_PATTERN.fullmatch(parent_adventure_id):
+            raise AdventureRegistryError("parent adventure identifier is invalid")
+        if parent_adventure_id == record.adventure_id:
+            raise AdventureRegistryError("an adventure cannot branch from itself")
+        if not isinstance(parent_checkpoint_id, str) or not _CHECKPOINT_ID_PATTERN.fullmatch(parent_checkpoint_id):
+            raise AdventureRegistryError("parent checkpoint identifier is invalid")
+        if not isinstance(parent_event_count, int) or isinstance(parent_event_count, bool) or parent_event_count < 0:
+            raise AdventureRegistryError("parent event count is invalid")
+        if not isinstance(parent_event_fingerprint, str) or not _FINGERPRINT_PATTERN.fullmatch(parent_event_fingerprint):
+            raise AdventureRegistryError("parent event fingerprint is invalid")
+        return {
+            "parent_adventure_id": parent_adventure_id,
+            "parent_checkpoint_id": parent_checkpoint_id,
+            "parent_event_count": parent_event_count,
+            "parent_event_fingerprint": parent_event_fingerprint,
+        }
+
     def _read_workspace_manifest(self, record: AdventureRecord) -> dict[str, object]:
         if not isinstance(record, AdventureRecord):
             raise TypeError("adventure record must be an AdventureRecord")
@@ -255,5 +322,5 @@ class AdventureRegistry:
 __all__ = [
     "ADVENTURE_SCHEMA_VERSION", "AdventureAmbiguousError", "AdventureNotFoundError",
     "AdventureRecord", "AdventureRegistry", "AdventureRegistryError", "MANIFEST_FILENAME",
-    "REGISTRY_FILENAME", "REGISTRY_SCHEMA_VERSION", "RESOURCE_CATALOG_MANIFEST_KEY", "normalize_adventure_title",
+    "BRANCH_ORIGIN_MANIFEST_KEY", "REGISTRY_FILENAME", "REGISTRY_SCHEMA_VERSION", "RESOURCE_CATALOG_MANIFEST_KEY", "normalize_adventure_title",
 ]
