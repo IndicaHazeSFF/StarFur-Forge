@@ -412,6 +412,13 @@ Prepare or inspect isolated CYOA workspace metadata with exact Core commands:
     adventure session
     adventure status
     adventure events
+    adventure imports
+    adventure import inspect <AI-######>
+    adventure import map <AI-######> <C-###> <premise|state|relationship|knowledge|resource|exclude>
+    adventure import mappings <AI-######>
+    adventure import commit premise <AI-######> <C-###>
+    adventure transcript
+    adventure transcript record <user|narrator>: <text>
     adventure checkpoint <label>
     adventure checkpoints
     adventure checkpoint inspect <checkpoint-id|label>
@@ -461,6 +468,22 @@ catalog, records its parent/checkpoint origin, and excludes later parent history
 parent checkpoints, recent conversation, and roleplay context. It is not a restore,
 rewind, or mutation of the source workspace.
 `adventure events` displays those bounded stored summaries without a model call.
+`adventure imports` lists reviewed document selections staged for the loaded
+workspace, and `adventure import inspect` displays one selected candidate set.
+They are read-only source-review controls: staged imports do not establish
+events, state, replay facts, or memories.
+`adventure import map` records an explicit user-authored destination plan for
+one staged candidate. `adventure import mappings` inspects the latest plan.
+Mappings are not commits: they create no event, state, replay fact, or memory.
+`adventure import commit premise` is the initial narrow canonical bridge: it
+requires that exact candidate's current mapping to be `premise`, then records
+one auditable `premise` event using the reviewed candidate summary/details.
+It is idempotent for the same mapping. State, relationship, knowledge, and
+resource mappings remain plans only until their separate typed commit paths exist.
+`adventure transcript` displays optional presentation history kept separately from
+authoritative events. `adventure transcript record` explicitly stores one bounded
+user or narrator line; it never creates story state, replay facts, memories, or a
+model request.
 `adventure checkpoint <label>` creates a named immutable reference to the current
 authoritative event-log prefix; `adventure checkpoints` lists those references; and
 `adventure checkpoint inspect <checkpoint-id|label>` recomputes the verified prefix's

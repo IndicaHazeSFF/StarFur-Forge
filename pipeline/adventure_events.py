@@ -43,7 +43,7 @@ EVENT_LOG_FILENAME = "events.jsonl"
 EVENT_WRITE_LOCK_FILENAME = ".events.write.lock"
 EVENT_SOURCE_CORE_EXPLICIT = "core_explicit"
 EVENT_TYPES = frozenset({
-    "choice", "discovery", "promise", "lie", "relationship_change", "emotional_transition",
+    "premise", "choice", "discovery", "promise", "lie", "relationship_change", "emotional_transition",
     "state_change", "unresolved_hook", "character_knowledge", "inventory_change", "location_change",
     "resource_change",
     "retraction",

@@ -14,8 +14,10 @@ from pipeline.adventure_registry import AdventureRegistry
 from pipeline.adventure_events import AdventureEvent, AdventureEventLog
 from pipeline.adventure_mutation import AdventureEventEnvelope, AdventureMutation, MUTATION_STATE_SET
 from pipeline.adventure_resources import AdventureResourceCatalog, AdventureResourceDefinition
+from pipeline.adventure_import import AdventureImportLog
 from pipeline.assistant import AssistantSession
 from pipeline.command_help import detect_command_help
+from pipeline.document_intake import extract_document_memory_candidates, prepare_document_text
 
 
 class AdventureCommandTests(unittest.TestCase):
@@ -578,6 +580,73 @@ class AdventureCommandTests(unittest.TestCase):
             self.assertIn("Vespera uncertain: the hatch is trapped", prompt)
             self.assertIn("not automatically objective world truth", prompt)
             self.assertIn("1 authoritative character-knowledge fact(s), 1 selected for context", session.context_stats())
+
+    def test_transcript_commands_do_not_create_story_events_or_call_a_model(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(directory, calls)
+            session.respond("adventure create Quiet Ember")
+            session.respond("adventure load Quiet Ember")
+
+            self.assertEqual(
+                "No presentation transcript is recorded for the loaded workspace.",
+                session.respond("adventure transcript"),
+            )
+            recorded = session.respond(
+                "adventure transcript record narrator: The brass hatch groans but stays sealed."
+            )
+            self.assertIn("AT-000001 [narrator]", recorded)
+            transcript = session.respond("adventure transcript")
+            self.assertIn("AT-000001 [narrator] The brass hatch groans but stays sealed.", transcript)
+            self.assertIn("do not establish adventure events or state", transcript)
+            self.assertEqual(
+                "No authoritative adventure events are recorded for the loaded workspace.",
+                session.respond("adventure events"),
+            )
+            self.assertEqual(
+                "Usage: adventure transcript record <user|narrator>: <text>",
+                session.respond("adventure transcript record narrator"),
+            )
+            self.assertEqual([], calls)
+            self.assertEqual([], session.proposals)
+
+    def test_staged_import_commands_are_read_only_and_never_create_story_events(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(directory, calls)
+            session.respond("adventure create Quiet Ember")
+            session.respond("adventure load Quiet Ember")
+            document = prepare_document_text("# Story\n\nVespera guards the brass hatch.", "story.md", domain="personal")
+            candidate = extract_document_memory_candidates(document, lambda _chunk: {"proposals": [{
+                "store": True, "subject": "Vespera", "memory_type": "project_context",
+                "summary": "Vespera guards the brass hatch", "details": "Vespera guards the brass hatch.",
+                "importance": 0.8, "confidence": 0.9, "retention": "long_term",
+            }]})[0]
+            AdventureImportLog(session.adventure_registry, session.adventure_session.record).stage(
+                review_id="DR-reviewed", document=document, selected=(("C-001", candidate),),
+            )
+
+            listing = session.respond("adventure imports")
+            self.assertIn("AI-000001 story.md [assistant_note] (1 candidate(s))", listing)
+            self.assertIn("not authoritative adventure events or state", listing)
+            inspection = session.respond("adventure import inspect AI-000001")
+            self.assertIn("Adventure import AI-000001", inspection)
+            self.assertIn("C-001 [project_context] Vespera guards the brass hatch", inspection)
+            self.assertIn("not adventure events, state, replay facts, or memories", inspection)
+            self.assertEqual("Adventure import not found.", session.respond("adventure import inspect AI-999999"))
+            mapped = session.respond("adventure import map AI-000001 C-001 premise")
+            self.assertIn("Mapped AI-000001 C-001 to premise", mapped)
+            self.assertIn(
+                "C-001 -> premise (IM-000001)",
+                session.respond("adventure import mappings AI-000001"),
+            )
+            self.assertEqual(
+                "Usage: adventure import map <AI-######> <C-###> <premise|state|relationship|knowledge|resource|exclude>",
+                session.respond("adventure import map AI-000001 C-001"),
+            )
+            self.assertEqual("No authoritative adventure events are recorded for the loaded workspace.", session.respond("adventure events"))
+            self.assertEqual([], calls)
+            self.assertEqual([], session.proposals)
 
     def test_explicit_adventure_turn_staging_commits_or_aborts_as_one_batch(self):
         with tempfile.TemporaryDirectory() as directory:

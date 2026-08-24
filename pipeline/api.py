@@ -15,6 +15,8 @@ from typing import Callable
 from urllib.parse import parse_qs, urlsplit
 
 from pipeline.assistant import GenerationInterrupted
+from pipeline.adventure_import import AdventureImportError, AdventureImportLog
+from pipeline.adventure_registry import AdventureNotFoundError, AdventureRegistry
 from pipeline.application import AssistantApplication, create_assistant_application
 from pipeline.document_review import (
     DEFAULT_REVIEW_TTL_SECONDS,
@@ -45,6 +47,7 @@ DOCUMENT_ANNOTATE_PATH = "/v1/starfur/documents/annotate"
 DOCUMENT_REVIEW_PATH = "/v1/starfur/documents/review"
 DOCUMENT_REVIEWS_PATH = "/v1/starfur/documents/reviews"
 DOCUMENT_CONTEXT_PATH = "/v1/starfur/documents/context"
+DOCUMENT_ADVENTURE_IMPORT_PATH = "/v1/starfur/documents/adventure-import"
 PERSONA_RUNTIME_PATH = "/v1/starfur/persona-runtime"
 MAX_DOCUMENT_REQUEST_BYTES = DEFAULT_MAX_DOCUMENT_BYTES * 6 + 64 * 1024
 
@@ -88,7 +91,7 @@ def _conversation_id_from_request(payload, header_value=None):
 class StarFurAPI:
     """OpenAI-compatible request adapter over a shared application facade."""
 
-    def __init__(self, application_or_session, *, api_key=None, model_id=API_MODEL_ID, document_annotator=None, document_review_store=None):
+    def __init__(self, application_or_session, *, api_key=None, model_id=API_MODEL_ID, document_annotator=None, document_review_store=None, adventure_registry=None):
         self.application = (
             application_or_session
             if isinstance(application_or_session, AssistantApplication)
@@ -102,6 +105,10 @@ class StarFurAPI:
         self.document_annotator = document_annotator
         review_ttl_seconds = getattr(self.session.config, "document_review_ttl_seconds", DEFAULT_REVIEW_TTL_SECONDS)
         self.document_review_store = document_review_store or DocumentReviewStore(ttl_seconds=review_ttl_seconds)
+        registry = adventure_registry or getattr(self.session, "adventure_registry", None)
+        if registry is not None and not isinstance(registry, AdventureRegistry):
+            raise TypeError("adventure_registry must be an AdventureRegistry or None.")
+        self.adventure_registry = registry
 
     def authenticate(self, headers):
         if not self.api_key:
@@ -294,6 +301,44 @@ class StarFurAPI:
             "review_id": payload["review_id"],
             "count": len(handoffs),
             "handoffs": handoffs,
+        }
+
+    def stage_document_adventure_import(self, payload):
+        """Stage selected review candidates under one exact target adventure.
+
+        This is deliberately an import-audit seam, not a bridge into the
+        authoritative event log. A later typed policy must review and commit
+        any continuity consequences separately.
+        """
+        if not isinstance(payload, dict):
+            raise ValueError("Request body must be a JSON object.")
+        allowed = {"review_id", "candidate_ids", "adventure_title", "confirm"}
+        unknown = set(payload) - allowed
+        if unknown:
+            raise ValueError(f"Unknown adventure-import field(s): {sorted(unknown)}")
+        if payload.get("confirm") != "stage reviewed adventure import":
+            raise ValueError("Adventure import handoff requires confirm='stage reviewed adventure import'.")
+        if self.adventure_registry is None:
+            raise RuntimeError("Adventure import staging is unavailable for this API session.")
+        title = payload.get("adventure_title")
+        if not isinstance(title, str) or not title.strip():
+            raise ValueError("adventure_title is required.")
+        record = self.adventure_registry.resolve_title(title)
+        selected = self.document_review_store.get_candidates(payload.get("review_id"), payload.get("candidate_ids"))
+        document = self.document_review_store.get_document(payload.get("review_id"))
+        staged = AdventureImportLog(self.adventure_registry, record).stage(
+            review_id=payload["review_id"], document=document, selected=selected,
+        )
+        return {
+            "object": "starfur.document.adventure_import_staging",
+            "review_id": payload["review_id"],
+            "adventure": {"id": record.adventure_id, "title": record.title},
+            "import": {
+                "id": staged.import_id,
+                "candidate_count": len(staged.candidates),
+                "source": {"id": staged.source_id, "name": staged.source_name, "profile": staged.source_profile},
+            },
+            "persistence_action": "staged_noncanonical",
         }
 
     def reject_document_review_candidates(self, payload):
@@ -506,11 +551,18 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _send_json(self, status, payload):
         body = _json_bytes(payload)
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            # A slow annotation/document request can outlive an OpenWebUI or
+            # curl client timeout. The work may have completed safely, but the
+            # response socket is gone; do not turn that expected disconnect
+            # into a server traceback.
+            self.close_connection = True
 
     def _send_terminal_annotation(self, payload):
         """Stream one opt-in terminal-progress annotation response.
@@ -620,13 +672,10 @@ class _Handler(BaseHTTPRequestHandler):
         parsed = urlsplit(self.path)
         path = parsed.path
         query = parse_qs(parsed.query, keep_blank_values=True)
-        if path not in {"/v1/chat/completions", DOCUMENT_PREPARE_PATH, DOCUMENT_ANNOTATE_PATH, DOCUMENT_REVIEW_PATH, DOCUMENT_CONTEXT_PATH}:
+        if path not in {"/v1/chat/completions", DOCUMENT_PREPARE_PATH, DOCUMENT_ANNOTATE_PATH, DOCUMENT_REVIEW_PATH, DOCUMENT_CONTEXT_PATH, DOCUMENT_ADVENTURE_IMPORT_PATH}:
             self._send_json(404, {"error": {"message": "Not found", "type": "invalid_request_error"}})
             return
         terminal_progress = path == DOCUMENT_ANNOTATE_PATH and query.get("stream") == ["terminal"]
-        if query and not terminal_progress:
-            self._send_json(400, {"error": {"message": "Unsupported query parameter.", "type": "invalid_request_error"}})
-            return
         try:
             length = int(self.headers.get("Content-Length", "0"))
             if length < 0:
@@ -638,10 +687,16 @@ class _Handler(BaseHTTPRequestHandler):
         except (ValueError, json.JSONDecodeError) as error:
             self._send_json(400, {"error": {"message": f"Invalid JSON request: {error}", "type": "invalid_request_error"}})
             return
+        if query and not terminal_progress:
+            # Consume the declared request body before rejecting a query.  On
+            # Windows, returning before the body is read can reset the client
+            # socket instead of delivering this intended structured error.
+            self._send_json(400, {"error": {"message": "Unsupported query parameter.", "type": "invalid_request_error"}})
+            return
         if terminal_progress:
             self._send_terminal_annotation(payload)
             return
-        if path in {DOCUMENT_PREPARE_PATH, DOCUMENT_ANNOTATE_PATH, DOCUMENT_REVIEW_PATH, DOCUMENT_CONTEXT_PATH}:
+        if path in {DOCUMENT_PREPARE_PATH, DOCUMENT_ANNOTATE_PATH, DOCUMENT_REVIEW_PATH, DOCUMENT_CONTEXT_PATH, DOCUMENT_ADVENTURE_IMPORT_PATH}:
             try:
                 if path == DOCUMENT_PREPARE_PATH:
                     result = self.api.prepare_document(payload)
@@ -649,6 +704,8 @@ class _Handler(BaseHTTPRequestHandler):
                     result = self.api.annotate_document(payload)
                 elif path == DOCUMENT_CONTEXT_PATH:
                     result = self.api.document_context(payload)
+                elif path == DOCUMENT_ADVENTURE_IMPORT_PATH:
+                    result = self.api.stage_document_adventure_import(payload)
                 elif payload.get("confirm") == "reject document candidates":
                     result = self.api.reject_document_review_candidates(payload)
                 else:
@@ -663,7 +720,7 @@ class _Handler(BaseHTTPRequestHandler):
             except DocumentAnnotationError as error:
                 self._send_json(422, {"error": {"message": str(error), "type": "document_annotation_error"}})
                 return
-            except (ValueError, DocumentIntakeError, DocumentContextError) as error:
+            except (ValueError, DocumentIntakeError, DocumentContextError, AdventureImportError, AdventureNotFoundError) as error:
                 self._send_json(400, {"error": {"message": str(error), "type": "invalid_request_error"}})
                 return
             except RuntimeError as error:
@@ -758,4 +815,4 @@ def serve(*, host="127.0.0.1", port=8000, config_path=None, api_key=None, quiet=
         server.server_close()
 
 
-__all__ = ["API_MODEL_ID", "CONVERSATION_HEADER", "DOCUMENT_ANNOTATE_PATH", "DOCUMENT_CONTEXT_PATH", "DOCUMENT_PREPARE_PATH", "DOCUMENT_REVIEW_PATH", "DOCUMENT_REVIEWS_PATH", "PERSONA_RUNTIME_PATH", "StarFurAPI", "StarFurHTTPServer", "create_api_application", "create_api_session", "serve"]
+__all__ = ["API_MODEL_ID", "CONVERSATION_HEADER", "DOCUMENT_ADVENTURE_IMPORT_PATH", "DOCUMENT_ANNOTATE_PATH", "DOCUMENT_CONTEXT_PATH", "DOCUMENT_PREPARE_PATH", "DOCUMENT_REVIEW_PATH", "DOCUMENT_REVIEWS_PATH", "PERSONA_RUNTIME_PATH", "StarFurAPI", "StarFurHTTPServer", "create_api_application", "create_api_session", "serve"]

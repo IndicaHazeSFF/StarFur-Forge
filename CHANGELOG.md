@@ -1286,3 +1286,55 @@
 - Behavior: `POST /v1/starfur/documents/annotate?stream=terminal` emits only completed/total chunk progress suitable for `curl -N`, then writes the normal final review JSON. The default annotation endpoint keeps its existing JSON response contract for OpenWebUI and other clients.
 - Constraints: progress never exposes source text, candidates, model output, provider diagnostics, or persistence state. Annotation remains synchronous and review-only; cancellation or a disconnected terminal does not auto-persist anything.
 - Verification: focused API tests cover terminal framing/final result and query-parameter rejection. No migration or runtime-data change.
+## 2026-08-22 - Separate typed adventure transcript records from canonical events
+
+- Behavior: added a closed, provider-free `AdventureTranscriptRecord` contract for bounded user/narrator text, timestamps, sequence IDs, and explicit Core provenance.
+- Constraints: transcript records do not write storage, capture chat automatically, call providers, enter prompts, create memories, mutate events, or rebuild authoritative adventure state.
+- Verification: focused transcript tests cover closed schemas, round-tripping, role/identifier validation, and rejection of event-like fields.
+## 2026-08-23 - Add optional isolated adventure transcript storage
+
+- Behavior: registered adventure workspaces may own a validated append-only `transcript.jsonl` of bounded user/narrator presentation records. Writes use a transcript-local advisory lock and atomic replacement.
+- Constraints: transcript storage is optional and separate from authoritative events, manifest recovery, state, replay, prompts, memories, automatic capture, providers, and retention policy.
+- Verification: focused transcript tests cover lazy storage, append/read sequence validation, corrupt-log failure isolation, and concurrent writer exclusion.
+
+## 2026-08-23 - Add explicit adventure transcript controls
+
+- Behavior: exact `adventure transcript` displays a bounded tail of optional presentation records, and `adventure transcript record <user|narrator>: <text>` appends one explicit user/narrator record without invoking a provider.
+- Constraints: transcript controls cannot create adventure events, mutate state, affect replay/prompt context, create memories/proposals, or enable automatic chat capture.
+- Verification: focused adventure command coverage confirms explicit recording, bounded inspection, malformed-command handling, and the absence of model/event writes.
+
+## 2026-08-23 - Add non-canonical reviewed-document adventure import staging
+
+- Behavior: added an isolated append-only workspace log for an explicitly selected set of already reviewed document candidates and their bounded source/chunk provenance.
+- Constraints: staging cannot create events, state, replay facts, prompt context, assistant memories, proposals, model calls, or automatic extraction. It remains outside the authoritative event-log manifest/recovery path.
+- Verification: focused import tests cover validated staging, provenance retention, no event-log creation, and corrupt/invalid record rejection.
+
+## 2026-08-24 - Expose explicit reviewed-document adventure import handoff
+
+- Behavior: `POST /v1/starfur/documents/adventure-import` stages selected original server-side review candidates under one exact existing adventure after `confirm="stage reviewed adventure import"`.
+- Constraints: unknown/forged candidates, missing confirmation, or unresolved adventures fail closed. Equivalent retry preserves one staged record. The handoff remains non-canonical and cannot create adventure events, state, prompts, memories, proposals, or model calls.
+- Verification: API coverage confirms exact target resolution, confirmation gating, idempotent retry, and no event/proposal/chat writes. The HTTP adapter now consumes a rejected query request body before returning its structured error, avoiding Windows socket resets during query validation.
+
+## 2026-08-24 - Harden API responses against client disconnects
+
+- Behavior: JSON response writes now absorb expected broken-pipe, connection-reset, and socket-close errors after a slow request completes.
+- Scope: This prevents long document annotation requests from producing a server traceback when OpenWebUI, curl, or another client times out or closes early. It does not alter annotation review/persistence semantics; asynchronous document jobs remain future work.
+- Verification: API test suite and `py_compile` pass.
+
+## 2026-08-24 - Add read-only staged adventure import inspection
+
+- Behavior: exact `adventure imports` lists the bounded staged reviewed-document selections for one mounted workspace; exact `adventure import inspect <AI-######>` shows one selected candidate set.
+- Constraints: inspection cannot call a provider, create events, alter state/replay context, create memories/proposals, or promote source observations to adventure truth.
+- Verification: focused adventure-command coverage confirms staged import display, candidate inspection, missing-import handling, and no event/model/proposal writes.
+
+## 2026-08-24 - Add explicit staged adventure import mapping
+
+- Behavior: exact `adventure import map <AI-######> <C-###> <premise|state|relationship|knowledge|resource|exclude>` records an explicit user-selected future destination for one server-validated staged candidate; `adventure import mappings <AI-######>` displays the latest plan for an import.
+- Constraints: mappings are append-only planning metadata. They cannot create events, state, replay facts, prompt context, memories, proposals, or model calls; a later typed validation/commit boundary is still required to apply any mapping.
+- Verification: focused mapping, adventure-command, command-help, and complete adventure tests pass.
+
+## 2026-08-24 - Add narrow reviewed-premise adventure import commit
+
+- Behavior: exact `adventure import commit premise <AI-######> <C-###>` commits one candidate only when its current explicit mapping is `premise`. The candidate's bounded reviewed summary/details become one canonical `premise` event; the mapping ID supplies an idempotency key for safe retry.
+- Constraints: Core does not infer document structure or destinations. `state`, `relationship`, `knowledge`, `resource`, and `exclude` mappings remain non-canonical planning records until separate typed validation/commit paths exist.
+- Verification: focused adventure-command, event-log, mapping, command-help, and complete adventure tests pass.

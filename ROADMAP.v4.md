@@ -265,6 +265,20 @@ This is a functional prototype, not yet a durable simulation system. The impleme
 - Transcript records what was presented; event history records validated facts; full projections represent current truth; narrative memory is a bounded derived view.
 - Transcript retention and privacy are configurable and never required to rebuild authoritative state.
 
+**Completed initial transcript-contract slice:** `pipeline.adventure_transcript` now validates one bounded user/narrator presentation record independently of events and mutations. It has no storage, automatic capture, prompt injection, provider call, or authority over replay/state.
+
+**Completed initial transcript-store slice:** an optional workspace-local append-only transcript log validates full sequence history and protects writes with an advisory lock plus atomic replacement. It is intentionally outside the authoritative event-log manifest/recovery path; automatic capture, retention configuration, transcript display, and narrative extraction remain separate work.
+
+**Completed initial transcript-control slice:** exact `adventure transcript` and `adventure transcript record <user|narrator>: <text>` provide bounded manual inspection and recording with no provider call. These presentation records remain separate from events, state, replay context, memories, and prompt context; automatic capture, retention configuration, and narrative extraction remain future work.
+
+**Completed initial import-staging slice:** `pipeline.adventure_import` preserves an explicit selection of already reviewed document candidates and bounded provenance under a registered workspace. `POST /v1/starfur/documents/adventure-import` requires an exact existing title, server-held review selection, and confirmation; matching retry is idempotent. It is non-canonical and creates no event, state, replay fact, prompt context, memory, or automatic extraction result. UI wiring and a later typed import-review/commit policy remain separate.
+
+**Completed initial import-inspection slice:** exact `adventure imports` and `adventure import inspect <AI-######>` display bounded staged candidate metadata from the mounted workspace with no provider call or canonical write. Typed import review and event/state commit remain separate.
+
+**Completed initial import-mapping slice:** exact `adventure import map <AI-######> <C-###> <premise|state|relationship|knowledge|resource|exclude>` records one explicit user-authored destination plan, and `adventure import mappings <AI-######>` displays its latest choice. Mapping is append-only planning only: it creates no event, state, replay fact, prompt context, memory, or model request. A separate typed, validation-gated commit boundary remains required before any canonical adventure write.
+
+**Completed initial premise-commit slice:** exact `adventure import commit premise <AI-######> <C-###>` commits only a currently `premise`-mapped staged candidate as one idempotent canonical `premise` event. It uses the bounded reviewed summary/details directly; it cannot infer a mapping or apply state, relationship, knowledge, resource, or excluded candidates. Each of those destinations still needs its own typed validation and commit boundary.
+
 #### C3. Add staged extraction, validation, and policy
 
 - A task-specific provider may propose events/mutations from the completed user+narrator turn.

@@ -60,6 +60,9 @@ from pipeline.adventure_resource_state import (
     derive_adventure_resource_state,
 )
 from pipeline.adventure_session import AdventureSessionState
+from pipeline.adventure_import import AdventureImportError, AdventureImportLog
+from pipeline.adventure_import_mapping import AdventureImportMappingError, AdventureImportMappingLog
+from pipeline.adventure_transcript import AdventureTranscriptError, AdventureTranscriptLog
 from pipeline.adventure_turn import AdventureTurnTransaction
 from pipeline.document_review import DEFAULT_REVIEW_TTL_SECONDS
 
@@ -1385,6 +1388,187 @@ class AssistantSession:
             )
         return "\n".join(lines)
 
+    def adventure_transcript(self):
+        """Inspect bounded presentation history without touching story truth."""
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded."
+        try:
+            records = AdventureTranscriptLog(
+                self.adventure_registry, self.adventure_session.record,
+            ).records()
+        except AdventureTranscriptError as error:
+            return f"Adventure transcript could not be inspected: {error}"
+        if not records:
+            return "No presentation transcript is recorded for the loaded workspace."
+        displayed = records[-12:]
+        lines = [f"Adventure transcript for {self.adventure_session.record.title}:"]
+        for record in displayed:
+            text = record.text if len(record.text) <= 500 else f"{record.text[:497]}..."
+            lines.append(f"{record.record_id} [{record.role}] {text}")
+        if len(records) > len(displayed):
+            lines.append(f"Showing the latest {len(displayed)} of {len(records)} transcript record(s).")
+        lines.append("Read-only presentation history; transcript records do not establish adventure events or state.")
+        return "\n".join(lines)
+
+    def adventure_imports(self):
+        """List staged document imports without treating them as story facts."""
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded."
+        try:
+            records = AdventureImportLog(
+                self.adventure_registry, self.adventure_session.record,
+            ).records()
+        except AdventureImportError as error:
+            return f"Adventure imports could not be inspected: {error}"
+        if not records:
+            return "No reviewed document imports are staged for the loaded workspace."
+        displayed = records[-12:]
+        lines = [f"Staged document imports for {self.adventure_session.record.title}:"]
+        lines.extend(
+            f"{record.import_id} {record.source_name} [{record.source_profile}] "
+            f"({len(record.candidates)} candidate(s))"
+            for record in displayed
+        )
+        if len(records) > len(displayed):
+            lines.append(f"Showing the latest {len(displayed)} of {len(records)} staged import(s).")
+        lines.append("Staged imports are reviewed source observations, not authoritative adventure events or state.")
+        return "\n".join(lines)
+
+    def adventure_import_inspect(self, identifier):
+        usage = "Usage: adventure import inspect <AI-######>"
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded."
+        if not isinstance(identifier, str) or not identifier.strip():
+            return usage
+        requested = identifier.strip().upper()
+        try:
+            records = AdventureImportLog(
+                self.adventure_registry, self.adventure_session.record,
+            ).records()
+        except AdventureImportError as error:
+            return f"Adventure import could not be inspected: {error}"
+        record = next((item for item in records if item.import_id == requested), None)
+        if record is None:
+            return "Adventure import not found."
+        lines = [
+            f"Adventure import {record.import_id}",
+            f"Source: {record.source_name} [{record.source_profile}]",
+            f"Review: {record.review_id}",
+            f"Candidates: {len(record.candidates)}",
+            "",
+        ]
+        for candidate in record.candidates:
+            lines.extend((
+                f"{candidate['candidate_id']} [{candidate['memory_type']}] {candidate['summary']}",
+                f"  Subject: {candidate['subject']}; confidence: {candidate['confidence']}; importance: {candidate['importance']}",
+            ))
+            if candidate["details"]:
+                lines.append(f"  Details: {candidate['details']}")
+        lines.append("Inspection is read-only; these candidates are not adventure events, state, replay facts, or memories.")
+        return "\n".join(lines)
+
+    def adventure_import_map(self, value):
+        usage = "Usage: adventure import map <AI-######> <C-###> <premise|state|relationship|knowledge|resource|exclude>"
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded."
+        parts = value.split() if isinstance(value, str) else []
+        if len(parts) != 3:
+            return usage
+        try:
+            mapping = AdventureImportMappingLog(
+                self.adventure_registry, self.adventure_session.record,
+            ).map(*parts)
+        except AdventureImportMappingError as error:
+            return f"Adventure import was not mapped: {error}"
+        return (
+            f"Mapped {mapping.import_id} {mapping.candidate_id} to {mapping.destination}. "
+            "This is a non-canonical import plan; it does not create adventure events or state."
+        )
+
+    def adventure_import_mappings(self, identifier):
+        usage = "Usage: adventure import mappings <AI-######>"
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded."
+        if not isinstance(identifier, str) or not identifier.strip():
+            return usage
+        try:
+            mappings = AdventureImportMappingLog(
+                self.adventure_registry, self.adventure_session.record,
+            ).current(identifier)
+        except AdventureImportMappingError as error:
+            return f"Adventure import mappings could not be inspected: {error}"
+        if not mappings:
+            return f"No explicit mappings are recorded for {identifier.strip().upper()}."
+        lines = [f"Adventure import mappings for {identifier.strip().upper()}:" ]
+        lines.extend(f"{candidate_id} -> {mapping.destination} ({mapping.mapping_id})" for candidate_id, mapping in sorted(mappings.items()))
+        lines.append("Mappings are a user-authored import plan, not adventure events or state.")
+        return "\n".join(lines)
+
+    def adventure_import_commit_premise(self, value):
+        """Commit one explicitly mapped premise candidate as one event.
+
+        This is intentionally the sole import-to-canonical bridge in this
+        slice.  State, relationships, knowledge, and resources retain their
+        own typed writers and are not inferred from document candidates.
+        """
+        usage = "Usage: adventure import commit premise <AI-######> <C-###>"
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded."
+        parts = value.split() if isinstance(value, str) else []
+        if len(parts) != 3 or parts[0].casefold() != "premise":
+            return usage
+        _, import_id, candidate_id = parts
+        try:
+            imports = AdventureImportLog(self.adventure_registry, self.adventure_session.record)
+            mappings = AdventureImportMappingLog(self.adventure_registry, self.adventure_session.record)
+            current = mappings.current(import_id)
+            normalized_candidate = candidate_id.strip().upper()
+            mapping = current.get(normalized_candidate)
+            if mapping is None:
+                return "Adventure import premise was not committed: candidate has no explicit mapping."
+            if mapping.destination != "premise":
+                return (
+                    "Adventure import premise was not committed: candidate is mapped to "
+                    f"{mapping.destination}, not premise."
+                )
+            imported = next(item for item in imports.records() if item.import_id == mapping.import_id)
+            candidate = next(item for item in imported.candidates if item["candidate_id"] == mapping.candidate_id)
+            log = AdventureEventLog(self.adventure_registry, self.adventure_session.record)
+            event = log.append(
+                "premise", candidate["summary"], details=candidate["details"],
+                request_id=f"import-{mapping.mapping_id.lower()}",
+            )
+            events = log.events()
+        except StopIteration:
+            return "Adventure import premise was not committed: staged import candidate not found."
+        except (AdventureImportError, AdventureImportMappingError, AdventureEventLogError) as error:
+            return f"Adventure import premise was not committed: {error}"
+        self.adventure_session = self.adventure_session.mount(self.adventure_session.record, events)
+        return (
+            f"Committed mapped premise {mapping.import_id} {mapping.candidate_id} as "
+            f"{event.event_id}. The source mapping remains auditable."
+        )
+
+    def adventure_transcript_record(self, value):
+        usage = "Usage: adventure transcript record <user|narrator>: <text>"
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded. Load an adventure before recording a transcript entry."
+        if not isinstance(value, str) or ":" not in value:
+            return usage
+        role, text = (part.strip() for part in value.split(":", 1))
+        if not role or not text:
+            return usage
+        try:
+            record = AdventureTranscriptLog(
+                self.adventure_registry, self.adventure_session.record,
+            ).append(role.casefold(), text)
+        except AdventureTranscriptError as error:
+            return f"Adventure transcript was not recorded: {error}"
+        return (
+            f"Recorded adventure transcript {record.record_id} [{record.role}]. "
+            "It does not create an adventure event or change story state."
+        )
+
     def adventure_checkpoints(self):
         """List immutable event-prefix references without changing the workspace."""
         if not self.adventure_session.active:
@@ -1887,6 +2071,20 @@ class AssistantSession:
             return self.adventure_session_status()
         if lowered in {"adventure events", "adventure event list"}:
             return self.adventure_events()
+        if lowered == "adventure import inspect" or lowered.startswith("adventure import inspect "):
+            return self.adventure_import_inspect(text.strip()[len("adventure import inspect"):])
+        if lowered == "adventure import commit" or lowered.startswith("adventure import commit "):
+            return self.adventure_import_commit_premise(text.strip()[len("adventure import commit"):])
+        if lowered == "adventure import map" or lowered.startswith("adventure import map "):
+            return self.adventure_import_map(text.strip()[len("adventure import map"):])
+        if lowered == "adventure import mappings" or lowered.startswith("adventure import mappings "):
+            return self.adventure_import_mappings(text.strip()[len("adventure import mappings"):])
+        if lowered in {"adventure imports", "adventure import list"}:
+            return self.adventure_imports()
+        if lowered == "adventure transcript record" or lowered.startswith("adventure transcript record "):
+            return self.adventure_transcript_record(text.strip()[len("adventure transcript record"):])
+        if lowered in {"adventure transcript", "adventure transcript show"}:
+            return self.adventure_transcript()
         if lowered in {"adventure checkpoints", "adventure checkpoint list"}:
             return self.adventure_checkpoints()
         if lowered == "adventure checkpoint inspect" or lowered.startswith("adventure checkpoint inspect "):

@@ -17,7 +17,7 @@ from pipeline.application import AssistantApplication
 from pipeline.adventure_events import AdventureEventLog
 from pipeline.adventure_registry import AdventureRegistry
 from pipeline.assistant import AssistantSession
-from pipeline.api import API_MODEL_ID, CONVERSATION_HEADER, DOCUMENT_ANNOTATE_PATH, DOCUMENT_CONTEXT_PATH, DOCUMENT_PREPARE_PATH, DOCUMENT_REVIEW_PATH, DOCUMENT_REVIEWS_PATH, PERSONA_RUNTIME_PATH, StarFurAPI, StarFurHTTPServer
+from pipeline.api import API_MODEL_ID, CONVERSATION_HEADER, DOCUMENT_ADVENTURE_IMPORT_PATH, DOCUMENT_ANNOTATE_PATH, DOCUMENT_CONTEXT_PATH, DOCUMENT_PREPARE_PATH, DOCUMENT_REVIEW_PATH, DOCUMENT_REVIEWS_PATH, PERSONA_RUNTIME_PATH, StarFurAPI, StarFurHTTPServer
 
 
 class FakeConfig:
@@ -84,6 +84,9 @@ class APITests(unittest.TestCase):
             session_factory=session_factory,
             max_conversations=2,
         )
+        self.adventure_directory = tempfile.TemporaryDirectory()
+        self.adventure_registry = AdventureRegistry(self.adventure_directory.name)
+        self.adventure_record = self.adventure_registry.create("Quiet Ember")
 
         def document_annotator(chunk):
             self.annotation_chunks.append(chunk)
@@ -102,6 +105,7 @@ class APITests(unittest.TestCase):
             self.application,
             api_key="local-test",
             document_annotator=document_annotator,
+            adventure_registry=self.adventure_registry,
         )
         self.server = StarFurHTTPServer(("127.0.0.1", 0), self.api, quiet=True)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -112,6 +116,7 @@ class APITests(unittest.TestCase):
         self.server.shutdown()
         self.server.server_close()
         self.thread.join(timeout=2)
+        self.adventure_directory.cleanup()
         self.public_id_patch.stop()
 
     def request(self, method, path, body=None, *, auth=True, extra_headers=None):
@@ -372,6 +377,51 @@ class APITests(unittest.TestCase):
         )
         self.assertEqual(self.proposal_writes[0]["observation_text"], self.annotation_chunks[0].text)
         self.assertEqual(self.session.calls, [])
+
+    def test_reviewed_document_candidates_can_be_staged_for_one_exact_adventure_without_events(self):
+        status, raw = self.request("POST", DOCUMENT_ANNOTATE_PATH, {
+            "filename": "story.md", "content": "Vespera guards the brass hatch.", "domain": "personal",
+        })
+        annotation = json.loads(raw)
+        review_id = annotation["review"]["id"]
+        candidate_id = annotation["candidates"][0]["id"]
+
+        status, raw = self.request("POST", DOCUMENT_ADVENTURE_IMPORT_PATH, {
+            "review_id": review_id,
+            "candidate_ids": [candidate_id],
+            "adventure_title": "Quiet Ember",
+        })
+        self.assertEqual(status, 400)
+        self.assertIn("requires confirm", json.loads(raw)["error"]["message"])
+
+        status, raw = self.request("POST", DOCUMENT_ADVENTURE_IMPORT_PATH, {
+            "review_id": review_id,
+            "candidate_ids": [candidate_id],
+            "adventure_title": "quiet ember",
+            "confirm": "stage reviewed adventure import",
+        })
+        payload = json.loads(raw)
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["object"], "starfur.document.adventure_import_staging")
+        self.assertEqual(payload["adventure"]["id"], self.adventure_record.adventure_id)
+        self.assertEqual(payload["import"]["id"], "AI-000001")
+        self.assertEqual(payload["import"]["candidate_count"], 1)
+        self.assertEqual(payload["persistence_action"], "staged_noncanonical")
+        workspace = self.adventure_registry.workspace_path(self.adventure_record.adventure_id)
+        self.assertTrue((workspace / "imports.jsonl").exists())
+        self.assertFalse((workspace / "events.jsonl").exists())
+        self.assertEqual(self.proposal_writes, [])
+        self.assertEqual(self.session.calls, [])
+
+        status, raw = self.request("POST", DOCUMENT_ADVENTURE_IMPORT_PATH, {
+            "review_id": review_id,
+            "candidate_ids": [candidate_id],
+            "adventure_title": "Quiet Ember",
+            "confirm": "stage reviewed adventure import",
+        })
+        self.assertEqual(status, 200)
+        self.assertEqual("AI-000001", json.loads(raw)["import"]["id"])
+        self.assertEqual(1, len((workspace / "imports.jsonl").read_text(encoding="utf-8").splitlines()))
 
     def test_document_review_can_be_inspected_and_driven_by_controlled_chat_extension(self):
         status, raw = self.request("POST", DOCUMENT_ANNOTATE_PATH, {
