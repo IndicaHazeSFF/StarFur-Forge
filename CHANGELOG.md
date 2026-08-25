@@ -1338,3 +1338,63 @@
 - Behavior: exact `adventure import commit premise <AI-######> <C-###>` commits one candidate only when its current explicit mapping is `premise`. The candidate's bounded reviewed summary/details become one canonical `premise` event; the mapping ID supplies an idempotency key for safe retry.
 - Constraints: Core does not infer document structure or destinations. `state`, `relationship`, `knowledge`, `resource`, and `exclude` mappings remain non-canonical planning records until separate typed validation/commit paths exist.
 - Verification: focused adventure-command, event-log, mapping, command-help, and complete adventure tests pass.
+
+## 2026-08-24 - Add typed reviewed-state adventure import commit
+
+- Behavior: exact `adventure import commit state <AI-######> <C-###> <key>: <value>` commits one `state`-mapped candidate only after Core validates the explicitly supplied state key/value. The event retains bounded reviewed-candidate provenance and mapping-keyed retry idempotency.
+- Constraints: documents and models cannot infer the state mutation. Relationship, knowledge, resource, and excluded mappings remain planning metadata until their own typed commit boundaries exist.
+- Verification: focused command, state, import-mapping, help, and complete adventure tests pass.
+
+## 2026-08-24 - Add typed reviewed-relationship adventure import commit
+
+- Behavior: exact `adventure import commit relationship <AI-######> <C-###> <character> <dimension>: <value>` commits one `relationship`-mapped candidate only after Core validates the explicit qualitative subject/dimension/value. The event retains bounded candidate provenance and mapping-keyed idempotent retry.
+- Constraints: document prose cannot infer a relationship or numeric meter, and adventure relationships remain isolated from real-world persona relationship state. Knowledge, resource, and excluded mappings remain planning metadata.
+- Verification: focused command, relationship, import-mapping, help, and complete adventure tests pass.
+
+## 2026-08-24 - Add typed reviewed-character-knowledge adventure import commit
+
+- Behavior: exact `adventure import commit knowledge <AI-######> <C-###> <character> <knows|believes|uncertain>: <fact>` commits one `knowledge`-mapped candidate only after Core validates the explicit character-specific perspective. The event retains bounded candidate provenance and mapping-keyed idempotent retry.
+- Constraints: document prose cannot infer the claim or transform belief/uncertainty into objective truth; adventure knowledge remains isolated from real-world persona memory. Resource and excluded mappings remain planning metadata.
+- Verification: focused command, knowledge, import-mapping, help, and complete adventure tests pass.
+
+## 2026-08-24 - Add catalog-gated reviewed-resource adventure import commit
+
+- Behavior: exact `adventure import commit resource <AI-######> <C-###> <resource-id> <operation>[: <value>]` commits one `resource`-mapped candidate only through the workspace's immutable resource catalog and normal event-log resource validation. Retry is idempotent by mapping ID.
+- Constraints: imports cannot define resources, bypass resource bounds/transitions, or expose hidden values. Excluded mappings remain planning metadata.
+- Verification: focused command, resource, import-mapping, help, and complete adventure tests pass.
+
+## 2026-08-24 - Add read-only reviewed-adventure import audit
+
+- Behavior: exact `adventure import status <AI-######>` shows every staged candidate's current explicit mapping and any canonical event IDs/types committed from its mapping history.
+- Constraints: it is read-only and provider-free. `exclude` changes only a candidate's latest import plan; it cannot retract, delete, or conceal earlier canonical events.
+- Verification: focused adventure-command coverage confirms mapping-history visibility, no-event audit behavior, missing-import and usage handling, plus the normal command/help suites.
+
+## 2026-08-24 - Add non-canonical multi-source adventure import bundles
+
+- Behavior: `adventure import bundle create <title>: <AI-######> <AI-######> [... ]` groups two or more staged reviewed sources under a loaded adventure; list and inspect controls expose bounded source metadata.
+- Constraints: grouping is append-only organizational metadata only. It cannot create events, state, replay facts, memories, proposals, provider calls, or prompt context.
+- Verification: focused adventure-command coverage confirms staging validation, idempotent creation, source inspection, and absence of canonical writes.
+
+## 2026-08-25 - Add read-only multi-source adventure import audit
+
+- Behavior: exact `adventure import bundle status <AB-######>` displays the current candidate plan and mapping-keyed canonical history for every staged source in a bundle.
+- Constraints: it composes existing read-only audits and cannot change mappings, events, state, memories, proposals, provider state, or prompt context.
+- Verification: focused adventure-command coverage confirms multi-source audit output, usage handling, and absence of canonical writes.
+
+## 2026-08-25 - Add read-only staged-adventure-turn inspection
+
+- Behavior: exact `adventure turn inspect` renders every session-local staged ordinary or structured draft before commit.
+- Constraints: it is provider-free and read-only; hidden resource changes remain redacted and no event/state/projection changes until explicit `adventure turn commit`.
+- Verification: focused adventure-command coverage confirms ordinary staged-draft visibility, inactive handling, and no canonical writes before commit.
+
+## 2026-08-25 - Add selective staged-adventure-turn removal
+
+- Behavior: exact `adventure turn remove <staged-event-number>` discards one numbered pre-commit draft after inspection, preserving every other draft in the transaction.
+- Constraints: removal is session-local and adjusts retained typed-mutation alignment; it cannot edit or delete canonical event history.
+- Verification: focused command and transaction tests confirm selective removal, invalid-number handling, preserved mutation alignment, and no premature event write.
+
+## 2026-08-25 - Add strict untrusted adventure-turn candidate validation
+
+- Behavior: `pipeline/adventure_turn_candidates.py` validates a decoded schema-v1 envelope of up to sixteen ordinary adventure-event proposals and assigns deterministic `TC-###` identifiers.
+- Constraints: this provider-free boundary cannot call a model, stage a turn, mutate a workspace, write an event, or inject prompt context. Candidate confidence is metadata only; structured state, relationship, knowledge, and resource candidates are rejected pending their own typed policy.
+- Verification: focused candidate and adventure-turn unit suites pass.

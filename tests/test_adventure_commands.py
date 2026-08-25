@@ -610,12 +610,75 @@ class AdventureCommandTests(unittest.TestCase):
             self.assertEqual([], calls)
             self.assertEqual([], session.proposals)
 
-    def test_staged_import_commands_are_read_only_and_never_create_story_events(self):
+    def test_import_bundles_group_multiple_staged_sources_without_canonical_writes(self):
         with tempfile.TemporaryDirectory() as directory:
             calls = []
             session = self._session(directory, calls)
             session.respond("adventure create Quiet Ember")
             session.respond("adventure load Quiet Ember")
+            staged = AdventureImportLog(session.adventure_registry, session.adventure_session.record)
+            for review_id, filename, text in (
+                ("DR-details", "details.md", "# Details\n\nVespera guards the hatch."),
+                ("DR-transcript", "conversation.md", "# Conversation\n\nThe crew finds a brass key."),
+            ):
+                document = prepare_document_text(text, filename, domain="personal")
+                candidate = extract_document_memory_candidates(document, lambda _chunk: {"proposals": [{
+                    "store": True, "subject": "story", "memory_type": "project_context",
+                    "summary": f"Reviewed {filename}", "details": text,
+                    "importance": 0.8, "confidence": 0.9, "retention": "long_term",
+                }]})[0]
+                staged.stage(review_id=review_id, document=document, selected=(("C-001", candidate),))
+
+            created = session.respond(
+                "adventure import bundle create Quiet Ember source set: AI-000001 AI-000002"
+            )
+            self.assertIn("Created multi-document import bundle: Quiet Ember source set (AB-000001; 2 staged source(s))", created)
+            self.assertIn(
+                "AB-000001 Quiet Ember source set (2 staged source(s))",
+                session.respond("adventure import bundles"),
+            )
+            inspected = session.respond("adventure import bundle inspect AB-000001")
+            self.assertIn("AI-000001 details.md [assistant_note]", inspected)
+            self.assertIn("AI-000002 conversation.md [assistant_note]", inspected)
+            self.assertIn("not an adventure event, state, replay fact, memory, or prompt context", inspected)
+            audit = session.respond("adventure import bundle status AB-000001")
+            self.assertIn("AI-000001:", audit)
+            self.assertIn("C-001: current plan unmapped; canonical history: none", audit)
+            self.assertIn("AI-000002:", audit)
+            self.assertIn("no mapping, event, state, memory, or prompt context was changed", audit)
+            self.assertIn(
+                "AB-000001",
+                session.respond("adventure import bundle create Quiet Ember source set: AI-000001 AI-000002"),
+            )
+            self.assertIn(
+                "references a missing staged import",
+                session.respond("adventure import bundle create Bad set: AI-000001 AI-000099"),
+            )
+            self.assertEqual(
+                "Usage: adventure import bundle create <title>: <AI-######> <AI-######> [... ]",
+                session.respond("adventure import bundle create"),
+            )
+            self.assertEqual(
+                "Usage: adventure import bundle status <AB-######>",
+                session.respond("adventure import bundle status"),
+            )
+            self.assertEqual([], AdventureEventLog(session.adventure_registry, session.adventure_session.record).events())
+            self.assertEqual([], calls)
+            self.assertEqual([], session.proposals)
+
+    def test_staged_import_mapping_and_typed_commits_are_explicit_and_idempotent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(directory, calls)
+            session.respond("adventure create Quiet Ember")
+            session.respond("adventure load Quiet Ember")
+            catalog = AdventureResourceCatalog((
+                AdventureResourceDefinition("fuel", "Fuel", "integer", minimum=0, maximum=100),
+            ))
+            session.adventure_registry.configure_resource_catalog(session.adventure_session.record, catalog)
+            session.adventure_session = session.adventure_session.mount(
+                session.adventure_session.record, (), resource_catalog=catalog,
+            )
             document = prepare_document_text("# Story\n\nVespera guards the brass hatch.", "story.md", domain="personal")
             candidate = extract_document_memory_candidates(document, lambda _chunk: {"proposals": [{
                 "store": True, "subject": "Vespera", "memory_type": "project_context",
@@ -640,11 +703,106 @@ class AdventureCommandTests(unittest.TestCase):
                 "C-001 -> premise (IM-000001)",
                 session.respond("adventure import mappings AI-000001"),
             )
+            committed = session.respond("adventure import commit premise AI-000001 C-001")
+            self.assertIn("Committed mapped premise AI-000001 C-001 as AE-000001", committed)
+            self.assertIn("[premise] Vespera guards the brass hatch", session.respond("adventure events"))
+            self.assertIn("AE-000001", session.respond("adventure import commit premise AI-000001 C-001"))
+            self.assertEqual(
+                1,
+                len(AdventureEventLog(session.adventure_registry, session.adventure_session.record).events()),
+            )
+            self.assertIn("Mapped AI-000001 C-001 to state", session.respond("adventure import map AI-000001 C-001 state"))
+            imported_state = session.respond(
+                "adventure import commit state AI-000001 C-001 current_location: chart room"
+            )
+            self.assertIn("Committed mapped state AI-000001 C-001 as AE-000002", imported_state)
+            self.assertIn("current_location = chart room", imported_state)
+            self.assertIn("current_location: chart room (AE-000002)", session.respond("adventure state"))
+            self.assertIn(
+                "AE-000002",
+                session.respond("adventure import commit state AI-000001 C-001 current_location: chart room"),
+            )
+            self.assertEqual(
+                2,
+                len(AdventureEventLog(session.adventure_registry, session.adventure_session.record).events()),
+            )
+            self.assertIn(
+                "Mapped AI-000001 C-001 to relationship",
+                session.respond("adventure import map AI-000001 C-001 relationship"),
+            )
+            imported_relationship = session.respond(
+                "adventure import commit relationship AI-000001 C-001 Vespera trust: cautious"
+            )
+            self.assertIn("Committed mapped relationship AI-000001 C-001 as AE-000003", imported_relationship)
+            self.assertIn("Vespera / trust = cautious", imported_relationship)
+            self.assertIn("Vespera / trust: cautious (AE-000003)", session.respond("adventure relationships"))
+            self.assertIn(
+                "AE-000003",
+                session.respond("adventure import commit relationship AI-000001 C-001 Vespera trust: cautious"),
+            )
+            self.assertEqual(
+                3,
+                len(AdventureEventLog(session.adventure_registry, session.adventure_session.record).events()),
+            )
+            self.assertIn(
+                "Mapped AI-000001 C-001 to knowledge",
+                session.respond("adventure import map AI-000001 C-001 knowledge"),
+            )
+            imported_knowledge = session.respond(
+                "adventure import commit knowledge AI-000001 C-001 Rook believes: the hatch is trapped"
+            )
+            self.assertIn("Committed mapped knowledge AI-000001 C-001 as AE-000004", imported_knowledge)
+            self.assertIn("Rook believes = the hatch is trapped", imported_knowledge)
+            self.assertIn("Rook believes: the hatch is trapped (AE-000004)", session.respond("adventure knowledge"))
+            self.assertIn(
+                "AE-000004",
+                session.respond("adventure import commit knowledge AI-000001 C-001 Rook believes: the hatch is trapped"),
+            )
+            self.assertEqual(
+                4,
+                len(AdventureEventLog(session.adventure_registry, session.adventure_session.record).events()),
+            )
+            self.assertIn(
+                "Mapped AI-000001 C-001 to resource",
+                session.respond("adventure import map AI-000001 C-001 resource"),
+            )
+            imported_resource = session.respond(
+                "adventure import commit resource AI-000001 C-001 fuel set: 80"
+            )
+            self.assertIn("Committed mapped resource AI-000001 C-001 as AE-000005", imported_resource)
+            self.assertIn("fuel set", imported_resource)
+            self.assertIn("fuel (Fuel): 80 (AE-000005)", session.respond("adventure resources"))
+            self.assertIn(
+                "AE-000005",
+                session.respond("adventure import commit resource AI-000001 C-001 fuel set: 80"),
+            )
+            self.assertEqual(
+                5,
+                len(AdventureEventLog(session.adventure_registry, session.adventure_session.record).events()),
+            )
+            self.assertIn("Mapped AI-000001 C-001 to exclude", session.respond("adventure import map AI-000001 C-001 exclude"))
+            audit = session.respond("adventure import status AI-000001")
+            self.assertIn("C-001: current plan exclude (IM-000006)", audit)
+            self.assertIn(
+                "canonical history: AE-000001 [premise], AE-000002 [state_change], "
+                "AE-000003 [relationship_change], AE-000004 [character_knowledge], AE-000005 [resource_change]",
+                audit,
+            )
+            self.assertIn("`exclude` changes only the current plan", audit)
+            self.assertEqual("Adventure import not found.", session.respond("adventure import status AI-999999"))
+            self.assertEqual(
+                "Usage: adventure import status <AI-######>",
+                session.respond("adventure import status"),
+            )
             self.assertEqual(
                 "Usage: adventure import map <AI-######> <C-###> <premise|state|relationship|knowledge|resource|exclude>",
                 session.respond("adventure import map AI-000001 C-001"),
             )
-            self.assertEqual("No authoritative adventure events are recorded for the loaded workspace.", session.respond("adventure events"))
+            self.assertIn("mapped to exclude, not premise", session.respond("adventure import commit premise AI-000001 C-001"))
+            self.assertIn("mapped to exclude, not state", session.respond("adventure import commit state AI-000001 C-001 current_location: chart room"))
+            self.assertIn("mapped to exclude, not relationship", session.respond("adventure import commit relationship AI-000001 C-001 Vespera trust: cautious"))
+            self.assertIn("mapped to exclude, not knowledge", session.respond("adventure import commit knowledge AI-000001 C-001 Rook believes: the hatch is trapped"))
+            self.assertIn("mapped to exclude, not resource", session.respond("adventure import commit resource AI-000001 C-001 fuel set: 80"))
             self.assertEqual([], calls)
             self.assertEqual([], session.proposals)
 
@@ -659,14 +817,31 @@ class AdventureCommandTests(unittest.TestCase):
             self.assertIn("[discovery]", session.respond("adventure turn stage discovery: The crew finds a hatch."))
             self.assertIn("[choice]", session.respond("adventure turn stage choice: The crew opens it."))
             self.assertIn("2 event(s) staged", session.respond("adventure turn status"))
+            inspection = session.respond("adventure turn inspect")
+            self.assertIn("1. [discovery] The crew finds a hatch.", inspection)
+            self.assertIn("2. [choice] The crew opens it.", inspection)
+            self.assertIn("nothing has been committed", inspection)
             self.assertEqual("No authoritative adventure events are recorded for the loaded workspace.", session.respond("adventure events"))
-            self.assertIn("Committed 2 staged adventure event(s): AE-000001 through AE-000002.", session.respond("adventure turn commit"))
-            self.assertIn("AE-000001", session.respond("adventure events"))
-            self.assertIn("AE-000002", session.respond("adventure events"))
+            removed = session.respond("adventure turn remove 1")
+            self.assertIn("Removed staged adventure event [discovery]: The crew finds a hatch.", removed)
+            self.assertIn("1. [choice] The crew opens it.", session.respond("adventure turn inspect"))
+            self.assertIn("Committed 1 staged adventure event(s): AE-000001 through AE-000001.", session.respond("adventure turn commit"))
+            self.assertNotIn("finds a hatch", session.respond("adventure events"))
+            self.assertIn("AE-000001 [choice] The crew opens it.", session.respond("adventure events"))
+
+            session.respond("adventure turn begin")
+            session.respond("adventure turn stage state current_location: chart room")
+            session.respond("adventure turn stage discovery: A second hatch appears.")
+            self.assertIn("Removed staged adventure event [state_change]", session.respond("adventure turn remove 1"))
+            self.assertIn("1. [discovery] A second hatch appears.", session.respond("adventure turn inspect"))
+            self.assertIn("staged event number is invalid", session.respond("adventure turn remove 2"))
+            self.assertEqual("Usage: adventure turn remove <staged-event-number>", session.respond("adventure turn remove nope"))
+            session.respond("adventure turn abort")
             committed = AdventureEventLog(session.adventure_registry, session.adventure_session.record).events()
             self.assertEqual(1, len({event.request_id for event in committed}))
             self.assertIsNotNone(committed[0].request_id)
             self.assertEqual("Adventure turn staging: inactive.", session.respond("adventure turn status"))
+            self.assertEqual("Adventure turn staging: inactive.", session.respond("adventure turn inspect"))
 
             session.respond("adventure turn begin")
             session.respond("adventure turn stage discovery: A second hatch appears.")

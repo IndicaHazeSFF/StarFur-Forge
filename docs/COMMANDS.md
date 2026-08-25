@@ -414,9 +414,18 @@ Prepare or inspect isolated CYOA workspace metadata with exact Core commands:
     adventure events
     adventure imports
     adventure import inspect <AI-######>
+    adventure import bundles
+    adventure import bundle create <title>: <AI-######> <AI-######> [...]
+    adventure import bundle inspect <AB-######>
+    adventure import bundle status <AB-######>
     adventure import map <AI-######> <C-###> <premise|state|relationship|knowledge|resource|exclude>
     adventure import mappings <AI-######>
+    adventure import status <AI-######>
     adventure import commit premise <AI-######> <C-###>
+    adventure import commit state <AI-######> <C-###> <key>: <value>
+    adventure import commit relationship <AI-######> <C-###> <character> <dimension>: <value>
+    adventure import commit knowledge <AI-######> <C-###> <character> <knows|believes|uncertain>: <fact>
+    adventure import commit resource <AI-######> <C-###> <resource-id> <operation>[: <value>]
     adventure transcript
     adventure transcript record <user|narrator>: <text>
     adventure checkpoint <label>
@@ -472,14 +481,39 @@ rewind, or mutation of the source workspace.
 workspace, and `adventure import inspect` displays one selected candidate set.
 They are read-only source-review controls: staged imports do not establish
 events, state, replay facts, or memories.
+`adventure import bundles` lists optional user-authored groups of two or more
+already staged document sources. Use `adventure import bundle create` to group,
+for example, a `details.md` and exported conversation for the same adventure;
+`adventure import bundle inspect` lists its source records. Bundles are
+non-canonical organizational metadata, not an automatic import or prompt mount.
+`adventure import bundle status` combines the read-only candidate mapping and
+canonical-history audit for every source in one bundle; it cannot alter any
+mapping, event, state, memory, or prompt context.
 `adventure import map` records an explicit user-authored destination plan for
 one staged candidate. `adventure import mappings` inspects the latest plan.
 Mappings are not commits: they create no event, state, replay fact, or memory.
+`adventure import status` is a read-only per-candidate audit: it shows the
+current mapping and any canonical events committed from its prior mappings.
+Mapping a candidate to `exclude` changes only that future plan; it never
+retracts already recorded adventure events.
 `adventure import commit premise` is the initial narrow canonical bridge: it
 requires that exact candidate's current mapping to be `premise`, then records
 one auditable `premise` event using the reviewed candidate summary/details.
 It is idempotent for the same mapping. State, relationship, knowledge, and
 resource mappings remain plans only until their separate typed commit paths exist.
+`adventure import commit state` is the next typed bridge. It requires a current
+`state` mapping but also requires the user to supply the validated state key and
+value explicitly; the reviewed document is provenance, not authority to infer a
+state mutation. It is idempotent for that mapping and exact typed value.
+`adventure import commit relationship` likewise requires a current `relationship`
+mapping and an explicit qualitative character/dimension/value. It never derives
+numeric meters or a relationship from document prose.
+`adventure import commit knowledge` requires a current `knowledge` mapping and
+an explicit character-specific `knows`, `believes`, or `uncertain` claim. A
+document does not make a belief objective world truth.
+`adventure import commit resource` requires a current `resource` mapping and a
+resource operation valid for the loaded adventure's immutable resource catalog.
+The document cannot invent resources, bypass bounds, or expose hidden values.
 `adventure transcript` displays optional presentation history kept separately from
 authoritative events. `adventure transcript record` explicitly stores one bounded
 user or narrator line; it never creates story state, replay facts, memories, or a

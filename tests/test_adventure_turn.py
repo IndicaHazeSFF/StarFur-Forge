@@ -102,6 +102,26 @@ class AdventureTurnTests(unittest.TestCase):
             self.assertEqual("increment", written[0].resource_operation)
             self.assertEqual(20, written[0].resource_value)
 
+    def test_remove_discards_one_draft_and_keeps_remaining_mutation_alignment(self):
+        with tempfile.TemporaryDirectory() as directory:
+            registry = AdventureRegistry(directory, now=lambda: datetime(2026, 8, 18, tzinfo=UTC))
+            record = registry.create("Quiet Ember")
+            transaction = AdventureTurnTransaction.inactive().begin(record)
+            transaction = transaction.stage(AdventureEventDraft("discovery", "The crew finds a hatch."))
+            transaction = transaction.stage_mutation(
+                AdventureMutation(MUTATION_STATE_SET, state_key="location", state_value="chart room"),
+                summary="The crew reaches the chart room.",
+            )
+            transaction = transaction.stage(AdventureEventDraft("choice", "The crew opens it."))
+            trimmed = transaction.remove(2)
+
+            self.assertEqual(["discovery", "choice"], [draft.event_type for draft in trimmed.drafts])
+            self.assertEqual((), trimmed.mutations)
+            self.assertEqual((), trimmed.mutation_draft_indices)
+            self.assertEqual("The crew opens it.", trimmed.drafts[1].summary)
+            with self.assertRaisesRegex(ValueError, "event number is invalid"):
+                trimmed.remove(3)
+
 
 if __name__ == "__main__":
     unittest.main()

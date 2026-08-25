@@ -292,6 +292,26 @@ Create-your-own-adventure sessions are isolated, mountable story worlds rather t
 
 **COMPLETED INITIAL C4 PREMISE-COMMIT SLICE:** Exact `adventure import commit premise <AI-######> <C-###>` can turn only a currently `premise`-mapped reviewed candidate into one idempotent, auditable canonical `premise` event. It uses only the staged candidate's bounded reviewed summary/details and cannot infer structure or commit state, relationship, knowledge, resource, or excluded mappings. Those destinations remain planning-only until their own typed validation/commit boundaries exist.
 
+**COMPLETED INITIAL C4 STATE-COMMIT SLICE:** Exact `adventure import commit state <AI-######> <C-###> <key>: <value>` requires a current `state` mapping and an explicit user-supplied, normal-validator-approved key/value. The reviewed candidate is bounded audit provenance, not authority to extract or infer a mutation; mapping-keyed retries are idempotent. Relationship, knowledge, resource, and excluded mappings remain planning-only.
+
+**COMPLETED INITIAL C4 RELATIONSHIP-COMMIT SLICE:** Exact `adventure import commit relationship <AI-######> <C-###> <character> <dimension>: <value>` requires a current `relationship` mapping plus explicit qualitative Core-validated values. A reviewed document cannot infer a relationship, create a numeric meter, or touch real-world persona relationships; it provides only bounded audit provenance. Knowledge, resource, and excluded mappings remain planning-only.
+
+**COMPLETED INITIAL C4 KNOWLEDGE-COMMIT SLICE:** Exact `adventure import commit knowledge <AI-######> <C-###> <character> <knows|believes|uncertain>: <fact>` requires a current `knowledge` mapping and an explicit character-specific, normal-validator-approved perspective. The reviewed document cannot infer the claim or turn belief/uncertainty into objective truth; it is bounded audit provenance only. Resource and excluded mappings remain planning-only.
+
+**COMPLETED INITIAL C4 RESOURCE-COMMIT SLICE:** Exact `adventure import commit resource <AI-######> <C-###> <resource-id> <operation>[: <value>]` requires a current `resource` mapping plus an operation permitted by the loaded adventure's immutable resource catalog. Core validates bounds and transitions through the event log; documents cannot invent resources, bypass rules, or expose hidden values. Excluded mappings remain planning-only.
+
+**COMPLETED INITIAL C4 IMPORT-AUDIT SLICE:** Exact `adventure import status <AI-######>` provides a read-only per-candidate view of the latest import plan and mapping-keyed canonical event history. `exclude` remains an explicit plan-only choice: it never deletes, retracts, or hides an already committed event. Explicit correction/retraction controls remain the sole canonical-history writers.
+
+**COMPLETED INITIAL C4 MULTI-SOURCE BUNDLE SLICE:** Exact `adventure import bundle create <title>: <AI-######> <AI-######> [... ]` records one append-only, non-canonical grouping of two or more staged reviewed sources for a workspace. `adventure import bundles` and `adventure import bundle inspect <AB-######>` provide bounded inspection. This supports a `details.md` plus exported conversation workflow without automatic prompt mounting, event extraction, or canonical import.
+
+**COMPLETED INITIAL C4 BUNDLE-AUDIT SLICE:** Exact `adventure import bundle status <AB-######>` composes each bundled source's existing read-only mapping and canonical-history audit. It lets a user inspect progress across a `details.md` + summary/source set without changing mappings, events, state, memories, or prompt context.
+
+**COMPLETED INITIAL C3 STAGED-TURN REVIEW SLICE:** Exact `adventure turn inspect` renders the current session-local ordinary and typed staged drafts before commit. It stays read-only, redacts hidden resource changes, and gives a future generated-turn policy a human-visible validation checkpoint without making partial narration canonical.
+
+**COMPLETED INITIAL C3 STAGED-TURN EDIT SLICE:** Exact `adventure turn remove <staged-event-number>` discards one pre-commit draft by its inspected position while preserving the alignment of later typed mutations. It is session-local only and never deletes, rewrites, or retracts canonical event history.
+
+**COMPLETED INITIAL C3 UNTRUSTED-CANDIDATE SLICE:** `pipeline/adventure_turn_candidates.py` now validates a bounded, decoded provider candidate envelope for ordinary story events only. The output has deterministic candidate IDs but no authority to stage, write, prompt-inject, or commit; candidate confidence is metadata, not trust. Typed state, relationship, knowledge, and resource proposals remain deliberately excluded until their dedicated policy boundary exists.
+
 ### Current dependency-ordered execution path
 
 The older numbered stages above preserve the project history. Active implementation now follows this dependency order so an adventure-import prototype and a read-only Murr apartment arrive early without bypassing safety boundaries:

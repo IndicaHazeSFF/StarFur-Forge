@@ -279,6 +279,26 @@ This is a functional prototype, not yet a durable simulation system. The impleme
 
 **Completed initial premise-commit slice:** exact `adventure import commit premise <AI-######> <C-###>` commits only a currently `premise`-mapped staged candidate as one idempotent canonical `premise` event. It uses the bounded reviewed summary/details directly; it cannot infer a mapping or apply state, relationship, knowledge, resource, or excluded candidates. Each of those destinations still needs its own typed validation and commit boundary.
 
+**Completed initial state-commit slice:** exact `adventure import commit state <AI-######> <C-###> <key>: <value>` requires a current `state` mapping plus an explicit key/value validated through the normal state event path. The reviewed candidate is provenance rather than a source of inferred structure, and mapping-keyed retries are idempotent. Relationship, knowledge, resource, and excluded destinations remain planning-only.
+
+**Completed initial relationship-commit slice:** exact `adventure import commit relationship <AI-######> <C-###> <character> <dimension>: <value>` requires a current `relationship` mapping plus an explicit qualitative relationship validated through the normal event path. The reviewed candidate is provenance, never authority to infer a relationship or numeric meter, and never affects real-world persona relationships. Knowledge, resource, and excluded destinations remain planning-only.
+
+**Completed initial knowledge-commit slice:** exact `adventure import commit knowledge <AI-######> <C-###> <character> <knows|believes|uncertain>: <fact>` requires a current `knowledge` mapping plus one explicit character-specific perspective validated through the normal event path. The reviewed candidate cannot infer the claim or turn a belief/uncertainty into objective truth; it is provenance only. Resource and excluded destinations remain planning-only.
+
+**Completed initial resource-commit slice:** exact `adventure import commit resource <AI-######> <C-###> <resource-id> <operation>[: <value>]` requires a current `resource` mapping plus an explicit operation permitted by the immutable scenario resource catalog. Event-log validation enforces bounds and transitions; reviewed documents cannot invent resources, bypass rules, or reveal hidden values. Excluded destinations remain planning-only.
+
+**Completed initial import-audit slice:** exact `adventure import status <AI-######>` is a read-only per-candidate view of the latest mapping plus mapping-keyed canonical event history. An `exclude` mapping changes only the future plan and never retracts, deletes, or hides existing events; explicit correction/retraction remains the sole history-changing surface.
+
+**Completed initial multi-source bundle slice:** exact `adventure import bundle create <title>: <AI-######> <AI-######> [... ]` records one append-only non-canonical grouping of related staged sources, while `adventure import bundles` and `adventure import bundle inspect <AB-######>` provide bounded inspection. A bundle supports `details.md` plus exported conversation workflows without automatic prompt mounting, extraction, or canonical writes.
+
+**Completed initial bundle-audit slice:** exact `adventure import bundle status <AB-######>` composes the existing read-only mapping and canonical-history audit for every bundled source. It provides cross-source progress inspection without changing mappings, events, state, memory, or prompt context.
+
+**Completed initial staged-turn review slice:** exact `adventure turn inspect` renders the current session-local ordinary and typed staged drafts before commit. It is read-only, redacts hidden resource changes, and creates a future generated-turn validation checkpoint without turning partial narration into canonical state.
+
+**Completed initial staged-turn edit slice:** exact `adventure turn remove <staged-event-number>` discards one inspected draft before commit while retaining later typed-mutation alignment. It is session-local only and never edits, deletes, or retracts canonical event history.
+
+**Completed initial untrusted-candidate slice:** `pipeline/adventure_turn_candidates.py` validates a strict, bounded decoded provider envelope for ordinary event candidates only. It assigns deterministic candidate IDs but cannot stage, write, inject, or commit anything; confidence remains untrusted metadata. Typed state, relationship, knowledge, and resource candidates remain outside this boundary pending dedicated policy.
+
 #### C3. Add staged extraction, validation, and policy
 
 - A task-specific provider may propose events/mutations from the completed user+narrator turn.

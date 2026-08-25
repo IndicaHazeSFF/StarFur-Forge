@@ -19,6 +19,7 @@ class AdventureTurnTransaction:
     record: AdventureRecord | None = None
     drafts: tuple[AdventureEventDraft, ...] = ()
     mutations: tuple[AdventureMutation, ...] = ()
+    mutation_draft_indices: tuple[int, ...] = ()
     request_id: str | None = None
 
     def __post_init__(self) -> None:
@@ -28,7 +29,17 @@ class AdventureTurnTransaction:
             raise TypeError("staged adventure drafts must be AdventureEventDrafts")
         if not isinstance(self.mutations, tuple) or not all(isinstance(mutation, AdventureMutation) for mutation in self.mutations):
             raise TypeError("staged adventure mutations must be AdventureMutations")
-        if self.record is None and (self.drafts or self.mutations):
+        if not isinstance(self.mutation_draft_indices, tuple) or not all(
+            isinstance(index, int) and not isinstance(index, bool) for index in self.mutation_draft_indices
+        ):
+            raise TypeError("staged mutation draft indices must be integers")
+        if len(self.mutations) != len(self.mutation_draft_indices):
+            raise ValueError("staged mutations must retain draft indices")
+        if tuple(sorted(self.mutation_draft_indices)) != self.mutation_draft_indices or len(set(self.mutation_draft_indices)) != len(self.mutation_draft_indices):
+            raise ValueError("staged mutation draft indices are invalid")
+        if any(index < 0 or index >= len(self.drafts) for index in self.mutation_draft_indices):
+            raise ValueError("staged mutation draft index is out of range")
+        if self.record is None and (self.drafts or self.mutations or self.mutation_draft_indices):
             raise ValueError("an inactive adventure turn cannot contain staged changes")
         if self.record is None and self.request_id is not None:
             raise ValueError("an inactive adventure turn cannot contain a request identifier")
@@ -63,6 +74,7 @@ class AdventureTurnTransaction:
             record=self.record,
             drafts=(*self.drafts, draft),
             mutations=self.mutations,
+            mutation_draft_indices=self.mutation_draft_indices,
             request_id=self.request_id,
         )
 
@@ -105,6 +117,7 @@ class AdventureTurnTransaction:
             record=self.record,
             drafts=(*self.drafts, draft),
             mutations=(*self.mutations, mutation),
+            mutation_draft_indices=(*self.mutation_draft_indices, len(self.drafts)),
             request_id=self.request_id,
         )
 
@@ -128,6 +141,29 @@ class AdventureTurnTransaction:
             resource_value=operation.value,
         )
         return self.stage(draft)
+
+    def remove(self, sequence: object) -> "AdventureTurnTransaction":
+        """Discard one 1-based staged draft while retaining mutation provenance."""
+        if not self.active:
+            raise ValueError("no adventure turn is active")
+        if isinstance(sequence, bool) or not isinstance(sequence, int) or not 1 <= sequence <= len(self.drafts):
+            raise ValueError("staged adventure event number is invalid")
+        index = sequence - 1
+        retained_drafts = self.drafts[:index] + self.drafts[index + 1:]
+        retained_mutations = []
+        retained_indices = []
+        for mutation, mutation_index in zip(self.mutations, self.mutation_draft_indices):
+            if mutation_index == index:
+                continue
+            retained_mutations.append(mutation)
+            retained_indices.append(mutation_index - 1 if mutation_index > index else mutation_index)
+        return type(self)(
+            record=self.record,
+            drafts=retained_drafts,
+            mutations=tuple(retained_mutations),
+            mutation_draft_indices=tuple(retained_indices),
+            request_id=self.request_id,
+        )
 
     def abort(self) -> "AdventureTurnTransaction":
         return type(self).inactive()

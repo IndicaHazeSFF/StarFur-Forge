@@ -61,6 +61,7 @@ from pipeline.adventure_resource_state import (
 )
 from pipeline.adventure_session import AdventureSessionState
 from pipeline.adventure_import import AdventureImportError, AdventureImportLog
+from pipeline.adventure_import_bundle import AdventureImportBundleError, AdventureImportBundleLog
 from pipeline.adventure_import_mapping import AdventureImportMappingError, AdventureImportMappingLog
 from pipeline.adventure_transcript import AdventureTranscriptError, AdventureTranscriptLog
 from pipeline.adventure_turn import AdventureTurnTransaction
@@ -1467,6 +1468,99 @@ class AssistantSession:
         lines.append("Inspection is read-only; these candidates are not adventure events, state, replay facts, or memories.")
         return "\n".join(lines)
 
+    def adventure_import_bundles(self):
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded."
+        try:
+            bundles = AdventureImportBundleLog(
+                self.adventure_registry, self.adventure_session.record,
+            ).records()
+        except AdventureImportBundleError as error:
+            return f"Adventure import bundles could not be inspected: {error}"
+        if not bundles:
+            return "No multi-document import bundles are recorded for the loaded workspace."
+        lines = [f"Multi-document import bundles for {self.adventure_session.record.title}:"]
+        lines.extend(
+            f"{bundle.bundle_id} {bundle.title} ({len(bundle.import_ids)} staged source(s))"
+            for bundle in bundles[-12:]
+        )
+        if len(bundles) > 12:
+            lines.append(f"Showing the latest 12 of {len(bundles)} bundles.")
+        lines.append("Bundles are non-canonical source groupings; they create no events, state, memory, or prompt context.")
+        return "\n".join(lines)
+
+    def adventure_import_bundle_create(self, value):
+        usage = "Usage: adventure import bundle create <title>: <AI-######> <AI-######> [... ]"
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded."
+        if not isinstance(value, str) or ":" not in value:
+            return usage
+        title, _, identifiers = value.partition(":")
+        import_ids = identifiers.split()
+        try:
+            bundle = AdventureImportBundleLog(
+                self.adventure_registry, self.adventure_session.record,
+            ).create(title, import_ids)
+        except AdventureImportBundleError as error:
+            return f"Adventure import bundle was not created: {error}"
+        return (
+            f"Created multi-document import bundle: {bundle.title} ({bundle.bundle_id}; "
+            f"{len(bundle.import_ids)} staged source(s)). It is non-canonical and not loaded into prompt context."
+        )
+
+    def adventure_import_bundle_inspect(self, identifier):
+        usage = "Usage: adventure import bundle inspect <AB-######>"
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded."
+        if not isinstance(identifier, str) or not identifier.strip():
+            return usage
+        try:
+            bundle = AdventureImportBundleLog(
+                self.adventure_registry, self.adventure_session.record,
+            ).inspect(identifier)
+            imports = {
+                imported.import_id: imported
+                for imported in AdventureImportLog(self.adventure_registry, self.adventure_session.record).records()
+            }
+        except (AdventureImportBundleError, AdventureImportError) as error:
+            return f"Adventure import bundle could not be inspected: {error}"
+        lines = [f"Adventure import bundle {bundle.bundle_id}: {bundle.title}"]
+        for import_id in bundle.import_ids:
+            imported = imports.get(import_id)
+            if imported is None:  # Defensive: bundle creation validates this, reads remain fail-safe.
+                return "Adventure import bundle could not be inspected: referenced staged import is missing"
+            lines.append(
+                f"{import_id} {imported.source_name} [{imported.source_profile}] "
+                f"({len(imported.candidates)} candidate(s))"
+            )
+        lines.append("Inspection is read-only; this bundle is not an adventure event, state, replay fact, memory, or prompt context.")
+        return "\n".join(lines)
+
+    def adventure_import_bundle_status(self, identifier):
+        """Render read-only mapping/event audit views for every source in a bundle."""
+        usage = "Usage: adventure import bundle status <AB-######>"
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded."
+        if not isinstance(identifier, str) or not identifier.strip():
+            return usage
+        try:
+            bundle = AdventureImportBundleLog(
+                self.adventure_registry, self.adventure_session.record,
+            ).inspect(identifier)
+        except AdventureImportBundleError as error:
+            return f"Adventure import bundle status could not be inspected: {error}"
+
+        lines = [f"Adventure import bundle audit {bundle.bundle_id}: {bundle.title}"]
+        for import_id in bundle.import_ids:
+            status = self.adventure_import_status(import_id)
+            if status.startswith("Adventure import status could not be inspected:") or status == "Adventure import not found.":
+                return f"Adventure import bundle status could not be inspected: {status}"
+            status_lines = status.splitlines()
+            lines.append(f"{import_id}:")
+            lines.extend(f"  {line}" for line in status_lines[1:-1])
+        lines.append("Read-only bundle audit; no mapping, event, state, memory, or prompt context was changed.")
+        return "\n".join(lines)
+
     def adventure_import_map(self, value):
         usage = "Usage: adventure import map <AI-######> <C-###> <premise|state|relationship|knowledge|resource|exclude>"
         if not self.adventure_session.active:
@@ -1502,6 +1596,53 @@ class AssistantSession:
         lines = [f"Adventure import mappings for {identifier.strip().upper()}:" ]
         lines.extend(f"{candidate_id} -> {mapping.destination} ({mapping.mapping_id})" for candidate_id, mapping in sorted(mappings.items()))
         lines.append("Mappings are a user-authored import plan, not adventure events or state.")
+        return "\n".join(lines)
+
+    def adventure_import_status(self, identifier):
+        """Inspect one import's current plan alongside its auditable event history."""
+        usage = "Usage: adventure import status <AI-######>"
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded."
+        if not isinstance(identifier, str) or not identifier.strip():
+            return usage
+        requested = identifier.strip().upper()
+        try:
+            imports = AdventureImportLog(self.adventure_registry, self.adventure_session.record)
+            imported = next(item for item in imports.records() if item.import_id == requested)
+            mappings = AdventureImportMappingLog(self.adventure_registry, self.adventure_session.record)
+            current = mappings.current(requested)
+            mapping_history = {candidate["candidate_id"]: [] for candidate in imported.candidates}
+            for mapping in mappings.records():
+                if mapping.import_id == requested:
+                    mapping_history[mapping.candidate_id].append(mapping)
+            events = AdventureEventLog(self.adventure_registry, self.adventure_session.record).events()
+        except StopIteration:
+            return "Adventure import not found."
+        except (AdventureImportError, AdventureImportMappingError, AdventureEventLogError) as error:
+            return f"Adventure import status could not be inspected: {error}"
+
+        events_by_request = {}
+        for event in events:
+            if event.request_id:
+                events_by_request.setdefault(event.request_id, []).append(event)
+        lines = [
+            f"Adventure import status for {imported.import_id}:",
+            f"Source: {imported.source_name} [{imported.source_profile}]",
+        ]
+        for candidate in imported.candidates:
+            candidate_id = candidate["candidate_id"]
+            mapping = current.get(candidate_id)
+            plan = "unmapped" if mapping is None else f"{mapping.destination} ({mapping.mapping_id})"
+            committed = []
+            for historical_mapping in mapping_history[candidate_id]:
+                committed.extend(events_by_request.get(f"import-{historical_mapping.mapping_id.casefold()}", ()))
+            history = "none" if not committed else ", ".join(
+                f"{event.event_id} [{event.event_type}]" for event in committed
+            )
+            lines.append(f"{candidate_id}: current plan {plan}; canonical history: {history}")
+        lines.append(
+            "Read-only import audit. `exclude` changes only the current plan; it never retracts prior canonical events."
+        )
         return "\n".join(lines)
 
     def adventure_import_commit_premise(self, value):
@@ -1547,6 +1688,197 @@ class AssistantSession:
         return (
             f"Committed mapped premise {mapping.import_id} {mapping.candidate_id} as "
             f"{event.event_id}. The source mapping remains auditable."
+        )
+
+    def adventure_import_commit_state(self, value):
+        """Commit one mapped document candidate through an explicit typed state value."""
+        usage = "Usage: adventure import commit state <AI-######> <C-###> <key>: <value>"
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded."
+        parts = value.split(maxsplit=3) if isinstance(value, str) else []
+        if len(parts) != 4 or parts[0].casefold() != "state" or ":" not in parts[3]:
+            return usage
+        _, import_id, candidate_id, state_input = parts
+        key, state_value = state_input.split(":", 1)
+        try:
+            imports = AdventureImportLog(self.adventure_registry, self.adventure_session.record)
+            mappings = AdventureImportMappingLog(self.adventure_registry, self.adventure_session.record)
+            current = mappings.current(import_id)
+            normalized_candidate = candidate_id.strip().upper()
+            mapping = current.get(normalized_candidate)
+            if mapping is None:
+                return "Adventure import state was not committed: candidate has no explicit mapping."
+            if mapping.destination != "state":
+                return (
+                    "Adventure import state was not committed: candidate is mapped to "
+                    f"{mapping.destination}, not state."
+                )
+            imported = next(item for item in imports.records() if item.import_id == mapping.import_id)
+            candidate = next(item for item in imported.candidates if item["candidate_id"] == mapping.candidate_id)
+            log = AdventureEventLog(self.adventure_registry, self.adventure_session.record)
+            event = log.append(
+                "state_change", f"Imported state {key.strip()}: {state_value.strip()}.",
+                details=f"Reviewed source {mapping.import_id}/{mapping.candidate_id}: {candidate['summary']}",
+                state_key=key, state_value=state_value,
+                request_id=f"import-{mapping.mapping_id.lower()}",
+            )
+            events = log.events()
+        except StopIteration:
+            return "Adventure import state was not committed: staged import candidate not found."
+        except (AdventureImportError, AdventureImportMappingError, AdventureEventLogError) as error:
+            return f"Adventure import state was not committed: {error}"
+        self.adventure_session = self.adventure_session.mount(self.adventure_session.record, events)
+        return (
+            f"Committed mapped state {mapping.import_id} {mapping.candidate_id} as {event.event_id}: "
+            f"{event.state_key} = {event.state_value}. The source mapping remains auditable."
+        )
+
+    def adventure_import_commit_relationship(self, value):
+        """Commit one mapped candidate through an explicit qualitative relationship value."""
+        usage = "Usage: adventure import commit relationship <AI-######> <C-###> <character> <dimension>: <value>"
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded."
+        parts = value.split(maxsplit=3) if isinstance(value, str) else []
+        if len(parts) != 4 or parts[0].casefold() != "relationship" or ":" not in parts[3]:
+            return usage
+        _, import_id, candidate_id, relationship_input = parts
+        identity, relationship_value = relationship_input.split(":", 1)
+        identity_parts = identity.split()
+        if len(identity_parts) < 2:
+            return usage
+        subject = " ".join(identity_parts[:-1])
+        dimension = identity_parts[-1]
+        try:
+            imports = AdventureImportLog(self.adventure_registry, self.adventure_session.record)
+            mappings = AdventureImportMappingLog(self.adventure_registry, self.adventure_session.record)
+            current = mappings.current(import_id)
+            normalized_candidate = candidate_id.strip().upper()
+            mapping = current.get(normalized_candidate)
+            if mapping is None:
+                return "Adventure import relationship was not committed: candidate has no explicit mapping."
+            if mapping.destination != "relationship":
+                return (
+                    "Adventure import relationship was not committed: candidate is mapped to "
+                    f"{mapping.destination}, not relationship."
+                )
+            imported = next(item for item in imports.records() if item.import_id == mapping.import_id)
+            candidate = next(item for item in imported.candidates if item["candidate_id"] == mapping.candidate_id)
+            log = AdventureEventLog(self.adventure_registry, self.adventure_session.record)
+            event = log.append(
+                "relationship_change", f"Imported relationship {subject.strip()} / {dimension.strip()}: {relationship_value.strip()}.",
+                details=f"Reviewed source {mapping.import_id}/{mapping.candidate_id}: {candidate['summary']}",
+                relationship_subject=subject, relationship_dimension=dimension,
+                relationship_value=relationship_value,
+                request_id=f"import-{mapping.mapping_id.lower()}",
+            )
+            events = log.events()
+        except StopIteration:
+            return "Adventure import relationship was not committed: staged import candidate not found."
+        except (AdventureImportError, AdventureImportMappingError, AdventureEventLogError) as error:
+            return f"Adventure import relationship was not committed: {error}"
+        self.adventure_session = self.adventure_session.mount(self.adventure_session.record, events)
+        return (
+            f"Committed mapped relationship {mapping.import_id} {mapping.candidate_id} as {event.event_id}: "
+            f"{event.relationship_subject} / {event.relationship_dimension} = {event.relationship_value}. "
+            "The source mapping remains auditable."
+        )
+
+    def adventure_import_commit_knowledge(self, value):
+        """Commit one mapped candidate through explicit character-specific knowledge."""
+        usage = "Usage: adventure import commit knowledge <AI-######> <C-###> <character> <knows|believes|uncertain>: <fact>"
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded."
+        parts = value.split(maxsplit=3) if isinstance(value, str) else []
+        if len(parts) != 4 or parts[0].casefold() != "knowledge" or ":" not in parts[3]:
+            return usage
+        _, import_id, candidate_id, knowledge_input = parts
+        identity, fact = knowledge_input.split(":", 1)
+        identity_parts = identity.split()
+        if len(identity_parts) < 2:
+            return usage
+        subject = " ".join(identity_parts[:-1])
+        status = identity_parts[-1]
+        try:
+            imports = AdventureImportLog(self.adventure_registry, self.adventure_session.record)
+            mappings = AdventureImportMappingLog(self.adventure_registry, self.adventure_session.record)
+            current = mappings.current(import_id)
+            normalized_candidate = candidate_id.strip().upper()
+            mapping = current.get(normalized_candidate)
+            if mapping is None:
+                return "Adventure import knowledge was not committed: candidate has no explicit mapping."
+            if mapping.destination != "knowledge":
+                return (
+                    "Adventure import knowledge was not committed: candidate is mapped to "
+                    f"{mapping.destination}, not knowledge."
+                )
+            imported = next(item for item in imports.records() if item.import_id == mapping.import_id)
+            candidate = next(item for item in imported.candidates if item["candidate_id"] == mapping.candidate_id)
+            log = AdventureEventLog(self.adventure_registry, self.adventure_session.record)
+            event = log.append(
+                "character_knowledge", f"Imported knowledge {subject.strip()} {status.strip()}: {fact.strip()}.",
+                details=f"Reviewed source {mapping.import_id}/{mapping.candidate_id}: {candidate['summary']}",
+                knowledge_subject=subject, knowledge_status=status, knowledge_fact=fact,
+                request_id=f"import-{mapping.mapping_id.lower()}",
+            )
+            events = log.events()
+        except StopIteration:
+            return "Adventure import knowledge was not committed: staged import candidate not found."
+        except (AdventureImportError, AdventureImportMappingError, AdventureEventLogError) as error:
+            return f"Adventure import knowledge was not committed: {error}"
+        self.adventure_session = self.adventure_session.mount(self.adventure_session.record, events)
+        return (
+            f"Committed mapped knowledge {mapping.import_id} {mapping.candidate_id} as {event.event_id}: "
+            f"{event.knowledge_subject} {event.knowledge_status} = {event.knowledge_fact}. "
+            "The source mapping remains auditable."
+        )
+
+    def adventure_import_commit_resource(self, value):
+        """Commit one mapped candidate through a catalog-validated resource operation."""
+        usage = "Usage: adventure import commit resource <AI-######> <C-###> <resource-id> <operation>[: <value>]"
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded."
+        parts = value.split(maxsplit=3) if isinstance(value, str) else []
+        if len(parts) != 4 or parts[0].casefold() != "resource":
+            return usage
+        _, import_id, candidate_id, resource_input = parts
+        try:
+            operation = self._parse_adventure_resource_operation(resource_input)
+            definition = self.adventure_session.resource_catalog.resolve(operation.resource_id)
+            imports = AdventureImportLog(self.adventure_registry, self.adventure_session.record)
+            mappings = AdventureImportMappingLog(self.adventure_registry, self.adventure_session.record)
+            current = mappings.current(import_id)
+            normalized_candidate = candidate_id.strip().upper()
+            mapping = current.get(normalized_candidate)
+            if mapping is None:
+                return "Adventure import resource was not committed: candidate has no explicit mapping."
+            if mapping.destination != "resource":
+                return (
+                    "Adventure import resource was not committed: candidate is mapped to "
+                    f"{mapping.destination}, not resource."
+                )
+            imported = next(item for item in imports.records() if item.import_id == mapping.import_id)
+            candidate = next(item for item in imported.candidates if item["candidate_id"] == mapping.candidate_id)
+            log = AdventureEventLog(self.adventure_registry, self.adventure_session.record)
+            event = log.append(
+                "resource_change", self._resource_event_summary(definition),
+                details=f"Reviewed source {mapping.import_id}/{mapping.candidate_id}: {candidate['summary']}",
+                resource_id=operation.resource_id, resource_operation=operation.operation,
+                resource_value=operation.value, request_id=f"import-{mapping.mapping_id.lower()}",
+            )
+            events = log.events()
+        except StopIteration:
+            return "Adventure import resource was not committed: staged import candidate not found."
+        except (AdventureImportError, AdventureImportMappingError, AdventureEventLogError, AdventureResourceError, ValueError) as error:
+            return f"Adventure import resource was not committed: {error}"
+        self.adventure_session = self.adventure_session.mount(self.adventure_session.record, events)
+        if definition.visibility == "hidden":
+            return (
+                f"Committed a mapped hidden adventure resource as {event.event_id}. "
+                "The source mapping remains auditable."
+            )
+        return (
+            f"Committed mapped resource {mapping.import_id} {mapping.candidate_id} as {event.event_id}: "
+            f"{definition.resource_id} {operation.operation}. The source mapping remains auditable."
         )
 
     def adventure_transcript_record(self, value):
@@ -1907,6 +2239,48 @@ class AssistantSession:
             f"{len(self.adventure_turn.drafts)} event(s) staged and not yet persisted."
         )
 
+    def adventure_turn_inspect(self):
+        """Show the current session-local batch without creating a story record."""
+        if not self.adventure_turn.active:
+            return "Adventure turn staging: inactive."
+        if not self.adventure_session.active or self.adventure_session.record != self.adventure_turn.record:
+            self.adventure_turn = self.adventure_turn.abort()
+            return "Adventure turn staging was discarded because its workspace is no longer loaded."
+        if not self.adventure_turn.drafts:
+            return "Adventure turn staging is active but has no staged events."
+        lines = [f"Staged adventure turn for {self.adventure_turn.record.title}:"]
+        for sequence, draft in enumerate(self.adventure_turn.drafts, 1):
+            if draft.event_type == "resource_change" and draft.resource_id:
+                try:
+                    definition = self.adventure_session.resource_catalog.resolve(draft.resource_id)
+                except AdventureResourceError:
+                    return "Adventure turn staging could not be inspected: staged resource is no longer declared"
+                if definition.visibility == "hidden":
+                    lines.append(f"{sequence}. [resource_change] Hidden resource change")
+                    continue
+            lines.append(f"{sequence}. [{draft.event_type}] {draft.summary}")
+        lines.append("Read-only staged-turn review; nothing has been committed to the adventure event log.")
+        return "\n".join(lines)
+
+    def adventure_turn_remove(self, value):
+        usage = "Usage: adventure turn remove <staged-event-number>"
+        if not self.adventure_turn.active:
+            return "Adventure turn staging: inactive."
+        if not self.adventure_session.active or self.adventure_session.record != self.adventure_turn.record:
+            self.adventure_turn = self.adventure_turn.abort()
+            return "Adventure turn staging was discarded because its workspace is no longer loaded."
+        if not isinstance(value, str) or not value.strip().isdigit():
+            return usage
+        try:
+            removed = self.adventure_turn.drafts[int(value.strip()) - 1]
+            self.adventure_turn = self.adventure_turn.remove(int(value.strip()))
+        except (IndexError, ValueError):
+            return "Adventure turn event was not removed: staged event number is invalid."
+        return (
+            f"Removed staged adventure event [{removed.event_type}]: {removed.summary} "
+            "Nothing was committed."
+        )
+
     def adventure_turn_stage(self, value):
         if not self.adventure_turn.active:
             return "Adventure turn staging: inactive. Use adventure turn begin first."
@@ -2073,10 +2447,29 @@ class AssistantSession:
             return self.adventure_events()
         if lowered == "adventure import inspect" or lowered.startswith("adventure import inspect "):
             return self.adventure_import_inspect(text.strip()[len("adventure import inspect"):])
+        if lowered == "adventure import bundle create" or lowered.startswith("adventure import bundle create "):
+            return self.adventure_import_bundle_create(text.strip()[len("adventure import bundle create"):])
+        if lowered == "adventure import bundle inspect" or lowered.startswith("adventure import bundle inspect "):
+            return self.adventure_import_bundle_inspect(text.strip()[len("adventure import bundle inspect"):])
+        if lowered == "adventure import bundle status" or lowered.startswith("adventure import bundle status "):
+            return self.adventure_import_bundle_status(text.strip()[len("adventure import bundle status"):])
+        if lowered in {"adventure import bundles", "adventure import bundle list"}:
+            return self.adventure_import_bundles()
         if lowered == "adventure import commit" or lowered.startswith("adventure import commit "):
-            return self.adventure_import_commit_premise(text.strip()[len("adventure import commit"):])
+            import_commit = text.strip()[len("adventure import commit"):]
+            if import_commit.lstrip().casefold().startswith("state "):
+                return self.adventure_import_commit_state(import_commit)
+            if import_commit.lstrip().casefold().startswith("relationship "):
+                return self.adventure_import_commit_relationship(import_commit)
+            if import_commit.lstrip().casefold().startswith("knowledge "):
+                return self.adventure_import_commit_knowledge(import_commit)
+            if import_commit.lstrip().casefold().startswith("resource "):
+                return self.adventure_import_commit_resource(import_commit)
+            return self.adventure_import_commit_premise(import_commit)
         if lowered == "adventure import map" or lowered.startswith("adventure import map "):
             return self.adventure_import_map(text.strip()[len("adventure import map"):])
+        if lowered == "adventure import status" or lowered.startswith("adventure import status "):
+            return self.adventure_import_status(text.strip()[len("adventure import status"):])
         if lowered == "adventure import mappings" or lowered.startswith("adventure import mappings "):
             return self.adventure_import_mappings(text.strip()[len("adventure import mappings"):])
         if lowered in {"adventure imports", "adventure import list"}:
@@ -2121,6 +2514,10 @@ class AssistantSession:
             return self.adventure_correct_resource(text.strip()[len("adventure correct resource"):])
         if lowered == "adventure turn begin":
             return self.adventure_turn_begin()
+        if lowered == "adventure turn inspect":
+            return self.adventure_turn_inspect()
+        if lowered == "adventure turn remove" or lowered.startswith("adventure turn remove "):
+            return self.adventure_turn_remove(text.strip()[len("adventure turn remove"):])
         if lowered in {"adventure turn status", "adventure turn"}:
             return self.adventure_turn_status()
         if lowered == "adventure turn stage state" or lowered.startswith("adventure turn stage state "):
