@@ -29,6 +29,7 @@ from pipeline.adventure_resource_state import (
     AdventureResourceOperation, AdventureResourceState, AdventureResourceStateError,
     derive_adventure_resource_state,
 )
+from pipeline.adventure_turn_provenance import AdventureTurnGenerationProvenance
 
 try:  # POSIX production (including WSL); Windows uses the standard-library fallback below.
     import fcntl
@@ -157,6 +158,7 @@ class AdventureEvent:
     request_id: str | None = None
     supersedes_event_id: str | None = None
     mutation: AdventureMutation | None = None
+    generation_provenance: AdventureTurnGenerationProvenance | None = None
     source: str = EVENT_SOURCE_CORE_EXPLICIT
     schema_version: int = EVENT_LOG_SCHEMA_VERSION
 
@@ -190,6 +192,13 @@ class AdventureEvent:
                 raise AdventureEventLogError("an event cannot supersede itself")
         if self.mutation is not None and not isinstance(self.mutation, AdventureMutation):
             raise AdventureEventLogError("event mutation is invalid")
+        if self.generation_provenance is not None:
+            if not isinstance(self.generation_provenance, AdventureTurnGenerationProvenance):
+                raise AdventureEventLogError("event generation provenance is invalid")
+            if self.schema_version != EVENT_LOG_SCHEMA_VERSION:
+                raise AdventureEventLogError("event generation provenance is supported only for schema-v1 events")
+            if self.generation_provenance.candidate_id is None:
+                raise AdventureEventLogError("event generation provenance requires a selected candidate")
         if self.schema_version == EVENT_LOG_SCHEMA_V2:
             self._apply_v2_mutation()
         if self.state_key is None and self.state_value is None:
@@ -329,6 +338,10 @@ class AdventureEvent:
                 request_id=value.get("request_id"),
                 supersedes_event_id=value.get("supersedes_event_id"),
                 mutation=None if mutation_value is None else AdventureMutation.from_dict(mutation_value),
+                generation_provenance=(
+                    None if value.get("generation_provenance") is None
+                    else AdventureTurnGenerationProvenance.from_dict(value["generation_provenance"])
+                ),
                 source=value.get("source", EVENT_SOURCE_CORE_EXPLICIT),
                 schema_version=schema_version,
             )
@@ -365,6 +378,10 @@ class AdventureEvent:
             "resource_operation": self.resource_operation,
             "resource_value": self.resource_value,
         })
+        # Keep legacy serialization exactly stable when no generated-candidate
+        # metadata exists, including existing checkpoint fingerprints.
+        if self.generation_provenance is not None:
+            value["generation_provenance"] = self.generation_provenance.to_dict()
         return value
 
 
@@ -386,6 +403,7 @@ class AdventureEventDraft:
     resource_id: str | None = None
     resource_operation: str | None = None
     resource_value: object = None
+    generation_provenance: AdventureTurnGenerationProvenance | None = None
 
     def __post_init__(self) -> None:
         # Reuse the authoritative field validation while deliberately omitting
@@ -402,12 +420,13 @@ class AdventureEventDraft:
             knowledge_fact=self.knowledge_fact,
             resource_id=self.resource_id, resource_operation=self.resource_operation,
             resource_value=self.resource_value,
+            generation_provenance=self.generation_provenance,
         )
         for field_name in (
             "event_type", "summary", "details", "state_key", "state_value",
             "relationship_subject", "relationship_dimension", "relationship_value",
             "knowledge_subject", "knowledge_status", "knowledge_fact",
-            "resource_id", "resource_operation", "resource_value",
+            "resource_id", "resource_operation", "resource_value", "generation_provenance",
         ):
             object.__setattr__(self, field_name, getattr(validated, field_name))
 
@@ -697,6 +716,7 @@ class AdventureEventLog:
                     knowledge_fact=draft.knowledge_fact, request_id=normalized_request_id,
                     resource_id=draft.resource_id, resource_operation=draft.resource_operation,
                     resource_value=draft.resource_value,
+                    generation_provenance=draft.generation_provenance,
                 )
                 for index, draft in enumerate(drafts, start=1)
             ]
@@ -775,7 +795,7 @@ class AdventureEventLog:
             "event_type", "summary", "details", "state_key", "state_value",
             "relationship_subject", "relationship_dimension", "relationship_value",
             "knowledge_subject", "knowledge_status", "knowledge_fact",
-            "resource_id", "resource_operation", "resource_value",
+            "resource_id", "resource_operation", "resource_value", "generation_provenance",
         )
         return all(
             all(getattr(event, field) == getattr(draft, field) for field in fields)

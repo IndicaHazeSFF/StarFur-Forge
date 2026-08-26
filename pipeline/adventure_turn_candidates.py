@@ -9,16 +9,30 @@ the resulting bounded ordinary-event candidates.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import Mapping
 
-from pipeline.adventure_events import AdventureEventDraft, DRAFT_EVENT_TYPES
+from pipeline.adventure_events import AdventureEventDraft
+from pipeline.adventure_turn_provenance import AdventureTurnGenerationProvenance
 
 
 TURN_CANDIDATE_SCHEMA_VERSION = 1
 MAX_ADVENTURE_TURN_CANDIDATES = 16
-_ORDINARY_CANDIDATE_EVENT_TYPES = DRAFT_EVENT_TYPES - {
-    "state_change", "relationship_change", "character_knowledge", "resource_change",
-}
+# This deliberately does not derive from every event type Core can write.  Adding
+# a generated type is an explicit policy change, not an accidental side effect of
+# expanding the event-log schema.
+ORDINARY_GENERATED_EVENT_TYPES = frozenset({
+    "choice", "discovery", "promise", "lie", "emotional_transition",
+    "unresolved_hook", "inventory_change", "location_change",
+})
+TURN_GENERATION_ID_PATTERN = re.compile(r"^TG-[0-9a-f]{32}$")
+
+
+def normalize_turn_generation_id(value: object) -> str:
+    """Validate a Core-generated opaque candidate-batch identity."""
+    if not isinstance(value, str) or not TURN_GENERATION_ID_PATTERN.fullmatch(value):
+        raise ValueError("turn generation identifier is invalid")
+    return value
 
 
 class AdventureTurnCandidateError(ValueError):
@@ -41,8 +55,10 @@ class AdventureTurnCandidate:
             raise AdventureTurnCandidateError("turn candidate identifier is invalid")
         if not isinstance(self.draft, AdventureEventDraft):
             raise TypeError("turn candidate draft must be an AdventureEventDraft")
-        if self.draft.event_type not in _ORDINARY_CANDIDATE_EVENT_TYPES:
-            raise AdventureTurnCandidateError("turn candidate event type requires a dedicated typed policy")
+        if self.draft.event_type not in ORDINARY_GENERATED_EVENT_TYPES:
+            raise AdventureTurnCandidateError(
+                "turn candidate event type is not permitted for generated candidates"
+            )
         if any((
             self.draft.state_key is not None,
             self.draft.relationship_subject is not None,
@@ -56,6 +72,25 @@ class AdventureTurnCandidate:
         if not 0.0 <= confidence <= 1.0:
             raise AdventureTurnCandidateError("turn candidate confidence must be between 0 and 1")
         object.__setattr__(self, "confidence", confidence)
+
+
+@dataclass(frozen=True)
+class AdventureTurnCandidateSelection:
+    """One exact candidate selected from a trusted, session-local generation."""
+
+    generation_id: str
+    candidate: AdventureTurnCandidate
+    provenance: AdventureTurnGenerationProvenance | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "generation_id", normalize_turn_generation_id(self.generation_id))
+        if not isinstance(self.candidate, AdventureTurnCandidate):
+            raise TypeError("selected turn candidate must be an AdventureTurnCandidate")
+        if self.provenance is not None:
+            if not isinstance(self.provenance, AdventureTurnGenerationProvenance):
+                raise TypeError("selected turn candidate provenance is invalid")
+            if self.provenance.generation_id != self.generation_id:
+                raise ValueError("selected turn candidate provenance does not match its generation")
 
 
 @dataclass(frozen=True)
@@ -107,8 +142,41 @@ def parse_untrusted_adventure_turn_candidates(value: object) -> AdventureTurnCan
     return AdventureTurnCandidateBatch(tuple(candidates))
 
 
+def render_adventure_turn_candidate_batch(
+    batch: AdventureTurnCandidateBatch, *, generation_id: str | None = None,
+) -> str:
+    """Render bounded candidate data for a future Core-owned review surface.
+
+    This intentionally displays only Core-validated ordinary draft fields.  It
+    does not turn a candidate into a staged draft, canonical event, or model
+    instruction.
+    """
+    if not isinstance(batch, AdventureTurnCandidateBatch):
+        raise TypeError("turn candidate batch is invalid")
+    lines = [
+        "Generated adventure-turn candidates (untrusted; not staged):",
+    ]
+    if generation_id is not None:
+        lines.append(f"Generation: {normalize_turn_generation_id(generation_id)}")
+    for candidate in batch.candidates:
+        lines.append(
+            f"{candidate.candidate_id} [{candidate.draft.event_type}] "
+            f"{candidate.draft.summary}"
+        )
+        if candidate.draft.details:
+            lines.append(f"  Details: {candidate.draft.details}")
+        lines.append(f"  Candidate confidence: {candidate.confidence:.2f}")
+    lines.append(
+        "Review output only; Core must explicitly validate and stage any "
+        "selected candidate before it can be committed."
+    )
+    return "\n".join(lines)
+
+
 __all__ = [
     "AdventureTurnCandidate", "AdventureTurnCandidateBatch", "AdventureTurnCandidateError",
-    "MAX_ADVENTURE_TURN_CANDIDATES", "TURN_CANDIDATE_SCHEMA_VERSION",
-    "parse_untrusted_adventure_turn_candidates",
+    "AdventureTurnCandidateSelection",
+    "MAX_ADVENTURE_TURN_CANDIDATES", "ORDINARY_GENERATED_EVENT_TYPES",
+    "TURN_CANDIDATE_SCHEMA_VERSION", "normalize_turn_generation_id",
+    "parse_untrusted_adventure_turn_candidates", "render_adventure_turn_candidate_batch",
 ]

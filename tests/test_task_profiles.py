@@ -9,10 +9,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.modules.setdefault("ollama", types.ModuleType("ollama"))
 
 from pipeline.application import AssistantApplication
+from pipeline.adventure_registry import AdventureRegistry
 from pipeline.assistant import AssistantConfig, AssistantSession, load_config
 from pipeline.document_intake import prepare_document_text
 from pipeline.task_profiles import (
-    TASK_ASSISTANT_CHAT, TASK_DOCUMENT_ANNOTATION, TaskProfile, TaskProfiles,
+    TASK_ADVENTURE_TURN_GENERATION, TASK_ADVENTURE_TURN_MUTATION_GENERATION, TASK_ASSISTANT_CHAT, TASK_DOCUMENT_ANNOTATION, TaskProfile, TaskProfiles,
     load_task_profiles,
 )
 
@@ -115,6 +116,42 @@ class TaskProfileTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(RuntimeError, "requires provider"):
             session.respond("hello")
+
+    def test_adventure_turn_profile_uses_its_own_model_and_options(self):
+        profiles = TaskProfiles({
+            TASK_ADVENTURE_TURN_GENERATION: TaskProfile(
+                TASK_ADVENTURE_TURN_GENERATION, provider="ollama", model="turn-model",
+                generation_options={"temperature": 0.1}, max_output_tokens=222,
+            ),
+        })
+        with tempfile.TemporaryDirectory() as directory:
+            provider = FakeProvider()
+            session = AssistantSession(
+                config_with_profiles(profiles), "Persona", provider=provider,
+                memory_loader=lambda **_kwargs: [], policy="Policy",
+                adventure_registry=AdventureRegistry(directory),
+            )
+            session.adventure_registry.create("Quiet Ember")
+            session.adventure_load("Quiet Ember")
+
+            with self.assertRaisesRegex(RuntimeError, "failed safely"):
+                session.generate_adventure_turn_candidates(user_text="I inspect the hatch.")
+
+            self.assertEqual("turn-model", provider.calls[0]["model"])
+            self.assertEqual({"temperature": 0.1, "num_predict": 222}, provider.calls[0]["options"])
+
+    def test_typed_adventure_mutation_task_is_a_distinct_profile_key(self):
+        profiles = TaskProfiles({
+            TASK_ADVENTURE_TURN_MUTATION_GENERATION: TaskProfile(
+                TASK_ADVENTURE_TURN_MUTATION_GENERATION, model="mutation-model", max_output_tokens=111,
+            ),
+        })
+        resolved = profiles.resolve(
+            TASK_ADVENTURE_TURN_MUTATION_GENERATION, default_model="chat-model",
+        )
+        self.assertEqual("mutation-model", resolved.model)
+        self.assertEqual({"num_predict": 111}, resolved.options)
+        self.assertNotEqual(TASK_ADVENTURE_TURN_GENERATION, TASK_ADVENTURE_TURN_MUTATION_GENERATION)
 
 
 if __name__ == "__main__":

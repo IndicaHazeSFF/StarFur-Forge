@@ -1398,3 +1398,57 @@
 - Behavior: `pipeline/adventure_turn_candidates.py` validates a decoded schema-v1 envelope of up to sixteen ordinary adventure-event proposals and assigns deterministic `TC-###` identifiers.
 - Constraints: this provider-free boundary cannot call a model, stage a turn, mutate a workspace, write an event, or inject prompt context. Candidate confidence is metadata only; structured state, relationship, knowledge, and resource candidates are rejected pending their own typed policy.
 - Verification: focused candidate and adventure-turn unit suites pass.
+
+## 2026-08-25 - Add read-only untrusted adventure-turn candidate review rendering
+
+- Behavior: validated ordinary `TC-###` candidates can be rendered deterministically with bounded details and candidate confidence.
+- Constraints: review output is explicitly marked untrusted and non-staged. It cannot call a provider, queue a candidate in session state, stage a draft, or write an adventure event.
+- Verification: focused candidate tests cover review rendering and invalid input rejection.
+
+## 2026-08-25 - Add explicit selected-candidate adventure-turn staging bridge
+
+- Behavior: an active `AdventureTurnTransaction` can stage a caller-selected, already validated ordinary `AdventureTurnCandidate` as its normal in-memory draft.
+- Constraints: the helper has no provider, candidate-batch, or event-log access and provides no automatic selection or persistence. Existing explicit transaction commit remains the sole writer.
+- Verification: focused transaction coverage confirms the candidate is staged only in memory and malformed inputs are rejected.
+
+## 2026-08-25 - Add session-local workspace-bound adventure-turn candidate inbox
+
+- Behavior: a bounded inbox can retain one validated ordinary candidate batch for one workspace and return an exact selected `TC-###` candidate without mutating it.
+- Constraints: it is noncanonical and provider-free; it has no command, prompt, staging, or persistence integration. Future mount lifecycle wiring must clear it before cross-workspace use is possible.
+- Verification: focused inbox coverage verifies exact selection, workspace isolation, empty handling, and clearing.
+
+## 2026-08-25 - Wire candidate inbox to the assistant adventure lifecycle
+
+- Behavior: `AssistantSession` can programmatically present a prevalidated candidate batch for its mounted workspace and retrieve one exact selected candidate; mount/unmount transitions clear that inbox.
+- Constraints: these are not chat commands or provider adapters. They cannot invoke a provider, add prompt context, select or stage automatically, or write an event.
+- Verification: focused command-session coverage confirms workspace transition clears the inbox without model calls.
+
+## 2026-08-25 - Make selected adventure-turn candidate staging idempotent
+
+- Behavior: transactions retain staged `TC-###` identities. Repeating selection of the same candidate is a no-op; removing its draft allows an explicit restage.
+- Constraints: this changes only session-local transaction bookkeeping. It adds no provider call, prompt input, automatic selection, or event-log write.
+- Verification: focused transaction tests confirm duplicate prevention and intentional restaging after removal.
+
+## 2026-08-25 - Guard adventure-turn candidates against stale authoritative state
+
+- Behavior: candidate inboxes retain the authoritative event count current at presentation; selection fails closed when that count no longer matches the mounted workspace.
+- Constraints: this is a provider-free, session-local validation check only. It neither regenerates candidates nor changes adventure history.
+- Verification: focused inbox tests cover stale-count rejection alongside workspace and candidate-ID validation.
+
+## 2026-08-25 - Add explicit adventure-turn candidate review and staging commands
+
+- Behavior: `adventure turn candidates` renders the current untrusted workspace-bound inbox; `adventure turn stage candidate <TC-###>` stages one exact ordinary candidate into an active transaction and is idempotent for retries.
+- Constraints: candidates still enter only through a programmatic prevalidated handoff. These Core commands cannot generate candidates, call a provider, automatically select a candidate, or write an event before normal `adventure turn commit`.
+- Verification: focused command coverage verifies review, inactive transaction rejection, exact staging, duplicate no-op behavior, and no model calls.
+
+## 2026-08-26 - Add bounded provider-neutral adventure-turn generation request
+
+- Behavior: `AdventureTurnGenerationRequest` renders one workspace-bound, event-count-aware request with bounded authoritative context and explicit untrusted user/narrator source sections for an ordinary-candidate JSON response.
+- Constraints: it cannot call a provider, parse output, populate the candidate inbox, stage a draft, add prompt context, or write an event. Structured mutation types and hidden reasoning are excluded from its response contract.
+- Verification: focused request tests cover rendered boundaries and empty/oversized input rejection.
+
+## 2026-08-26 - Add dormant task-specific adventure-turn provider adapter
+
+- Behavior: an injected `ChatProvider` can be explicitly asked to complete a bounded adventure-turn request; only strict JSON response content proceeds to the separate ordinary-candidate validator.
+- Constraints: construction performs no provider call. The adapter has no session, command, retrieval, prompt-injection, inbox, staging, or event-log access; provider/malformed-output failures provide no partial candidates.
+- Verification: fake-provider tests cover explicit invocation, model/options forwarding, strict-JSON rejection, and invalid-envelope rejection.

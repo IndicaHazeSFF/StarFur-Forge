@@ -412,6 +412,7 @@ Prepare or inspect isolated CYOA workspace metadata with exact Core commands:
     adventure session
     adventure status
     adventure events
+    adventure event provenance <AE-######>
     adventure imports
     adventure import inspect <AI-######>
     adventure import bundles
@@ -447,6 +448,13 @@ Prepare or inspect isolated CYOA workspace metadata with exact Core commands:
     adventure correct resource <AE-######> <resource-id> <operation>[: <value>]
     adventure turn begin
     adventure turn status
+    adventure turn generate <completed user-turn text>
+    adventure turn generate transcript
+    adventure turn generation status
+    adventure turn candidates
+    adventure turn inspect
+    adventure turn remove <staged-event-number>
+    adventure turn stage candidate <TC-###>
     adventure turn stage <event-type>: <summary>
     adventure turn stage state <key>: <value>
     adventure turn stage relationship <character> <dimension>: <value>
@@ -477,6 +485,10 @@ catalog, records its parent/checkpoint origin, and excludes later parent history
 parent checkpoints, recent conversation, and roleplay context. It is not a restore,
 rewind, or mutation of the source workspace.
 `adventure events` displays those bounded stored summaries without a model call.
+`adventure event provenance <AE-######>` is a read-only audit of a generated
+ordinary event's bounded generation ID, candidate ID, task/provider/model labels,
+origin event count, and explicit transcript record references when used. It never
+returns raw prompts, provider output, hidden context, or chain-of-thought.
 `adventure imports` lists reviewed document selections staged for the loaded
 workspace, and `adventure import inspect` displays one selected candidate set.
 They are read-only source-review controls: staged imports do not establish
@@ -517,7 +529,13 @@ The document cannot invent resources, bypass bounds, or expose hidden values.
 `adventure transcript` displays optional presentation history kept separately from
 authoritative events. `adventure transcript record` explicitly stores one bounded
 user or narrator line; it never creates story state, replay facts, memories, or a
-model request.
+model request. After explicitly recording one adjacent `user` line followed by one
+`narrator` line, `adventure turn generate transcript` may use that pair as bounded,
+untrusted candidate-extraction input. It does not make the transcript authoritative,
+stage a candidate, or write an event. Any incomplete or non-adjacent pair fails
+closed. `adventure turn generate <completed user-turn text>` remains the direct
+manual source path; `adventure turn generation status` reports bounded task outcome
+and transcript record references when that explicit source path was used.
 `adventure checkpoint <label>` creates a named immutable reference to the current
 authoritative event-log prefix; `adventure checkpoints` lists those references; and
 `adventure checkpoint inspect <checkpoint-id|label>` recomputes the verified prefix's
@@ -555,6 +573,17 @@ event draft in session memory only; the `state`, `relationship`, `knowledge`, an
 variants stage one Core-validated structured fact. None alter prompt context or
 the event log until `adventure turn commit` atomically appends the full batch;
 the opaque Core request ID makes a matching completed-commit retry idempotent.
+`adventure turn inspect` is the read-only pre-commit review of that staged batch;
+hidden resource changes remain redacted. It never creates an event or changes a
+projection.
+`adventure turn candidates` displays only the current noncanonical, provider-untrusted
+candidate batch for the loaded workspace. Candidates become stale after any authoritative
+story write. `adventure turn stage candidate <TC-###>` requires an active transaction and
+explicitly stages just that validated ordinary candidate; repeating the same candidate is a
+no-op. Neither command creates candidates, calls a model, or writes an event.
+`adventure turn remove <staged-event-number>` discards exactly one inspected
+draft while retaining the rest of the session-local batch. It is not a canonical
+event deletion; no stored history exists until the remaining batch is committed.
 `adventure turn abort` discards staging, and a mount change also discards it.
 The direct state, relationship, knowledge, and resource commands remain documented
 immediate-write alternatives.
@@ -968,6 +997,6 @@ The ledger stores versioned manifest metadata, expected/returned fixture memory 
 
 ### Task/provider profiles
 
-`config/assistant.json` may declare validated `task_profiles` for workloads such as `assistant_chat`, `assistant_proposal`, `document_annotation`, `coding`, `vision`, and `image_generation`. A profile may declare a provider label, model, bounded generation settings, context size, output ceiling, and a future fallback task name. Profiles do not route requests or construct providers yet.
+`config/assistant.json` may declare validated `task_profiles` for workloads such as `assistant_chat`, `assistant_proposal`, `adventure_turn_generation`, `document_annotation`, `coding`, `vision`, and `image_generation`. A profile may declare a provider label, model, bounded generation settings, context size, output ceiling, and a future fallback task name. Profiles do not route requests or construct providers yet; `adventure_turn_generation` is the narrow explicit generated-candidate path through the current active provider.
 
 An `assistant_chat` profile model establishes Assistant Mode's startup default; later `model use` selections still control chat and proposal calls for that session. Document annotation may use its own configured model. If a profile names a provider other than the already active provider, StarFur fails clearly rather than silently substituting a backend.

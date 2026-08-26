@@ -312,6 +312,24 @@ Create-your-own-adventure sessions are isolated, mountable story worlds rather t
 
 **COMPLETED INITIAL C3 UNTRUSTED-CANDIDATE SLICE:** `pipeline/adventure_turn_candidates.py` now validates a bounded, decoded provider candidate envelope for ordinary story events only. The output has deterministic candidate IDs but no authority to stage, write, prompt-inject, or commit; candidate confidence is metadata, not trust. Typed state, relationship, knowledge, and resource proposals remain deliberately excluded until their dedicated policy boundary exists.
 
+**COMPLETED INITIAL C3 CANDIDATE-REVIEW SLICE:** Core can deterministically render validated ordinary candidates with their bounded details and an explicit untrusted/non-staged warning. This remains a presentation seam only: no provider, session candidate queue, staging action, or event-log write was added.
+
+**COMPLETED INITIAL C3 EXPLICIT-CANDIDATE-STAGING SLICE:** An active turn may now stage exactly one caller-selected, already validated ordinary candidate through its normal session-local transaction. The helper has no selection policy and cannot access a provider, candidate batch, or event log; only the existing explicit commit can persist the resulting draft.
+
+**COMPLETED INITIAL C3 CANDIDATE-INBOX SLICE:** A bounded session-local inbox can hold one validated candidate batch for exactly one adventure workspace and return an exact user/Core-selected `TC-###` candidate without changing it. It remains noncanonical and disconnected from provider calls, prompt context, commands, staging, and persistence; later lifecycle wiring must clear it on mount transitions.
+
+**COMPLETED INITIAL C3 CANDIDATE-INBOX LIFECYCLE SLICE:** `AssistantSession` now has programmatic-only present/select seams for a prevalidated candidate batch on its currently mounted workspace. Mount/unmount transitions clear the inbox with staged turns and recent chat context, preventing cross-adventure reuse. No chat command, provider adapter, prompt injection, automatic selection, staging, or event write was added.
+
+**COMPLETED INITIAL C3 IDEMPOTENT-CANDIDATE-STAGING SLICE:** Staged transactions now retain the originating `TC-###` alongside its draft. Repeating selection of the same candidate is a no-op, while removing that draft releases it for a deliberate restage. This protects future retry/UI behavior without changing manual-draft semantics or creating a write path.
+
+**COMPLETED INITIAL C3 CANDIDATE-STALE-GUARD SLICE:** Candidate inboxes now record the authoritative event count they were generated against. Exact selection fails closed if that count changed after an intervening story write, preventing stale generated proposals from being staged against a newer world state. This is still provider-free and noncanonical.
+
+**COMPLETED INITIAL C3 EXPLICIT-CANDIDATE COMMAND SLICE:** Exact `adventure turn candidates` displays the bounded untrusted inbox, while `adventure turn stage candidate <TC-###>` stages one selected ordinary candidate into an active transaction. Review is read-only and staging is idempotent; neither creates candidates, calls a provider, or persists anything before normal commit.
+
+**COMPLETED INITIAL C3 GENERATION-REQUEST SLICE:** `AdventureTurnGenerationRequest` renders bounded authoritative adventure context and explicitly untrusted user/narrator text into a closed ordinary-candidate JSON contract for a future task-specific provider. It has no provider call, output parsing, inbox, staging, or write authority.
+
+**COMPLETED INITIAL C3 TASK-PROVIDER ADAPTER SLICE:** A dormant injected chat-provider adapter can explicitly submit the bounded generation request and accept only strict JSON before the separate ordinary-candidate validator runs. It has no session, command, prompt, inbox, staging, or event-log integration; provider and malformed-output failures yield no partial candidate batch.
+
 ### Current dependency-ordered execution path
 
 The older numbered stages above preserve the project history. Active implementation now follows this dependency order so an adventure-import prototype and a read-only Murr apartment arrive early without bypassing safety boundaries:

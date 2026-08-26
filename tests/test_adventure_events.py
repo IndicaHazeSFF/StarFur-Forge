@@ -16,6 +16,23 @@ from pipeline.adventure_state import derive_adventure_state
 
 
 class AdventureEventLogTests(unittest.TestCase):
+    def test_generated_candidate_provenance_round_trips_without_changing_legacy_event_shape(self):
+        from pipeline.adventure_turn_provenance import AdventureTurnGenerationProvenance
+
+        legacy = AdventureEvent(1, "AE-000001", "discovery", "A key is found.", None, "2026-08-26T00:00:00+00:00")
+        self.assertNotIn("generation_provenance", legacy.to_dict())
+        provenance = AdventureTurnGenerationProvenance(
+            "TG-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "adventure_turn_generation", "Ollama", "qwen3:8b", 4,
+            ("AT-000001", "AT-000002"), "TC-001",
+        )
+        generated = AdventureEvent(
+            1, "AE-000001", "discovery", "The hatch opens.", None, "2026-08-26T00:00:00+00:00",
+            generation_provenance=provenance,
+        )
+
+        restored = AdventureEvent.from_dict(generated.to_dict())
+        self.assertEqual(provenance, restored.generation_provenance)
+
     def _registry(self, root):
         return AdventureRegistry(root, now=lambda: datetime(2026, 8, 17, 12, 0, tzinfo=UTC))
 

@@ -299,6 +299,24 @@ This is a functional prototype, not yet a durable simulation system. The impleme
 
 **Completed initial untrusted-candidate slice:** `pipeline/adventure_turn_candidates.py` validates a strict, bounded decoded provider envelope for ordinary event candidates only. It assigns deterministic candidate IDs but cannot stage, write, inject, or commit anything; confidence remains untrusted metadata. Typed state, relationship, knowledge, and resource candidates remain outside this boundary pending dedicated policy.
 
+**Completed initial candidate-review slice:** Core can deterministically display validated ordinary candidates and their bounded details while explicitly marking them untrusted and non-staged. It introduces no provider call, candidate queue, staging operation, or canonical write.
+
+**Completed initial explicit-candidate-staging slice:** an active transaction can stage one caller-selected, already validated ordinary candidate through the same session-local path as a manual draft. This helper has no candidate-selection policy or provider/log access; the normal explicit commit remains the only persistence route.
+
+**Completed initial candidate-inbox slice:** one bounded session-local inbox may retain a validated ordinary candidate batch for one adventure workspace and return an exact selected `TC-###` candidate without changing it. It is noncanonical and has no provider, command, prompt, staging, or persistence integration; lifecycle wiring must clear it on future mount transitions.
+
+**Completed initial candidate-inbox lifecycle slice:** `AssistantSession` now exposes only programmatic present/select seams for a prevalidated batch on its mounted workspace. Mount/unmount transitions clear the inbox with staging and recent chat context, preventing cross-adventure reuse. No command, provider adapter, prompt injection, automatic selection, staging, or persistence was added.
+
+**Completed initial idempotent-candidate-staging slice:** transactions retain each staged candidate's `TC-###` identity, so selecting the same candidate again is a no-op. Removing that draft releases it for an explicit restage. This hardens future retry/UI behavior without adding provider or write authority.
+
+**Completed initial candidate stale-guard slice:** candidate inboxes record the authoritative event count their batch was generated against. Selection fails closed after an intervening story write changes that count, preventing a stale generated proposal from being staged into a newer world state. The boundary remains provider-free and noncanonical.
+
+**Completed initial explicit candidate-command slice:** `adventure turn candidates` displays the bounded untrusted inbox and `adventure turn stage candidate <TC-###>` stages one exact ordinary candidate into an active transaction. Review is read-only and staging idempotent; neither command creates a candidate, calls a provider, or persists anything before normal commit.
+
+**Completed initial generation-request slice:** `AdventureTurnGenerationRequest` renders bounded authoritative adventure context plus explicitly untrusted user/narrator text into a closed ordinary-candidate JSON contract for a future task-specific provider. It has no provider call, output parsing, inbox/staging integration, or write authority.
+
+**Completed initial task-provider adapter slice:** a dormant injected chat-provider adapter can explicitly submit the bounded request and accept only strict JSON before the separate ordinary-candidate validator runs. It has no session, command, prompt, inbox, staging, or event-log integration; provider/malformed-output failures yield no partial batch.
+
 #### C3. Add staged extraction, validation, and policy
 
 - A task-specific provider may propose events/mutations from the completed user+narrator turn.

@@ -8,6 +8,8 @@ from typing import Any, Mapping
 
 TASK_ASSISTANT_CHAT = "assistant_chat"
 TASK_ASSISTANT_PROPOSAL = "assistant_proposal"
+TASK_ADVENTURE_TURN_GENERATION = "adventure_turn_generation"
+TASK_ADVENTURE_TURN_MUTATION_GENERATION = "adventure_turn_mutation_generation"
 TASK_DOCUMENT_ANNOTATION = "document_annotation"
 TASK_RETRIEVAL_EVALUATION = "retrieval_evaluation"
 TASK_CODING = "coding"
@@ -17,6 +19,8 @@ TASK_IMAGE_GENERATION = "image_generation"
 KNOWN_TASKS = (
     TASK_ASSISTANT_CHAT,
     TASK_ASSISTANT_PROPOSAL,
+    TASK_ADVENTURE_TURN_GENERATION,
+    TASK_ADVENTURE_TURN_MUTATION_GENERATION,
     TASK_DOCUMENT_ANNOTATION,
     TASK_RETRIEVAL_EVALUATION,
     TASK_CODING,
@@ -178,7 +182,7 @@ def provider_matches(profile_provider: str | None, runtime_provider_name: str | 
 
 
 __all__ = [
-    "KNOWN_TASKS", "TASK_ASSISTANT_CHAT", "TASK_ASSISTANT_PROPOSAL", "TASK_DOCUMENT_ANNOTATION",
+    "KNOWN_TASKS", "TASK_ASSISTANT_CHAT", "TASK_ASSISTANT_PROPOSAL", "TASK_ADVENTURE_TURN_GENERATION", "TASK_ADVENTURE_TURN_MUTATION_GENERATION", "TASK_DOCUMENT_ANNOTATION",
     "TASK_RETRIEVAL_EVALUATION", "TASK_CODING", "TASK_VISION", "TASK_IMAGE_GENERATION",
     "ResolvedTaskProfile", "TaskProfile", "TaskProfiles", "load_task_profiles", "provider_matches",
     "validate_generation_options",

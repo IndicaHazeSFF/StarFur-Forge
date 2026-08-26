@@ -12,6 +12,13 @@ from pipeline.adventure_registry import AdventureRegistry
 from pipeline.adventure_resources import AdventureResourceCatalog, AdventureResourceDefinition
 from pipeline.adventure_resource_state import AdventureResourceOperation
 from pipeline.adventure_turn import AdventureTurnTransaction
+from pipeline.adventure_turn_candidates import (
+    AdventureTurnCandidateSelection,
+    parse_untrusted_adventure_turn_candidates,
+)
+from pipeline.adventure_turn_mutation_candidate_inbox import AdventureTurnMutationCandidateSelection
+from pipeline.adventure_turn_mutation_candidates import parse_untrusted_adventure_turn_mutation_candidates
+from pipeline.adventure_turn_provenance import AdventureTurnGenerationProvenance
 
 
 class AdventureTurnTests(unittest.TestCase):
@@ -121,6 +128,124 @@ class AdventureTurnTests(unittest.TestCase):
             self.assertEqual("The crew opens it.", trimmed.drafts[1].summary)
             with self.assertRaisesRegex(ValueError, "event number is invalid"):
                 trimmed.remove(3)
+
+    def test_explicitly_selected_ordinary_candidate_can_stage_but_cannot_write_itself(self):
+        with tempfile.TemporaryDirectory() as directory:
+            registry = AdventureRegistry(directory, now=lambda: datetime(2026, 8, 18, tzinfo=UTC))
+            record = registry.create("Quiet Ember")
+            candidate = parse_untrusted_adventure_turn_candidates({
+                "schema_version": 1,
+                "candidates": [{
+                    "event_type": "discovery",
+                    "summary": "The crew finds a brass key.",
+                    "confidence": 0.8,
+                }],
+            }).candidates[0]
+            selection = AdventureTurnCandidateSelection("TG-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", candidate)
+            transaction = AdventureTurnTransaction.inactive().begin(record).stage_candidate(selection)
+            log = AdventureEventLog(registry, record)
+
+            self.assertEqual("The crew finds a brass key.", transaction.drafts[0].summary)
+            self.assertEqual([], log.events())
+            with self.assertRaisesRegex(TypeError, "AdventureTurnCandidate"):
+                transaction.stage_candidate(object())
+
+    def test_candidate_staging_is_idempotent_and_removal_allows_an_explicit_restage(self):
+        with tempfile.TemporaryDirectory() as directory:
+            registry = AdventureRegistry(directory, now=lambda: datetime(2026, 8, 25, tzinfo=UTC))
+            record = registry.create("Quiet Ember")
+            candidate = parse_untrusted_adventure_turn_candidates({
+                "schema_version": 1,
+                "candidates": [{
+                    "event_type": "discovery",
+                    "summary": "The crew finds a brass key.",
+                    "confidence": 0.8,
+                }],
+            }).candidates[0]
+            selection = AdventureTurnCandidateSelection("TG-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", candidate)
+            transaction = AdventureTurnTransaction.inactive().begin(record).stage_candidate(selection)
+            duplicate = transaction.stage_candidate(selection)
+
+            self.assertEqual(transaction, duplicate)
+            self.assertEqual(((0, "TG-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "TC-001"),), duplicate.candidate_draft_ids)
+            removed = duplicate.remove(1)
+            self.assertEqual((), removed.candidate_draft_ids)
+            self.assertEqual(1, len(removed.stage_candidate(selection).drafts))
+
+    def test_distinct_generation_batches_can_stage_their_own_tc_001_candidates(self):
+        with tempfile.TemporaryDirectory() as directory:
+            record = AdventureRegistry(directory, now=lambda: datetime(2026, 8, 25, tzinfo=UTC)).create("Quiet Ember")
+            first = parse_untrusted_adventure_turn_candidates({
+                "schema_version": 1,
+                "candidates": [{"event_type": "discovery", "summary": "A brass key is found.", "confidence": 0.8}],
+            }).candidates[0]
+            second = parse_untrusted_adventure_turn_candidates({
+                "schema_version": 1,
+                "candidates": [{"event_type": "discovery", "summary": "A silver key is found.", "confidence": 0.8}],
+            }).candidates[0]
+            first_selection = AdventureTurnCandidateSelection("TG-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", first)
+            second_selection = AdventureTurnCandidateSelection("TG-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", second)
+
+            transaction = AdventureTurnTransaction.inactive().begin(record).stage_candidate(first_selection)
+            transaction = transaction.stage_candidate(second_selection)
+
+            self.assertEqual(["A brass key is found.", "A silver key is found."], [draft.summary for draft in transaction.drafts])
+            self.assertEqual(
+                ((0, first_selection.generation_id, "TC-001"), (1, second_selection.generation_id, "TC-001")),
+                transaction.candidate_draft_ids,
+            )
+
+    def test_reviewed_typed_candidate_stages_only_through_core_summary_and_provenance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            registry = AdventureRegistry(directory, now=lambda: datetime(2026, 8, 26, tzinfo=UTC))
+            record = registry.create("Quiet Ember")
+            candidate = parse_untrusted_adventure_turn_mutation_candidates({
+                "schema_version": 1,
+                "candidates": [{
+                    "mutation": {"kind": "state_set", "key": "current_location", "value": "engine room"},
+                    "confidence": 0.8,
+                }],
+            }).candidates[0]
+            provenance = AdventureTurnGenerationProvenance(
+                "TG-cccccccccccccccccccccccccccccccc", "adventure_turn_mutation_generation",
+                "Ollama", "qwen3:8b", 0, (), "TM-001",
+            )
+            selection = AdventureTurnMutationCandidateSelection(provenance.generation_id, candidate, provenance)
+
+            transaction = AdventureTurnTransaction.inactive().begin(record).stage_mutation_candidate(selection)
+
+            self.assertEqual("state_change", transaction.drafts[0].event_type)
+            self.assertEqual("Generated state: current_location = engine room.", transaction.drafts[0].summary)
+            self.assertEqual(provenance, transaction.drafts[0].generation_provenance)
+            self.assertEqual(((0, provenance.generation_id, "TM-001"),), transaction.candidate_draft_ids)
+            self.assertEqual(transaction, transaction.stage_mutation_candidate(selection))
+
+    def test_generated_resource_candidate_requires_matching_catalog_validated_operation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            record = AdventureRegistry(directory).create("Quiet Ember")
+            candidate = parse_untrusted_adventure_turn_mutation_candidates({
+                "schema_version": 1,
+                "candidates": [{
+                    "mutation": {"kind": "resource_change", "id": "fuel", "operation": "increment", "value": 10},
+                    "confidence": 0.8,
+                }],
+            }).candidates[0]
+            provenance = AdventureTurnGenerationProvenance(
+                "TG-dddddddddddddddddddddddddddddddd", "adventure_turn_mutation_generation",
+                "Ollama", "qwen3:8b", 0, (), "TM-001",
+            )
+            selection = AdventureTurnMutationCandidateSelection(provenance.generation_id, candidate, provenance)
+            transaction = AdventureTurnTransaction.inactive().begin(record)
+
+            with self.assertRaisesRegex(ValueError, "catalog-validated"):
+                transaction.stage_mutation_candidate(selection)
+            with self.assertRaisesRegex(ValueError, "does not match"):
+                transaction.stage_mutation_candidate(selection, resource_operation=AdventureResourceOperation("fuel", "set", 10))
+            staged = transaction.stage_mutation_candidate(
+                selection, resource_operation=AdventureResourceOperation("fuel", "increment", 10),
+            )
+            self.assertEqual("resource_change", staged.drafts[0].event_type)
+            self.assertEqual(provenance, staged.drafts[0].generation_provenance)
 
 
 if __name__ == "__main__":

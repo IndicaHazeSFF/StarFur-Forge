@@ -64,7 +64,26 @@ from pipeline.adventure_import import AdventureImportError, AdventureImportLog
 from pipeline.adventure_import_bundle import AdventureImportBundleError, AdventureImportBundleLog
 from pipeline.adventure_import_mapping import AdventureImportMappingError, AdventureImportMappingLog
 from pipeline.adventure_transcript import AdventureTranscriptError, AdventureTranscriptLog
+from pipeline.adventure_turn_source import AdventureTurnSourceError, select_latest_completed_transcript_turn
 from pipeline.adventure_turn import AdventureTurnTransaction
+from pipeline.adventure_turn_candidate_inbox import AdventureTurnCandidateInbox, AdventureTurnCandidateInboxError
+from pipeline.adventure_turn_candidates import render_adventure_turn_candidate_batch
+from pipeline.adventure_turn_coordinator import AdventureTurnCoordinator, AdventureTurnCoordinatorError
+from pipeline.adventure_turn_generation import AdventureTurnGenerationResult
+from pipeline.adventure_turn_mutation_candidate_inbox import (
+    AdventureTurnMutationCandidateInbox,
+    AdventureTurnMutationCandidateInboxError,
+)
+from pipeline.adventure_turn_mutation_candidates import render_adventure_turn_mutation_candidate_batch
+from pipeline.adventure_turn_mutation_coordinator import (
+    AdventureTurnMutationCoordinator,
+    AdventureTurnMutationCoordinatorError,
+)
+from pipeline.adventure_turn_mutation_generation import AdventureTurnMutationGenerationResult
+from pipeline.adventure_turn_provider import (
+    CallableAdventureTurnCandidateProvider,
+    CallableAdventureTurnMutationCandidateProvider,
+)
 from pipeline.document_review import DEFAULT_REVIEW_TTL_SECONDS
 
 from pipeline.capabilities import CapabilityManifest
@@ -73,6 +92,7 @@ from pipeline.providers import CallableChatProvider, ChatProvider, OllamaChatPro
 from pipeline.provider_state import ProviderLifecycle
 from pipeline.retrieval import DeterministicMemoryRetriever, MemoryLoaderRetriever, MemoryRetriever
 from pipeline.task_profiles import (
+    TASK_ADVENTURE_TURN_GENERATION, TASK_ADVENTURE_TURN_MUTATION_GENERATION,
     TASK_ASSISTANT_CHAT, TASK_ASSISTANT_PROPOSAL, TaskProfiles,
     load_task_profiles, provider_matches, validate_generation_options,
 )
@@ -210,7 +230,9 @@ class AssistantSession:
                  persona_development_state: PersonaDevelopmentState | None = None,
                  persona_registry: PersonaRegistry | None = None,
                  persona_runtime_registry: PersonaRuntimeRegistry | None = None,
-                 adventure_registry: AdventureRegistry | None = None):
+                 adventure_registry: AdventureRegistry | None = None,
+                 adventure_turn_coordinator: AdventureTurnCoordinator | None = None,
+                 adventure_turn_mutation_coordinator: AdventureTurnMutationCoordinator | None = None):
         if config.max_session_messages <= 0:
             raise ValueError("max_session_messages must be positive")
         if provider is not None and chat is not None:
@@ -273,6 +295,21 @@ class AssistantSession:
         )
         self.adventure_session = AdventureSessionState.unmounted()
         self.adventure_turn = AdventureTurnTransaction.inactive()
+        self.adventure_turn_candidate_inbox = AdventureTurnCandidateInbox.empty()
+        self.adventure_turn_mutation_candidate_inbox = AdventureTurnMutationCandidateInbox.empty()
+        if adventure_turn_coordinator is not None and not isinstance(adventure_turn_coordinator, AdventureTurnCoordinator):
+            raise TypeError("adventure_turn_coordinator must be an AdventureTurnCoordinator or None")
+        # An injected coordinator supports tests/specialist providers.  The
+        # normal explicit generation method below otherwise uses its dedicated
+        # validated task profile through the existing provider boundary.
+        self.adventure_turn_coordinator = adventure_turn_coordinator
+        if adventure_turn_mutation_coordinator is not None and not isinstance(
+            adventure_turn_mutation_coordinator, AdventureTurnMutationCoordinator,
+        ):
+            raise TypeError("adventure_turn_mutation_coordinator must be an AdventureTurnMutationCoordinator or None")
+        self.adventure_turn_mutation_coordinator = adventure_turn_mutation_coordinator
+        self.last_adventure_turn_generation = None
+        self.last_adventure_turn_mutation_generation = None
         self.proposals = []
         self.last_memory_ids = []
         self._pending_bulk_proposal_ids = None
@@ -1050,9 +1087,223 @@ class AssistantSession:
     def _set_adventure_session(self, state):
         self.adventure_session = state
         self.adventure_turn = AdventureTurnTransaction.inactive()
+        self.adventure_turn_candidate_inbox = AdventureTurnCandidateInbox.empty()
+        self.adventure_turn_mutation_candidate_inbox = AdventureTurnMutationCandidateInbox.empty()
         self.messages.clear()
         self.last_memory_ids = []
         self.last_turn_diagnostics = None
+        self.last_adventure_turn_generation = None
+        self.last_adventure_turn_mutation_generation = None
+
+    def present_adventure_turn_candidates(self, result: AdventureTurnGenerationResult) -> str:
+        """Accept a prevalidated future provider batch for the mounted workspace.
+
+        This programmatic boundary is intentionally not a chat command.  A
+        later generated-turn policy must validate provider output before this
+        call, then separately present/select/stage a candidate.
+        """
+        if not self.adventure_session.active:
+            raise ValueError("no adventure workspace is loaded")
+        if not isinstance(result, AdventureTurnGenerationResult):
+            raise TypeError("adventure-turn candidates must be an AdventureTurnGenerationResult")
+        if result.request.record != self.adventure_session.record:
+            raise ValueError("adventure-turn candidates belong to another workspace")
+        if result.request.event_count != self.adventure_session.event_count:
+            raise ValueError("adventure-turn candidates are stale after authoritative story changes")
+        self.adventure_turn_candidate_inbox = self.adventure_turn_candidate_inbox.present(result)
+        return (
+            f"Presented {len(result.batch.candidates)} untrusted adventure-turn candidate(s) "
+            f"from {result.generation_id} for review."
+        )
+
+    def generate_adventure_turn_candidates(
+        self, *, user_text: str, narrator_text: str = "", source_record_ids: tuple[str, ...] = (),
+    ) -> str:
+        """Explicitly generate review-only candidate events for one mounted adventure.
+
+        This method is deliberately not a conversational command.  It has no
+        event-log write path: after generation, callers must separately review
+        a candidate and explicitly stage/commit it through the existing Core
+        controls.  ``present_adventure_turn_candidates`` rechecks the captured
+        workspace and event count in case the story changed during generation.
+
+        Starting a replacement generation clears the prior review inbox before
+        any provider work.  A failed retry therefore cannot leave stale
+        candidates available for accidental staging.  The separately owned
+        explicit turn transaction is deliberately untouched.
+        """
+        profile = None
+        self.adventure_turn_candidate_inbox = AdventureTurnCandidateInbox.empty()
+        try:
+            if self.adventure_turn_coordinator is None:
+                profile = self._task_profile(TASK_ADVENTURE_TURN_GENERATION)
+            coordinator = self.adventure_turn_coordinator or AdventureTurnCoordinator(
+                CallableAdventureTurnCandidateProvider(
+                    lambda messages: self._provider_complete(
+                        messages, stream=False, task_id=TASK_ADVENTURE_TURN_GENERATION,
+                    )
+                )
+            )
+            result = coordinator.propose(
+                self.adventure_session, user_text=user_text, narrator_text=narrator_text,
+                source_record_ids=source_record_ids,
+                task_id=TASK_ADVENTURE_TURN_GENERATION,
+                provider_name=self._provider_name,
+                model_name=profile.model if profile is not None else self.active_model,
+            )
+        except AdventureTurnCoordinatorError as error:
+            self.last_adventure_turn_generation = {
+                "status": "failed", "reason": error.reason,
+                "provider": self._provider_name,
+                "model": profile.model if profile is not None else "injected",
+            }
+            raise RuntimeError("adventure-turn candidate generation failed safely") from error
+        except RuntimeError as error:
+            self.last_adventure_turn_generation = {
+                "status": "failed", "reason": "task_profile_unavailable",
+                "provider": self._provider_name, "model": None,
+            }
+            raise RuntimeError("adventure-turn candidate generation failed safely") from error
+        self.last_adventure_turn_generation = {
+            "status": "completed", "reason": None,
+            "provider": self._provider_name,
+            "model": profile.model if profile is not None else "injected",
+            "generation_id": result.generation_id,
+            "candidate_count": len(result.batch.candidates),
+            "source_record_ids": result.request.source_record_ids,
+        }
+        return self.present_adventure_turn_candidates(result)
+
+    def adventure_turn_generation_status(self):
+        """Render bounded generation diagnostics without retaining model output."""
+        snapshot = self.last_adventure_turn_generation
+        if snapshot is None:
+            return "No adventure-turn generation has run in this session."
+        lines = [
+            f"Adventure-turn generation: {snapshot['status']}.",
+            f"Provider: {snapshot['provider']}",
+            f"Model: {snapshot['model'] or 'unavailable'}",
+        ]
+        if snapshot["status"] == "completed":
+            lines.extend((
+                f"Generation: {snapshot['generation_id']}",
+                f"Validated candidates: {snapshot['candidate_count']}",
+                "No candidate was staged or persisted automatically.",
+            ))
+            if snapshot.get("source_record_ids"):
+                lines.append(f"Source: explicit transcript {' -> '.join(snapshot['source_record_ids'])}")
+        else:
+            lines.extend((
+                f"Failure category: {snapshot['reason']}",
+                "No candidate was staged or persisted.",
+            ))
+        return "\n".join(lines)
+
+    def adventure_turn_mutation_generation_status(self):
+        """Render bounded diagnostics for the separate typed-proposal task."""
+        snapshot = self.last_adventure_turn_mutation_generation
+        if snapshot is None:
+            return "No typed adventure-turn candidate generation has run in this session."
+        lines = [
+            f"Typed adventure-turn generation: {snapshot['status']}.",
+            f"Provider: {snapshot['provider']}",
+            f"Model: {snapshot['model'] or 'unavailable'}",
+        ]
+        if snapshot["status"] == "completed":
+            lines.extend((
+                f"Generation: {snapshot['generation_id']}",
+                f"Validated typed candidates: {snapshot['candidate_count']}",
+                "No candidate was staged or persisted automatically.",
+            ))
+            if snapshot.get("source_record_ids"):
+                lines.append(f"Source: explicit transcript {' -> '.join(snapshot['source_record_ids'])}")
+        else:
+            lines.extend((
+                f"Failure category: {snapshot['reason']}",
+                "No candidate was staged or persisted.",
+            ))
+        return "\n".join(lines)
+
+    def select_adventure_turn_candidate(self, candidate_id: object):
+        """Return an exact candidate from the current workspace's inbox only."""
+        if not self.adventure_session.active:
+            raise ValueError("no adventure workspace is loaded")
+        return self.adventure_turn_candidate_inbox.select(
+            self.adventure_session.record, candidate_id,
+            event_count=self.adventure_session.event_count,
+        )
+
+    def present_adventure_turn_mutation_candidates(
+        self, result: AdventureTurnMutationGenerationResult,
+    ) -> str:
+        """Accept a prevalidated typed proposal batch for the mounted workspace only."""
+        if not self.adventure_session.active:
+            raise ValueError("no adventure workspace is loaded")
+        if not isinstance(result, AdventureTurnMutationGenerationResult):
+            raise TypeError("typed adventure-turn candidates must be an AdventureTurnMutationGenerationResult")
+        if result.request.record != self.adventure_session.record:
+            raise ValueError("typed adventure-turn candidates belong to another workspace")
+        if result.request.event_count != self.adventure_session.event_count:
+            raise ValueError("typed adventure-turn candidates are stale after authoritative story changes")
+        self.adventure_turn_mutation_candidate_inbox = self.adventure_turn_mutation_candidate_inbox.present(
+            record=result.request.record,
+            batch=result.batch,
+            event_count=result.request.event_count,
+            provenance=result.request.provenance,
+        )
+        return (
+            f"Presented {len(result.batch.candidates)} untrusted typed adventure-turn candidate(s) "
+            f"from {result.generation_id} for review."
+        )
+
+    def generate_adventure_turn_mutation_candidates(
+        self, *, user_text: str, narrator_text: str = "", source_record_ids: tuple[str, ...] = (),
+    ) -> str:
+        """Generate review-only typed proposals; no output is staged or persisted."""
+        profile = None
+        self.adventure_turn_mutation_candidate_inbox = AdventureTurnMutationCandidateInbox.empty()
+        try:
+            if self.adventure_turn_mutation_coordinator is None:
+                profile = self._task_profile(TASK_ADVENTURE_TURN_MUTATION_GENERATION)
+            coordinator = self.adventure_turn_mutation_coordinator or AdventureTurnMutationCoordinator(
+                CallableAdventureTurnMutationCandidateProvider(
+                    lambda messages: self._provider_complete(
+                        messages, stream=False, task_id=TASK_ADVENTURE_TURN_MUTATION_GENERATION,
+                    )
+                )
+            )
+            result = coordinator.propose(
+                self.adventure_session, user_text=user_text, narrator_text=narrator_text,
+                source_record_ids=source_record_ids, provider_name=self._provider_name,
+                model_name=profile.model if profile is not None else self.active_model,
+            )
+        except AdventureTurnMutationCoordinatorError as error:
+            self.last_adventure_turn_mutation_generation = {
+                "status": "failed", "reason": error.reason, "provider": self._provider_name,
+                "model": profile.model if profile is not None else "injected",
+            }
+            raise RuntimeError("adventure-turn mutation candidate generation failed safely") from error
+        except RuntimeError as error:
+            self.last_adventure_turn_mutation_generation = {
+                "status": "failed", "reason": "task_profile_unavailable", "provider": self._provider_name,
+                "model": None,
+            }
+            raise RuntimeError("adventure-turn mutation candidate generation failed safely") from error
+        self.last_adventure_turn_mutation_generation = {
+            "status": "completed", "reason": None, "provider": self._provider_name,
+            "model": profile.model if profile is not None else "injected",
+            "generation_id": result.generation_id, "candidate_count": len(result.batch.candidates),
+            "source_record_ids": result.request.source_record_ids,
+        }
+        return self.present_adventure_turn_mutation_candidates(result)
+
+    def select_adventure_turn_mutation_candidate(self, candidate_id: object):
+        if not self.adventure_session.active:
+            raise ValueError("no adventure workspace is loaded")
+        return self.adventure_turn_mutation_candidate_inbox.select(
+            self.adventure_session.record, candidate_id,
+            event_count=self.adventure_session.event_count,
+        )
 
     def adventure_load(self, title):
         if not title or not title.strip():
@@ -2249,6 +2500,10 @@ class AssistantSession:
         if not self.adventure_turn.drafts:
             return "Adventure turn staging is active but has no staged events."
         lines = [f"Staged adventure turn for {self.adventure_turn.record.title}:"]
+        candidate_ids_by_index = {
+            index: (generation_id, candidate_id)
+            for index, generation_id, candidate_id in self.adventure_turn.candidate_draft_ids
+        }
         for sequence, draft in enumerate(self.adventure_turn.drafts, 1):
             if draft.event_type == "resource_change" and draft.resource_id:
                 try:
@@ -2258,7 +2513,11 @@ class AssistantSession:
                 if definition.visibility == "hidden":
                     lines.append(f"{sequence}. [resource_change] Hidden resource change")
                     continue
-            lines.append(f"{sequence}. [{draft.event_type}] {draft.summary}")
+            candidate_suffix = ""
+            if (candidate_identity := candidate_ids_by_index.get(sequence - 1)) is not None:
+                generation_id, candidate_id = candidate_identity
+                candidate_suffix = f" (from untrusted candidate {candidate_id}; {generation_id})"
+            lines.append(f"{sequence}. [{draft.event_type}] {draft.summary}{candidate_suffix}")
         lines.append("Read-only staged-turn review; nothing has been committed to the adventure event log.")
         return "\n".join(lines)
 
@@ -2385,6 +2644,177 @@ class AssistantSession:
             return "Staged a hidden adventure resource change."
         return f"Staged adventure resource {definition.resource_id} ({definition.label})."
 
+    def adventure_turn_candidates(self):
+        """Render current noncanonical candidates without staging any of them."""
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded."
+        inbox = self.adventure_turn_candidate_inbox
+        if not inbox.active:
+            return "No untrusted adventure-turn candidates are available for this workspace."
+        if inbox.record != self.adventure_session.record:
+            self.adventure_turn_candidate_inbox = inbox.clear()
+            return "No untrusted adventure-turn candidates are available for this workspace."
+        if inbox.event_count != self.adventure_session.event_count:
+            return "Adventure-turn candidates are stale after authoritative story changes; regenerate them before review."
+        return render_adventure_turn_candidate_batch(inbox.batch, generation_id=inbox.generation_id)
+
+    def adventure_turn_mutation_candidates(self):
+        """Render the separate typed proposal inbox without staging it."""
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded."
+        inbox = self.adventure_turn_mutation_candidate_inbox
+        if not inbox.active:
+            return "No untrusted typed adventure-turn candidates are available for this workspace."
+        if inbox.record != self.adventure_session.record:
+            self.adventure_turn_mutation_candidate_inbox = inbox.clear()
+            return "No untrusted typed adventure-turn candidates are available for this workspace."
+        if inbox.event_count != self.adventure_session.event_count:
+            return "Typed adventure-turn candidates are stale after authoritative story changes; regenerate them before review."
+        return render_adventure_turn_mutation_candidate_batch(inbox.batch, generation_id=inbox.generation_id)
+
+    def adventure_turn_generate(self, value):
+        """Explicitly request noncanonical ordinary-event candidates for a staged turn."""
+        usage = "Usage: adventure turn generate <completed user-turn text>|transcript"
+        if not self.adventure_turn.active:
+            return "Adventure turn staging: inactive. Use adventure turn begin first."
+        if not self.adventure_session.active or self.adventure_session.record != self.adventure_turn.record:
+            self.adventure_turn = self.adventure_turn.abort()
+            return "Adventure turn staging was discarded because its workspace is no longer loaded."
+        if not isinstance(value, str) or not value.strip():
+            return usage
+        user_text = value
+        narrator_text = ""
+        source_record_ids: tuple[str, ...] = ()
+        if value.strip().casefold() in {"transcript", "from transcript"}:
+            try:
+                records = AdventureTranscriptLog(
+                    self.adventure_registry, self.adventure_session.record,
+                ).records()
+                source = select_latest_completed_transcript_turn(records)
+            except (AdventureTranscriptError, AdventureTurnSourceError):
+                return (
+                    "Adventure-turn transcript generation requires the latest two explicit transcript "
+                    "entries to be user then narrator; nothing was staged or persisted."
+                )
+            user_text = source.user_text
+            narrator_text = source.narrator_text
+            source_record_ids = source.record_ids
+        try:
+            return self.generate_adventure_turn_candidates(
+                user_text=user_text,
+                narrator_text=narrator_text,
+                source_record_ids=source_record_ids,
+            )
+        except RuntimeError:
+            # Provider details are deliberately not rendered as fictional
+            # narration or surfaced as raw response content.
+            return "Adventure-turn candidate generation failed safely; nothing was staged or persisted."
+
+    def adventure_turn_generate_mutations(self, value):
+        """Explicitly request review-only typed mutation candidates for a staged turn."""
+        usage = "Usage: adventure turn mutations generate <completed user-turn text>|transcript"
+        if not self.adventure_turn.active:
+            return "Adventure turn staging: inactive. Use adventure turn begin first."
+        if not self.adventure_session.active or self.adventure_session.record != self.adventure_turn.record:
+            self.adventure_turn = self.adventure_turn.abort()
+            return "Adventure turn staging was discarded because its workspace is no longer loaded."
+        if not isinstance(value, str) or not value.strip():
+            return usage
+        user_text = value
+        narrator_text = ""
+        source_record_ids: tuple[str, ...] = ()
+        if value.strip().casefold() in {"transcript", "from transcript"}:
+            try:
+                records = AdventureTranscriptLog(
+                    self.adventure_registry, self.adventure_session.record,
+                ).records()
+                source = select_latest_completed_transcript_turn(records)
+            except (AdventureTranscriptError, AdventureTurnSourceError):
+                return (
+                    "Typed adventure-turn transcript generation requires the latest two explicit transcript "
+                    "entries to be user then narrator; nothing was staged or persisted."
+                )
+            user_text = source.user_text
+            narrator_text = source.narrator_text
+            source_record_ids = source.record_ids
+        try:
+            return self.generate_adventure_turn_mutation_candidates(
+                user_text=user_text, narrator_text=narrator_text, source_record_ids=source_record_ids,
+            )
+        except RuntimeError:
+            return "Typed adventure-turn candidate generation failed safely; nothing was staged or persisted."
+
+    def adventure_turn_stage_candidate(self, value):
+        usage = "Usage: adventure turn stage candidate <TC-###>"
+        if not self.adventure_turn.active:
+            return "Adventure turn staging: inactive. Use adventure turn begin first."
+        if not self.adventure_session.active or self.adventure_session.record != self.adventure_turn.record:
+            self.adventure_turn = self.adventure_turn.abort()
+            return "Adventure turn staging was discarded because its workspace is no longer loaded."
+        if not isinstance(value, str) or not value.strip():
+            return usage
+        try:
+            selection = self.select_adventure_turn_candidate(value)
+        except (AdventureTurnCandidateInboxError, ValueError) as error:
+            return f"Adventure-turn candidate was not staged: {error}"
+        before_count = len(self.adventure_turn.drafts)
+        self.adventure_turn = self.adventure_turn.stage_candidate(selection)
+        if len(self.adventure_turn.drafts) == before_count:
+            return f"Adventure-turn candidate {selection.candidate.candidate_id} is already staged; nothing changed."
+        return (
+            f"Staged adventure-turn candidate {selection.candidate.candidate_id} "
+            f"[{selection.candidate.draft.event_type}]: {selection.candidate.draft.summary}"
+        )
+
+    def _resolved_generated_adventure_resource_operation(self, mutation):
+        """Validate one selected resource mutation against current/staged catalog state."""
+        operation = AdventureResourceOperation(
+            mutation.resource_id, mutation.resource_operation, mutation.resource_value,
+        )
+        definition = self.adventure_session.resource_catalog.resolve(operation.resource_id)
+        log = AdventureEventLog(self.adventure_registry, self.adventure_session.record)
+        state = derive_adventure_resource_state(
+            self.adventure_session.resource_catalog,
+            (*log.events(), *self.adventure_turn.drafts),
+        )
+        state.apply(operation)
+        return operation, definition
+
+    def adventure_turn_stage_mutation_candidate(self, value):
+        usage = "Usage: adventure turn stage mutation candidate <TM-###>"
+        if not self.adventure_turn.active:
+            return "Adventure turn staging: inactive. Use adventure turn begin first."
+        if not self.adventure_session.active or self.adventure_session.record != self.adventure_turn.record:
+            self.adventure_turn = self.adventure_turn.abort()
+            return "Adventure turn staging was discarded because its workspace is no longer loaded."
+        if not isinstance(value, str) or not value.strip():
+            return usage
+        try:
+            selection = self.select_adventure_turn_mutation_candidate(value)
+            resource_operation = None
+            resource_definition = None
+            if selection.candidate.mutation.kind == MUTATION_RESOURCE_CHANGE:
+                resource_operation, resource_definition = self._resolved_generated_adventure_resource_operation(
+                    selection.candidate.mutation,
+                )
+            before_count = len(self.adventure_turn.drafts)
+            self.adventure_turn = self.adventure_turn.stage_mutation_candidate(
+                selection, resource_operation=resource_operation,
+            )
+        except (
+            AdventureTurnMutationCandidateInboxError, AdventureEventLogError, AdventureResourceError,
+            AdventureResourceStateError, ValueError, TypeError,
+        ) as error:
+            return f"Typed adventure-turn candidate was not staged: {error}"
+        if len(self.adventure_turn.drafts) == before_count:
+            return f"Typed adventure-turn candidate {selection.candidate.candidate_id} is already staged; nothing changed."
+        if resource_definition is not None and resource_definition.visibility == "hidden":
+            return f"Staged typed adventure-turn candidate {selection.candidate.candidate_id} [resource_change]."
+        return (
+            f"Staged typed adventure-turn candidate {selection.candidate.candidate_id} "
+            f"[{selection.candidate.mutation.kind}]."
+        )
+
     def adventure_turn_commit(self):
         if not self.adventure_turn.active:
             return "Adventure turn staging: inactive."
@@ -2410,6 +2840,45 @@ class AssistantSession:
         count = len(self.adventure_turn.drafts)
         self.adventure_turn = self.adventure_turn.abort()
         return f"Discarded {count} staged adventure event(s); nothing was persisted."
+
+    def adventure_event_provenance(self, value):
+        """Inspect bounded generated-candidate provenance for one canonical event."""
+        usage = "Usage: adventure event provenance <AE-######>"
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded."
+        if not isinstance(value, str) or not value.strip():
+            return usage
+        event_id = value.strip().upper()
+        if not re.fullmatch(r"AE-[0-9]{6}", event_id):
+            return usage
+        try:
+            event = next(
+                item for item in AdventureEventLog(
+                    self.adventure_registry, self.adventure_session.record,
+                ).events() if item.event_id == event_id
+            )
+        except StopIteration:
+            return "Adventure event was not found."
+        except AdventureEventLogError as error:
+            return f"Adventure event provenance could not be inspected: {error}"
+        provenance = event.generation_provenance
+        if provenance is None:
+            return f"Adventure event {event_id} has no generated-candidate provenance."
+        lines = [
+            f"Generated-candidate provenance for {event_id}:",
+            f"Generation: {provenance.generation_id}",
+            f"Candidate: {provenance.candidate_id}",
+            f"Task: {provenance.task_id}",
+            f"Provider: {provenance.provider_name}",
+            f"Model: {provenance.model_name or 'unavailable'}",
+            f"Authoritative event count at generation: {provenance.origin_event_count}",
+        ]
+        if provenance.source_record_ids:
+            lines.append(f"Explicit transcript source: {' -> '.join(provenance.source_record_ids)}")
+        else:
+            lines.append("Explicit transcript source: none (manual completed-turn text)")
+        lines.append("Read-only bounded audit metadata; raw prompts and provider output are not retained here.")
+        return "\n".join(lines)
 
     def command(self, text):
         lowered = text.strip().casefold()
@@ -2445,6 +2914,8 @@ class AssistantSession:
             return self.adventure_session_status()
         if lowered in {"adventure events", "adventure event list"}:
             return self.adventure_events()
+        if lowered == "adventure event provenance" or lowered.startswith("adventure event provenance "):
+            return self.adventure_event_provenance(text.strip()[len("adventure event provenance"):])
         if lowered == "adventure import inspect" or lowered.startswith("adventure import inspect "):
             return self.adventure_import_inspect(text.strip()[len("adventure import inspect"):])
         if lowered == "adventure import bundle create" or lowered.startswith("adventure import bundle create "):
@@ -2516,6 +2987,18 @@ class AssistantSession:
             return self.adventure_turn_begin()
         if lowered == "adventure turn inspect":
             return self.adventure_turn_inspect()
+        if lowered in {"adventure turn mutation generation status", "adventure turn mutations generation status"}:
+            return self.adventure_turn_mutation_generation_status()
+        if lowered == "adventure turn mutations generate" or lowered.startswith("adventure turn mutations generate "):
+            return self.adventure_turn_generate_mutations(text.strip()[len("adventure turn mutations generate"):])
+        if lowered in {"adventure turn mutations", "adventure turn mutation candidates"}:
+            return self.adventure_turn_mutation_candidates()
+        if lowered in {"adventure turn generation status", "adventure turn generate status"}:
+            return self.adventure_turn_generation_status()
+        if lowered == "adventure turn generate" or lowered.startswith("adventure turn generate "):
+            return self.adventure_turn_generate(text.strip()[len("adventure turn generate"):])
+        if lowered in {"adventure turn candidates", "adventure turn candidate list"}:
+            return self.adventure_turn_candidates()
         if lowered == "adventure turn remove" or lowered.startswith("adventure turn remove "):
             return self.adventure_turn_remove(text.strip()[len("adventure turn remove"):])
         if lowered in {"adventure turn status", "adventure turn"}:
@@ -2528,6 +3011,12 @@ class AssistantSession:
             return self.adventure_turn_stage_knowledge(text.strip()[len("adventure turn stage knowledge"):])
         if lowered == "adventure turn stage resource" or lowered.startswith("adventure turn stage resource "):
             return self.adventure_turn_stage_resource(text.strip()[len("adventure turn stage resource"):])
+        if lowered == "adventure turn stage mutation candidate" or lowered.startswith("adventure turn stage mutation candidate "):
+            return self.adventure_turn_stage_mutation_candidate(
+                text.strip()[len("adventure turn stage mutation candidate"):]
+            )
+        if lowered == "adventure turn stage candidate" or lowered.startswith("adventure turn stage candidate "):
+            return self.adventure_turn_stage_candidate(text.strip()[len("adventure turn stage candidate"):])
         if lowered == "adventure turn stage" or lowered.startswith("adventure turn stage "):
             return self.adventure_turn_stage(text.strip()[len("adventure turn stage"):])
         if lowered == "adventure turn commit":

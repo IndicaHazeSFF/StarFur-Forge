@@ -16,6 +16,10 @@ from pipeline.adventure_mutation import AdventureEventEnvelope, AdventureMutatio
 from pipeline.adventure_resources import AdventureResourceCatalog, AdventureResourceDefinition
 from pipeline.adventure_import import AdventureImportLog
 from pipeline.assistant import AssistantSession
+from pipeline.adventure_turn_candidates import parse_untrusted_adventure_turn_candidates
+from pipeline.adventure_turn_coordinator import AdventureTurnCoordinator
+from pipeline.adventure_turn_generation import AdventureTurnGenerationRequest, AdventureTurnGenerationResult
+from pipeline.adventure_turn_mutation_coordinator import AdventureTurnMutationCoordinator
 from pipeline.command_help import detect_command_help
 from pipeline.document_intake import extract_document_memory_candidates, prepare_document_text
 
@@ -27,13 +31,28 @@ class AdventureCommandTests(unittest.TestCase):
             "max_memories": 2, "memory_policy": "off", "debug_level": "off",
         })()
 
-    def _session(self, root, calls):
+    def _session(
+        self, root, calls, *, adventure_turn_coordinator=None,
+        adventure_turn_mutation_coordinator=None, chat_response=None,
+    ):
         registry = AdventureRegistry(root, now=lambda: datetime(2026, 8, 15, tzinfo=UTC))
+        chat_response = chat_response or {"message": {"content": "unexpected"}}
         return AssistantSession(
             self._config(), "Persona", policy="Policy", adventure_registry=registry,
-            chat=lambda **kwargs: calls.append(kwargs) or {"message": {"content": "unexpected"}},
+            chat=lambda **kwargs: calls.append(kwargs) or chat_response,
             memory_loader=lambda **kwargs: [],
+            adventure_turn_coordinator=adventure_turn_coordinator,
+            adventure_turn_mutation_coordinator=adventure_turn_mutation_coordinator,
         )
+
+    class _CandidateProvider:
+        def __init__(self, payload):
+            self.payload = payload
+            self.requests = []
+
+        def propose(self, request):
+            self.requests.append(request)
+            return self.payload
 
     def test_commands_create_list_and_inspect_metadata_without_a_model_or_memory(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -104,6 +123,300 @@ class AdventureCommandTests(unittest.TestCase):
             self.assertFalse(session.roleplay_state.active)
             self.assertIn("unloaded: Quiet Ember", session.respond("adventure unload"))
             self.assertEqual("Adventure workspace: none loaded.", session.respond("adventure status"))
+
+    def test_programmatic_turn_candidate_inbox_is_cleared_on_adventure_mount_transition(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(directory, calls)
+            session.respond("adventure create Quiet Ember")
+            session.respond("adventure create Other Ember")
+            session.respond("adventure load Quiet Ember")
+            batch = parse_untrusted_adventure_turn_candidates({
+                "schema_version": 1,
+                "candidates": [{
+                    "event_type": "discovery",
+                    "summary": "The crew finds a brass key.",
+                    "confidence": 0.8,
+                }],
+            })
+
+            result = AdventureTurnGenerationResult(
+                AdventureTurnGenerationRequest(
+                    session.adventure_session.record, session.adventure_session.event_count,
+                    "No authoritative events.", "I inspect the key.",
+                    generation_id="TG-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                ), batch,
+            )
+            self.assertIn("Presented 1", session.present_adventure_turn_candidates(result))
+            self.assertEqual("TC-001", session.select_adventure_turn_candidate("TC-001").candidate.candidate_id)
+            session.respond("adventure load Other Ember")
+
+            self.assertFalse(session.adventure_turn_candidate_inbox.active)
+            with self.assertRaisesRegex(ValueError, "no adventure-turn candidates"):
+                session.select_adventure_turn_candidate("TC-001")
+            self.assertEqual([], calls)
+
+    def test_explicit_generation_uses_the_injected_coordinator_and_only_populates_review_inbox(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            provider = self._CandidateProvider({
+                "schema_version": 1,
+                "candidates": [{
+                    "event_type": "discovery",
+                    "summary": "The hatch opens.",
+                    "confidence": 0.8,
+                }],
+            })
+            session = self._session(
+                directory, calls, adventure_turn_coordinator=AdventureTurnCoordinator(provider),
+            )
+            session.respond("adventure create Quiet Ember")
+            session.respond("adventure load Quiet Ember")
+            record = session.adventure_session.record
+
+            response = session.generate_adventure_turn_candidates(
+                user_text="I turn the brass key.", narrator_text="The lock clicks.",
+            )
+
+            self.assertIn("Presented 1 untrusted", response)
+            self.assertEqual(1, len(provider.requests))
+            self.assertEqual("TC-001", session.select_adventure_turn_candidate("TC-001").candidate.candidate_id)
+            self.assertEqual([], AdventureEventLog(session.adventure_registry, record).events())
+            self.assertFalse(session.adventure_turn.active)
+            self.assertEqual([], calls)
+
+    def test_exact_generate_command_requires_staging_and_only_fills_candidate_review_inbox(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            provider = self._CandidateProvider({
+                "schema_version": 1,
+                "candidates": [{
+                    "event_type": "discovery",
+                    "summary": "The brass hatch opens.",
+                    "confidence": 0.9,
+                }],
+            })
+            session = self._session(
+                directory, calls, adventure_turn_coordinator=AdventureTurnCoordinator(provider),
+            )
+            session.respond("adventure create Quiet Ember")
+            session.respond("adventure load Quiet Ember")
+            record = session.adventure_session.record
+
+            self.assertIn("inactive", session.respond("adventure turn generate I open the hatch."))
+            self.assertIn("staging started", session.respond("adventure turn begin"))
+            self.assertIn("Usage:", session.respond("adventure turn generate"))
+            self.assertIn("Presented 1 untrusted", session.respond("adventure turn generate I open the hatch."))
+            self.assertIn("TC-001 [discovery]", session.respond("adventure turn candidates"))
+            self.assertEqual([], AdventureEventLog(session.adventure_registry, record).events())
+            self.assertEqual([], calls)
+
+    def test_typed_generation_has_a_separate_inbox_and_requires_explicit_stage_commit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            provider = self._CandidateProvider({
+                "schema_version": 1,
+                "candidates": [{
+                    "mutation": {"kind": "state_set", "key": "current_location", "value": "engine room"},
+                    "confidence": 0.9,
+                }],
+            })
+            session = self._session(
+                directory, calls,
+                adventure_turn_mutation_coordinator=AdventureTurnMutationCoordinator(provider),
+            )
+            session.respond("adventure create Quiet Ember")
+            session.respond("adventure load Quiet Ember")
+            record = session.adventure_session.record
+
+            self.assertIn("staging started", session.respond("adventure turn begin"))
+            self.assertIn("Presented 1 untrusted typed", session.respond(
+                "adventure turn mutations generate I enter the engine room."
+            ))
+            self.assertIn("TM-001 [state_set]", session.respond("adventure turn mutations"))
+            self.assertEqual([], AdventureEventLog(session.adventure_registry, record).events())
+            self.assertIn("Staged typed adventure-turn candidate TM-001", session.respond(
+                "adventure turn stage mutation candidate TM-001"
+            ))
+            self.assertIn("Committed 1 staged adventure event", session.respond("adventure turn commit"))
+            event = AdventureEventLog(session.adventure_registry, record).events()[0]
+            self.assertEqual("state_change", event.event_type)
+            self.assertEqual("engine room", event.state_value)
+            self.assertEqual("TM-001", event.generation_provenance.candidate_id)
+            self.assertEqual("adventure_turn_mutation_generation", event.generation_provenance.task_id)
+            self.assertEqual([], calls)
+
+    def test_transcript_generation_requires_explicit_completed_pair_and_keeps_it_untrusted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            provider = self._CandidateProvider({
+                "schema_version": 1,
+                "candidates": [{
+                    "event_type": "discovery", "summary": "The hatch opens.", "confidence": 0.9,
+                }],
+            })
+            session = self._session(
+                directory, calls, adventure_turn_coordinator=AdventureTurnCoordinator(provider),
+            )
+            session.respond("adventure create Quiet Ember")
+            session.respond("adventure load Quiet Ember")
+            record = session.adventure_session.record
+            session.respond("adventure turn begin")
+
+            self.assertIn("requires the latest two explicit", session.respond("adventure turn generate transcript"))
+            session.respond("adventure transcript record user: I turn the brass key.")
+            session.respond("adventure transcript record narrator: The hatch groans open.")
+            self.assertIn("Presented 1 untrusted", session.respond("adventure turn generate transcript"))
+            self.assertEqual("I turn the brass key.", provider.requests[0].user_text)
+            self.assertEqual("The hatch groans open.", provider.requests[0].narrator_text)
+            self.assertEqual(("AT-000001", "AT-000002"), provider.requests[0].source_record_ids)
+            self.assertIn("AT-000001 -> AT-000002", session.respond("adventure turn generation status"))
+            self.assertEqual([], AdventureEventLog(session.adventure_registry, record).events())
+
+    def test_default_generated_turn_flow_requires_review_stage_and_commit_before_any_event_exists(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(
+                directory, calls,
+                chat_response={"message": {"content": json.dumps({
+                    "schema_version": 1,
+                    "candidates": [{
+                        "event_type": "discovery",
+                        "summary": "The brass hatch opens.",
+                        "confidence": 0.9,
+                    }],
+                })}},
+            )
+            session.respond("adventure create Quiet Ember")
+            session.respond("adventure load Quiet Ember")
+            record = session.adventure_session.record
+            session.respond("adventure turn begin")
+
+            self.assertIn("Presented 1 untrusted", session.respond(
+                "adventure turn generate I turn the brass key in the hatch."
+            ))
+            self.assertEqual([], AdventureEventLog(session.adventure_registry, record).events())
+            self.assertIn("TC-001 [discovery]", session.respond("adventure turn candidates"))
+            self.assertIn("Staged adventure-turn candidate TC-001", session.respond(
+                "adventure turn stage candidate TC-001"
+            ))
+            self.assertIn("Committed 1 staged adventure event", session.respond("adventure turn commit"))
+            events = AdventureEventLog(session.adventure_registry, record).events()
+            self.assertEqual(1, len(events))
+            self.assertEqual("discovery", events[0].event_type)
+            self.assertEqual("The brass hatch opens.", events[0].summary)
+            self.assertIsNotNone(events[0].generation_provenance)
+            self.assertEqual("adventure_turn_generation", events[0].generation_provenance.task_id)
+            self.assertEqual("TC-001", session.adventure_turn_candidate_inbox.batch.candidates[0].candidate_id)
+            audit = session.respond("adventure event provenance AE-000001")
+            self.assertIn("Generation: TG-", audit)
+            self.assertIn("Candidate: TC-001", audit)
+            self.assertIn("raw prompts and provider output are not retained", audit)
+            self.assertEqual(1, len(calls))
+            self.assertFalse(calls[0].get("stream"))
+
+    def test_default_generation_uses_the_dedicated_task_profile_and_fails_safely_on_invalid_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(directory, calls)
+            session.respond("adventure create Quiet Ember")
+            session.respond("adventure load Quiet Ember")
+
+            with self.assertRaisesRegex(RuntimeError, "failed safely"):
+                session.generate_adventure_turn_candidates(user_text="I wait.")
+            self.assertFalse(session.adventure_turn_candidate_inbox.active)
+            self.assertEqual(1, len(calls))
+            status = session.respond("adventure turn generation status")
+            self.assertIn("failed", status)
+            self.assertIn("response_not_json", status)
+
+    def test_failed_replacement_generation_clears_old_candidates_without_aborting_manual_staging(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            provider = self._CandidateProvider({
+                "schema_version": 1,
+                "candidates": [{
+                    "event_type": "discovery", "summary": "The hatch opens.", "confidence": 0.9,
+                }],
+            })
+            session = self._session(
+                directory, calls, adventure_turn_coordinator=AdventureTurnCoordinator(provider),
+            )
+            session.respond("adventure create Quiet Ember")
+            session.respond("adventure load Quiet Ember")
+            session.respond("adventure turn begin")
+            self.assertIn("Presented 1 untrusted", session.respond("adventure turn generate I open the hatch."))
+            self.assertIn("Staged adventure-turn candidate", session.respond("adventure turn stage candidate TC-001"))
+
+            provider.payload = {"schema_version": 1, "candidates": []}
+            self.assertIn(
+                "failed safely", session.respond("adventure turn generate I wait."),
+            )
+            self.assertFalse(session.adventure_turn_candidate_inbox.active)
+            self.assertTrue(session.adventure_turn.active)
+            self.assertEqual(["The hatch opens."], [draft.summary for draft in session.adventure_turn.drafts])
+
+    def test_programmatic_candidates_reject_a_generation_origin_that_became_stale(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(directory, calls)
+            session.respond("adventure create Quiet Ember")
+            session.respond("adventure load Quiet Ember")
+            batch = parse_untrusted_adventure_turn_candidates({
+                "schema_version": 1,
+                "candidates": [{
+                    "event_type": "discovery",
+                    "summary": "The crew finds a brass key.",
+                    "confidence": 0.8,
+                }],
+            })
+            result = AdventureTurnGenerationResult(
+                AdventureTurnGenerationRequest(
+                    session.adventure_session.record, session.adventure_session.event_count,
+                    "No authoritative events.", "I inspect the key.",
+                    generation_id="TG-cccccccccccccccccccccccccccccccc",
+                ), batch,
+            )
+            session.respond("adventure record discovery: A different clue is found.")
+
+            with self.assertRaisesRegex(ValueError, "stale"):
+                session.present_adventure_turn_candidates(result)
+            self.assertFalse(session.adventure_turn_candidate_inbox.active)
+            self.assertEqual([], calls)
+
+    def test_exact_candidate_commands_review_and_stage_only_one_selected_candidate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(directory, calls)
+            session.respond("adventure create Quiet Ember")
+            session.respond("adventure load Quiet Ember")
+            batch = parse_untrusted_adventure_turn_candidates({
+                "schema_version": 1,
+                "candidates": [{
+                    "event_type": "discovery",
+                    "summary": "The crew finds a brass key.",
+                    "confidence": 0.8,
+                }],
+            })
+            result = AdventureTurnGenerationResult(
+                AdventureTurnGenerationRequest(
+                    session.adventure_session.record, session.adventure_session.event_count,
+                    "No authoritative events.", "I inspect the key.",
+                    generation_id="TG-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                ), batch,
+            )
+            session.present_adventure_turn_candidates(result)
+
+            review = session.respond("adventure turn candidates")
+            self.assertIn("TC-001 [discovery]", review)
+            self.assertIn("Generation: TG-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", review)
+            self.assertIn("untrusted; not staged", review)
+            self.assertIn("inactive", session.respond("adventure turn stage candidate TC-001"))
+            session.respond("adventure turn begin")
+            self.assertIn("Staged adventure-turn candidate TC-001", session.respond("adventure turn stage candidate tc-001"))
+            self.assertIn("already staged", session.respond("adventure turn stage candidate TC-001"))
+            self.assertIn("TC-001", session.respond("adventure turn inspect"))
+            self.assertEqual([], calls)
 
     def test_load_reads_bounded_event_summaries_without_writing_or_calling_a_model(self):
         with tempfile.TemporaryDirectory() as directory:

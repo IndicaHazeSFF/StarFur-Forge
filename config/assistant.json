@@ -35,7 +35,9 @@
   "task_profiles": {
     "assistant_chat": {},
     "assistant_proposal": {},
-    "document_annotation": {"max_output_tokens": 1024}
+    "document_annotation": {"max_output_tokens": 1024},
+      "adventure_turn_generation": {"max_output_tokens": 1024},
+      "adventure_turn_mutation_generation": {"max_output_tokens": 512}
   },
   "policy_path": "config/assistant_policy.md"
 }
