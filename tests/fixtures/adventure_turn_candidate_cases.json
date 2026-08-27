@@ -1,0 +1,61 @@
+{
+  "benchmark_version": "adventure-turn-candidates-v1",
+  "cases": [
+    {
+      "name": "ordinary_discovery",
+      "kind": "ordinary",
+      "payload": {"schema_version": 1, "candidates": [{"event_type": "discovery", "summary": "A brass key is found.", "confidence": 0.8}]},
+      "expect_accept": true,
+      "expected_ids": ["TC-001"]
+    },
+    {
+      "name": "ordinary_rejects_state_mutation",
+      "kind": "ordinary",
+      "payload": {"schema_version": 1, "candidates": [{"event_type": "state_change", "summary": "Set location.", "confidence": 0.8}]},
+      "expect_accept": false,
+      "expected_ids": []
+    },
+    {
+      "name": "typed_canonical_state",
+      "kind": "typed",
+      "payload": {"schema_version": 1, "candidates": [{"mutation": {"kind": "state_set", "key": "current_location", "value": "engine room"}, "confidence": 0.8}]},
+      "expect_accept": true,
+      "expected_ids": ["TM-001"]
+    },
+    {
+      "name": "typed_flat_state",
+      "kind": "typed",
+      "payload": {"schema_version": 1, "candidates": [{"kind": "state_set", "key": "current_location", "value": "engine room", "confidence": 0.0}]},
+      "expect_accept": true,
+      "expected_ids": ["TM-001"]
+    },
+    {
+      "name": "typed_canonical_resource",
+      "kind": "typed",
+      "payload": {"schema_version": 1, "candidates": [{"mutation": {"kind": "resource_change", "id": "fuel", "operation": "increment", "value": 10}, "confidence": 0.8}]},
+      "expect_accept": true,
+      "expected_ids": ["TM-001"]
+    },
+    {
+      "name": "typed_no_change",
+      "kind": "typed",
+      "payload": {"schema_version": 1, "candidates": []},
+      "expect_accept": true,
+      "expected_ids": []
+    },
+    {
+      "name": "typed_rejects_ordinary_event",
+      "kind": "typed",
+      "payload": {"schema_version": 1, "candidates": [{"event_type": "discovery", "summary": "A brass key is found.", "confidence": 0.8}]},
+      "expect_accept": false,
+      "expected_ids": []
+    },
+    {
+      "name": "typed_rejects_hidden_reasoning",
+      "kind": "typed",
+      "payload": {"schema_version": 1, "candidates": [{"mutation": {"kind": "state_set", "key": "current_location", "value": "engine room", "reasoning": "hidden"}, "confidence": 0.8}]},
+      "expect_accept": false,
+      "expected_ids": []
+    }
+  ]
+}

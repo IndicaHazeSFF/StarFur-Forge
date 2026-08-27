@@ -337,6 +337,13 @@ def main():
     subparsers.add_parser(
         "adventure-eval", help="Run checked-in deterministic adventure integrity fixtures",
     )
+    candidate_eval_parser = subparsers.add_parser(
+        "adventure-candidate-eval", help="Run checked-in deterministic adventure-turn candidate fixtures",
+    )
+    candidate_eval_parser.add_argument("--record-ledger", metavar="PATH", help="Explicitly append this fixture result to a local JSONL experiment ledger")
+    candidate_eval_parser.add_argument("--run-id", help="Optional reproducible benchmark run identifier")
+    candidate_eval_parser.add_argument("--git-commit", help="Optional source commit recorded with this benchmark run")
+    candidate_eval_parser.add_argument("--hardware-profile", help="Optional non-sensitive hardware profile label")
 
     context_parser = subparsers.add_parser("assistant-context", help="Show ranked assistant memory context")
     context_parser.add_argument("query", help="Question or query text")
@@ -574,6 +581,28 @@ def main():
     elif args.command == "adventure-eval":
         from pipeline.adventure_eval import format_adventure_integrity_result, run_adventure_integrity_benchmark
         print(format_adventure_integrity_result(run_adventure_integrity_benchmark()))
+
+    elif args.command == "adventure-candidate-eval":
+        from pipeline.adventure_turn_candidate_eval import (
+            format_adventure_turn_candidate_result, run_adventure_turn_candidate_benchmark,
+        )
+        result = run_adventure_turn_candidate_benchmark()
+        print(format_adventure_turn_candidate_result(result))
+        if args.record_ledger:
+            from pipeline.benchmark import BenchmarkModelProfile, BenchmarkRunManifest
+            from pipeline.experiment_ledger import append_benchmark_result, build_benchmark_result_record
+            manifest = BenchmarkRunManifest(
+                benchmark_id="adventure-turn-candidate-fixture",
+                workload="adventure-turn-candidate-schema-fixture",
+                model_profile=BenchmarkModelProfile("internal", "fixture"),
+                architecture_fingerprint="adventure-turn-candidates-v1",
+                git_commit=args.git_commit,
+                run_id=args.run_id,
+                hardware={"profile": args.hardware_profile} if args.hardware_profile else {},
+            )
+            record = build_benchmark_result_record(manifest, result, run_id=args.run_id)
+            append_benchmark_result(args.record_ledger, record)
+            print(f"\nRecorded benchmark result: {record['record_id']} -> {args.record_ledger}")
 
     elif args.command == "assistant-context":
         from pipeline.db import retrieve_assistant_memories, explain_assistant_memory_retrieval

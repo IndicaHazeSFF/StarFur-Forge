@@ -452,9 +452,14 @@ Prepare or inspect isolated CYOA workspace metadata with exact Core commands:
     adventure turn generate transcript
     adventure turn generation status
     adventure turn candidates
+    adventure turn mutations generate <completed user-turn text>
+    adventure turn mutations generate transcript
+    adventure turn mutation generation status
+    adventure turn mutations
     adventure turn inspect
     adventure turn remove <staged-event-number>
     adventure turn stage candidate <TC-###>
+    adventure turn stage mutation candidate <TM-###>
     adventure turn stage <event-type>: <summary>
     adventure turn stage state <key>: <value>
     adventure turn stage relationship <character> <dimension>: <value>
@@ -581,6 +586,14 @@ candidate batch for the loaded workspace. Candidates become stale after any auth
 story write. `adventure turn stage candidate <TC-###>` requires an active transaction and
 explicitly stages just that validated ordinary candidate; repeating the same candidate is a
 no-op. Neither command creates candidates, calls a model, or writes an event.
+`adventure turn mutations generate` runs a separate, explicit model task that may
+propose only typed `state_set`, `relationship_set`, `knowledge_set`, or
+`resource_change` mutations. Its `TM-###` inbox is distinct from ordinary `TC-###`
+events; `adventure turn mutations` is read-only and `adventure turn stage mutation
+candidate <TM-###>` still requires an active staged turn. A selected resource proposal
+must additionally validate against the loaded adventure's immutable resource catalog
+and current/staged resource state. No generated candidate is automatically staged or
+persisted.
 `adventure turn remove <staged-event-number>` discards exactly one inspected
 draft while retaining the rest of the session-local batch. It is not a canonical
 event deletion; no stored history exists until the remaining batch is committed.
@@ -966,6 +979,14 @@ Persona Runtime diagnostics:
     persona inspect
 
 This is read-only and shows bounded state metadata plus derived behavior controls without displaying the full persona prompt or changing runtime state. Normal chat receives the same Core-provided presentation-only behavior guidance; it cannot override engine policy, factual grounding, provenance, commands, or permissions.
+
+Resident apartment activity:
+
+    resident status
+    resident action <idle|resting|reading|working|waiting|chatting|adventuring>
+    resident action clear
+
+This is an exact Core-owned, persona-local, restart-ephemeral presentation state. It does not start work, call a provider, change memory, or imply autonomous activity. `resident action clear` restores the Core default `idle` state. The apartment dashboard may show the action even when no matching authored animation is installed yet.
 
 ### External document annotation resilience
 

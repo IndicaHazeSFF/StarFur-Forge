@@ -21,6 +21,9 @@ _RECORD_FIELDS = {
 _METRIC_FIELDS = {
     "top1_hit_rate", "top3_hit_rate", "recall_at_k", "precision_at_k",
     "irrelevant_result_count", "latency_ms", "time_to_first_token_ms", "repeatability",
+    "candidate_acceptance_rate", "candidate_schema_pass_rate",
+    "candidate_ordinary_schema_pass_rate", "candidate_typed_schema_pass_rate",
+    "candidate_no_change_pass_rate",
 }
 
 
@@ -42,7 +45,7 @@ def _number(value: Any, field: str) -> float | int:
     return value
 
 
-def _sanitize_case_result(value: Mapping[str, Any]) -> dict[str, Any]:
+def _sanitize_retrieval_case_result(value: Mapping[str, Any]) -> dict[str, Any]:
     """Keep only bounded evaluation identifiers and measurements, never query text."""
     if not isinstance(value, Mapping):
         raise ValueError("case result must be an object")
@@ -79,6 +82,44 @@ def _sanitize_case_result(value: Mapping[str, Any]) -> dict[str, Any]:
     return sanitized
 
 
+def _sanitize_candidate_case_result(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Keep only candidate-schema outcomes; never retain model text or payloads."""
+    name = _bounded_text(value.get("name"), "case name", required=True)
+    kind = _bounded_text(value.get("kind"), "candidate case kind", required=True)
+    if kind not in {"ordinary", "typed"}:
+        raise ValueError("candidate case kind is unsupported")
+    expected_accept = value.get("expected_accept")
+    accepted = value.get("accepted")
+    passed = value.get("pass")
+    expected_ids = value.get("expected_ids")
+    returned_ids = value.get("returned_ids")
+    if not all(isinstance(item, bool) for item in (expected_accept, accepted, passed)):
+        raise ValueError("candidate case acceptance and pass must be boolean")
+    if not isinstance(expected_ids, list) or not isinstance(returned_ids, list):
+        raise ValueError("candidate case identifiers must be lists")
+    if len(expected_ids) > 16 or len(returned_ids) > 16:
+        raise ValueError("candidate case contains too many identifiers")
+    prefix = "TC-" if kind == "ordinary" else "TM-"
+    if not all(isinstance(item, str) and item.startswith(prefix) and len(item) <= 16 for item in expected_ids + returned_ids):
+        raise ValueError("candidate identifiers are invalid")
+    return {
+        "name": name, "kind": kind, "expected_accept": expected_accept,
+        "accepted": accepted, "expected_ids": list(expected_ids),
+        "returned_ids": list(returned_ids), "pass": passed,
+    }
+
+
+def _sanitize_case_result(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Select one closed, privacy-bounded result schema by case shape."""
+    if not isinstance(value, Mapping):
+        raise ValueError("case result must be an object")
+    if {"expected", "returned"}.issubset(value):
+        return _sanitize_retrieval_case_result(value)
+    if {"kind", "expected_accept", "accepted", "expected_ids", "returned_ids"}.issubset(value):
+        return _sanitize_candidate_case_result(value)
+    raise ValueError("case result schema is unsupported")
+
+
 def build_benchmark_result_record(
     manifest: BenchmarkRunManifest,
     result: Mapping[str, Any],
@@ -102,6 +143,9 @@ def build_benchmark_result_record(
     for field in (
         "top1_hit_rate", "top3_hit_rate", "recall_at_k", "precision_at_k",
         "irrelevant_result_count", "latency_ms", "time_to_first_token_ms",
+        "candidate_acceptance_rate", "candidate_schema_pass_rate",
+        "candidate_ordinary_schema_pass_rate", "candidate_typed_schema_pass_rate",
+        "candidate_no_change_pass_rate",
     ):
         if field in result and result[field] is not None:
             metrics[field] = _number(result[field], field)

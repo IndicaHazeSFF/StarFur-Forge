@@ -125,6 +125,23 @@ class AdventureTurnProviderTests(unittest.TestCase):
                 "candidates": [{"event_type": "discovery", "summary": "A key.", "confidence": 0.8}],
             })
 
+    def test_typed_mutation_adapter_preserves_empty_and_invalid_envelope_failure_categories(self):
+        empty = ChatAdventureTurnMutationCandidateProvider(
+            _FakeChatProvider({"message": {"content": "   "}}),
+        )
+        with self.assertRaisesRegex(AdventureTurnProviderError, "empty") as captured:
+            empty.propose(self._mutation_request())
+        self.assertEqual("response_empty", captured.exception.reason)
+
+        invalid = ChatAdventureTurnMutationCandidateProvider(_FakeChatProvider({"message": {"content": (
+            '{"schema_version":1,"candidates":[{"event_type":"discovery",'
+            '"summary":"The hatch opens.","confidence":0.8}]}'
+        )}}))
+        decoded = invalid.propose(self._mutation_request())
+        with self.assertRaisesRegex(AdventureTurnProviderError, "invalid candidate envelope") as captured:
+            validate_adventure_turn_mutation_provider_result(decoded)
+        self.assertEqual("mutation_candidate_envelope_invalid", captured.exception.reason)
+
 
 if __name__ == "__main__":
     unittest.main()

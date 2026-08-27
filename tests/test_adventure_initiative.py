@@ -1,7 +1,12 @@
 import unittest
+from pathlib import Path
+import sys
+
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from pipeline.adventure_initiative import (
-    AdventureInitiativeError, AdventureParticipant, AdventureParticipantMemoryPolicy,
+    AdventureInitiativeError, AdventureParticipant, AdventureParticipantMemoryPolicy, AdventureParticipantRoster,
     PersonaInitiativePolicy, evaluate_initiative,
 )
 
@@ -29,6 +34,20 @@ class AdventureInitiativeTests(unittest.TestCase):
         self.assertTrue(decision.allowed)
         limited = evaluate_initiative(policy, trigger="world_event", turns_since_last_action=3, actions_this_turn=1)
         self.assertFalse(limited.allowed)
+
+    def test_roster_is_exactly_adventure_scoped_and_resolves_without_guessing(self):
+        roster = AdventureParticipantRoster("quiet-ember", (
+            AdventureParticipant("Murr", "Murr", "persona", "adventure:quiet-ember:participant:murr"),
+            AdventureParticipant("rook", "Rook", "npc", "adventure:quiet-ember:participant:rook"),
+        ))
+        self.assertEqual(["murr", "rook"], [item.participant_id for item in roster.participants])
+        self.assertEqual("murr", roster.resolve("MURR").participant_id)
+        with self.assertRaisesRegex(AdventureInitiativeError, "not found"):
+            roster.resolve("mu")
+        with self.assertRaisesRegex(AdventureInitiativeError, "does not match adventure"):
+            AdventureParticipantRoster("quiet-ember", (
+                AdventureParticipant("murr", "Murr", "persona", "adventure:other:participant:murr"),
+            ))
 
 
 if __name__ == "__main__":

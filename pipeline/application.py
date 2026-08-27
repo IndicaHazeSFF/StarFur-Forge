@@ -25,6 +25,9 @@ from pipeline.retrieval import DeterministicMemoryRetriever, MemoryRetriever
 from pipeline.task_profiles import TASK_DOCUMENT_ANNOTATION, TaskProfiles, provider_matches
 from pipeline.persona_registry import PersonaRegistry, load_persona_package
 from pipeline.persona_runtime import PersonaRuntimeRegistry
+from pipeline.resident_presentation import ResidentPresentationPlan
+from pipeline.resident_snapshot import ResidentSnapshot
+from pipeline.system_metrics import LocalSystemMetricsProvider, NullSystemMetricsProvider, SystemMetricsProvider, SystemMetricsSnapshot
 
 
 DEFAULT_CONVERSATION_ID = "default"
@@ -74,11 +77,15 @@ class AssistantApplication:
         session_factory: Callable[[], AssistantSession] | None = None,
         max_conversations: int = DEFAULT_MAX_CONVERSATIONS,
         retriever: MemoryRetriever | None = None,
+        system_metrics_provider: SystemMetricsProvider | None = None,
     ):
         if max_conversations <= 0:
             raise ValueError("max_conversations must be positive.")
         self.session = session
         self.retriever = retriever or getattr(session, "retriever", None)
+        self.system_metrics_provider = system_metrics_provider or NullSystemMetricsProvider()
+        if not callable(getattr(self.system_metrics_provider, "snapshot", None)):
+            raise TypeError("system_metrics_provider must provide a callable snapshot method.")
         self.capability_manifest = capability_manifest or build_core_capability_registry().build_manifest()
         # The registry lock protects only lookup, creation, LRU ordering, and
         # eviction.  Individual conversations retain their own locks so a
@@ -308,6 +315,72 @@ class AssistantApplication:
                 "persona": public_dict(),
             }
 
+    def resident_snapshot(self, *, conversation_id=None):
+        """Return a compact read-only resident/dashboard view for one session.
+
+        This boundary intentionally observes only existing public session
+        summaries while holding the normal conversation lock.  It neither
+        seeds runtime state nor reads canonical memory, provider payloads,
+        prompt text, candidate content, or hidden adventure resource values.
+        """
+        with self._locked_session_for(conversation_id) as session:
+            runtime = getattr(session, "persona_runtime_state", None)
+            runtime_public = getattr(runtime, "public_dict", None)
+            lifecycle = getattr(session, "provider_lifecycle", None)
+            lifecycle_public = getattr(lifecycle, "public_dict", None)
+            provider = getattr(session, "provider", None)
+            health = self._provider_health_for_session(session)
+            adventure = getattr(session, "adventure_session", None)
+            adventure_public = getattr(adventure, "public_dict", None)
+            roleplay = getattr(session, "roleplay_state", None)
+            roleplay_public = getattr(roleplay, "public_dict", None)
+            turn = getattr(session, "adventure_turn", None)
+            ordinary_inbox = getattr(session, "adventure_turn_candidate_inbox", None)
+            mutation_inbox = getattr(session, "adventure_turn_mutation_candidate_inbox", None)
+
+            def candidate_count(inbox):
+                batch = getattr(inbox, "batch", None)
+                candidates = getattr(batch, "candidates", ())
+                return len(candidates) if isinstance(candidates, tuple) else 0
+
+            manifest = self.capability_manifest
+            try:
+                metrics = self.system_metrics_provider.snapshot()
+                metrics_public = metrics.public_dict()
+            except Exception:
+                # Dashboard observation is never worth failing an otherwise
+                # healthy resident snapshot or leaking host exception text.
+                metrics_public = SystemMetricsSnapshot.unavailable("observation_failed").public_dict()
+            snapshot = ResidentSnapshot(
+                conversation_id=normalize_conversation_id(conversation_id),
+                persona=runtime_public() if callable(runtime_public) else None,
+                provider={
+                    "name": getattr(session, "_provider_name", None) or getattr(provider, "name", None) or "unknown",
+                    "configured": provider is not None,
+                    "health": health["status"],
+                    "model": self._active_model_for_session(session),
+                },
+                lifecycle=lifecycle_public() if callable(lifecycle_public) else None,
+                system_metrics=metrics_public,
+                capability_ids=tuple(item.id for item in manifest.capabilities),
+                adventure=adventure_public() if callable(adventure_public) else {"mounted": False, "storage": "session_ephemeral"},
+                roleplay=roleplay_public() if callable(roleplay_public) else {"active": False, "storage": "session_ephemeral"},
+                turn={
+                    "active": getattr(turn, "active", False) is True,
+                    "staged_count": len(getattr(turn, "drafts", ())),
+                },
+                candidates={
+                    "ordinary_count": candidate_count(ordinary_inbox),
+                    "mutation_count": candidate_count(mutation_inbox),
+                    "storage": "session_ephemeral",
+                },
+            ).public_dict()
+            # A plan contains generic stable asset slots only.  It is derived
+            # from the same bounded public snapshot rather than from prompt
+            # text, memory, raw provider output, or installed asset paths.
+            snapshot["presentation"] = ResidentPresentationPlan.from_resident_snapshot(snapshot).public_dict()
+            return snapshot
+
     def annotate_document(self, document: PreparedDocument, *, annotator=None, progress=None):
         """Return validated external-document candidates without persistence.
 
@@ -443,6 +516,7 @@ def create_assistant_application(
     session_factory=AssistantSession,
     max_conversations: int = DEFAULT_MAX_CONVERSATIONS,
     retriever: MemoryRetriever | None = None,
+    system_metrics_provider: SystemMetricsProvider | None = None,
 ):
     """Create the standard Assistant Mode application for any presentation client."""
     config = load_config(config_path) if config_path else load_config()
@@ -487,6 +561,7 @@ def create_assistant_application(
         session_factory=make_session,
         max_conversations=max_conversations,
         retriever=shared_retriever,
+        system_metrics_provider=system_metrics_provider or LocalSystemMetricsProvider(),
     )
 
 

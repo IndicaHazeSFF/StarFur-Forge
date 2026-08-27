@@ -136,18 +136,28 @@ def parse_untrusted_adventure_turn_mutation_candidates(
 
 def render_adventure_turn_mutation_candidate_batch(
     batch: AdventureTurnMutationCandidateBatch, *, generation_id: str | None = None,
+    hidden_resource_ids: frozenset[str] = frozenset(),
 ) -> str:
     """Render only validated typed proposal fields for explicit Core review."""
     if not isinstance(batch, AdventureTurnMutationCandidateBatch):
         raise TypeError("mutation candidate batch is invalid")
+    if not isinstance(hidden_resource_ids, frozenset) or not all(
+        isinstance(resource_id, str) for resource_id in hidden_resource_ids
+    ):
+        raise TypeError("hidden resource identifiers must be a frozen set of text")
     lines = ["Generated typed adventure-turn candidates (untrusted; not staged):"]
     if generation_id is not None:
         from pipeline.adventure_turn_candidates import normalize_turn_generation_id
         lines.append(f"Generation: {normalize_turn_generation_id(generation_id)}")
+    if not batch.candidates:
+        lines.append("(none; the provider proposed no durable typed changes)")
     for candidate in batch.candidates:
         mutation = candidate.mutation
-        lines.append(f"{candidate.candidate_id} [{mutation.kind}] {mutation.to_dict()}")
-        lines.append(f"  Candidate confidence: {candidate.confidence:.2f}")
+        if mutation.kind == "resource_change" and mutation.resource_id in hidden_resource_ids:
+            lines.append(f"{candidate.candidate_id} [resource_change] Hidden resource change")
+        else:
+            lines.append(f"{candidate.candidate_id} [{mutation.kind}] {mutation.to_dict()}")
+        lines.append(f"  Model-declared confidence (advisory): {candidate.confidence:.2f}")
     lines.append(
         "Review output only; Core must explicitly validate and stage any selected "
         "candidate before it can be committed."

@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>StarFur Apartment Prototype</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #171420; color: #f4ebff; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: radial-gradient(circle at 35% 25%, #3b3054, #171420 56%); }
+    main { width: min(940px, calc(100% - 32px)); display: grid; gap: 16px; padding: 24px 0; }
+    .panel { background: #241d32dd; border: 1px solid #5e4e7b; border-radius: 16px; padding: 16px; box-shadow: 0 16px 40px #0006; }
+    .connect { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    input, button { border-radius: 9px; padding: 9px 10px; border: 1px solid #6e5b91; background: #171420; color: inherit; }
+    input { flex: 1 1 220px; } button { cursor: pointer; background: #71559e; border-color: #9a7fcb; font-weight: 700; }
+    .apartment { min-height: 430px; position: relative; overflow: hidden; background: linear-gradient(#4c3c68 0 66%, #2f2638 66%); }
+    .apartment::before { content: ""; position: absolute; left: 8%; top: 14%; width: 130px; height: 115px; border: 10px solid #281f36; background: linear-gradient(135deg, #b9d5ff, #685c9c); box-shadow: inset 0 0 0 4px #d8ccff; }
+    .apartment::after { content: ""; position: absolute; right: 9%; bottom: 54px; width: 210px; height: 105px; border-radius: 16px 16px 3px 3px; background: #6b4c38; box-shadow: 0 16px #231b26; }
+    .resident { position: absolute; left: 44%; bottom: 44px; width: 220px; height: 340px; display: grid; place-items: center; border-radius: 49% 51% 25% 25%; background: linear-gradient(145deg, #c7b0ef, #8c73b5); border: 4px solid #decfff; box-shadow: 0 0 30px #c6a6ff88; transition: transform .35s ease, filter .35s ease; z-index: 1; overflow: hidden; }
+    .resident::before { content: "Murr"; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #2d223c; }
+    .resident img { width: 100%; height: 100%; object-fit: contain; position: relative; z-index: 1; }
+    .resident:has(img) { background: transparent; border-color: transparent; box-shadow: none; overflow: visible; }
+    .resident:has(img)::before { content: none; }
+    .resident[data-state="thinking"] { transform: translateY(-5px); filter: brightness(1.15); }
+    .resident[data-state="offline"], .resident[data-state="provider_error"] { filter: saturate(.45) brightness(.75); }
+    .resident[data-state="reviewing"] { transform: translateX(12px); }
+    .resident[data-state="adventuring"], .resident[data-state="roleplaying"] { transform: translateX(-20px); }
+    .activity { position: absolute; left: 16px; bottom: 16px; z-index: 2; padding: 8px 11px; background: #18121fcc; border-radius: 9px; }
+    .status { color: #c8b2ee; min-height: 1.4em; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+    .card { background: #18131f; border-left: 3px solid #a78adc; padding: 10px; border-radius: 7px; min-height: 62px; }
+    .label { color: #c5b9d8; font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; }.value { display:block; margin-top:4px; font-weight:700; overflow-wrap:anywhere; }
+    .hint { margin: 0; color: #c5b9d8; font-size: .9rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="panel">
+      <strong>StarFur Apartment Prototype</strong>
+      <p class="hint">Read-only local view. The token stays only in this browser tab and is used only to request the resident snapshot.</p>
+      <div class="connect">
+        <input id="endpoint" aria-label="API endpoint" value="" placeholder="API endpoint">
+        <input id="token" aria-label="Local API token" type="password" placeholder="Local API token">
+        <input id="conversation" aria-label="Conversation ID" placeholder="Conversation ID (default)">
+        <button id="connect" type="button">Connect</button>
+        <label class="hint"><input id="refresh" type="checkbox" checked> Refresh every 2 seconds</label>
+      </div>
+      <div id="status" class="status">Enter the local token, then connect.</div>
+    </section>
+    <section class="panel apartment" aria-label="Read-only apartment scene">
+      <div id="resident" class="resident" data-state="idle" aria-label="Resident placeholder"><img src="/starfur/assets/murr/Murr_S_Idle.png" alt="Murr standing idle" onerror="this.remove()"></div>
+      <div id="activity" class="activity">Idle</div>
+    </section>
+    <section class="panel grid" aria-label="Resident runtime status">
+      <div class="card"><span class="label">Persona</span><span id="persona" class="value">—</span></div>
+      <div class="card"><span class="label">Resident action</span><span id="resident-action" class="value">—</span></div>
+      <div class="card"><span class="label">Provider / model</span><span id="provider" class="value">—</span></div>
+      <div class="card"><span class="label">Adventure</span><span id="adventure" class="value">—</span></div>
+      <div class="card"><span class="label">Roleplay</span><span id="roleplay" class="value">—</span></div>
+      <div class="card"><span class="label">Turn staging</span><span id="turn" class="value">—</span></div>
+      <div class="card"><span class="label">Candidate inbox</span><span id="candidates" class="value">—</span></div>
+      <div class="card"><span class="label">Host resources</span><span id="resources" class="value">—</span></div>
+      <div class="card"><span class="label">Storage / GPU</span><span id="hardware" class="value">—</span></div>
+    </section>
+  </main>
+  <script>
+    (() => {
+      const byId = (id) => document.getElementById(id);
+      const endpoint = byId('endpoint'); const token = byId('token'); const conversation = byId('conversation'); const status = byId('status');
+      const resident = byId('resident'); const activity = byId('activity'); let timer = null;
+      endpoint.value = `${window.location.origin}/v1/starfur/resident-snapshot`;
+      const value = (element, text) => { element.textContent = text || '—'; };
+      const bytes = (amount) => typeof amount === 'number' ? `${(amount / 1073741824).toFixed(1)} GiB` : 'unavailable';
+      const render = (data) => {
+        const p = data.persona || {}; const provider = data.provider || {}; const adventure = data.adventure || {};
+        const roleplay = data.roleplay || {}; const turn = data.adventure_turn || {}; const inbox = data.candidate_inbox || {};
+        const metrics = data.system_metrics || {}; const cpu = metrics.cpu || {}; const memory = metrics.memory || {}; const storage = metrics.storage || {}; const gpu = metrics.gpu || {};
+        const plan = data.presentation || {}; const current = data.activity || 'idle';
+        resident.dataset.state = plan.visual_state || 'idle';
+        resident.setAttribute('aria-label', `${p.display_name || 'Resident'} is ${current}`);
+        value(activity, current.replaceAll('_', ' '));
+        value(byId('persona'), p.display_name || p.persona_id);
+        const residentAction = p.resident_action || {};
+        value(byId('resident-action'), `${residentAction.kind || 'idle'} · ${residentAction.source || 'core_default'}`);
+        value(byId('provider'), `${provider.name || 'unavailable'} · ${provider.model || '—'} · ${provider.health || 'unknown'}`);
+        value(byId('adventure'), adventure.mounted ? `${adventure.title || 'Untitled'} · ${adventure.event_count || 0} events` : 'No adventure mounted');
+        value(byId('roleplay'), roleplay.active ? `Active${roleplay.title ? ` · ${roleplay.title}` : ''}` : 'Inactive');
+        value(byId('turn'), turn.active ? `Active · ${turn.staged_count || 0} staged` : 'No staged turn');
+        value(byId('candidates'), `${inbox.ordinary_count || 0} ordinary · ${inbox.mutation_count || 0} typed`);
+        value(byId('resources'), `${metrics.status || 'unavailable'} · ${cpu.logical_cores ?? '—'} logical cores · RAM ${bytes(memory.available_bytes)} free`);
+        value(byId('hardware'), `Disk ${bytes(storage.free_bytes)} free · GPU ${gpu.status || 'unavailable'}`);
+      };
+      const poll = async () => {
+        if (!token.value.trim()) return;
+        try {
+          const headers = { Authorization: `Bearer ${token.value.trim()}` };
+          if (conversation.value.trim()) headers['X-StarFur-Conversation'] = conversation.value.trim();
+          const response = await fetch(endpoint.value, { headers });
+          if (!response.ok) throw new Error(`API returned ${response.status}`);
+          render(await response.json()); status.textContent = 'Connected. Read-only snapshot refreshed.';
+        } catch (error) { status.textContent = `Not connected: ${error.message}`; }
+      };
+      const schedule = () => { clearInterval(timer); timer = byId('refresh').checked ? setInterval(poll, 2000) : null; };
+      byId('connect').addEventListener('click', () => { poll(); schedule(); });
+      byId('refresh').addEventListener('change', schedule);
+    })();
+  </script>
+</body>
+</html>

@@ -137,6 +137,21 @@ def detect_command_help(query: str) -> CommandHelp | None:
             commands=("persona inspect",),
             notes=("This shows bounded state metadata and does not display the full persona prompt or change state.",),
         )
+    if _contains_any(value, (
+        "how do i change resident action", "how can i change resident action",
+        "how do i change what murr is doing", "how can i change what murr is doing",
+        "how do i set apartment activity", "how can i set apartment activity",
+    )):
+        return CommandHelp(
+            intent="resident_action",
+            title="To set the current persona's explicit apartment activity, use:",
+            commands=(
+                "resident status",
+                "resident action <idle|resting|reading|working|waiting|chatting|adventuring>",
+                "resident action clear",
+            ),
+            notes=("This is restart-ephemeral presentation state only. It does not start work, call a provider, or change memory.",),
+        )
     if _contains_any(value, ("how do i switch persona", "how can i switch persona", "how do i change persona", "how can i change persona", "how do i list personas", "how can i list personas", "how do i select a persona", "how can i select a persona")):
         return CommandHelp(
             intent="persona_selection",

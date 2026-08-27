@@ -246,6 +246,213 @@ class AdventureCommandTests(unittest.TestCase):
             self.assertEqual("adventure_turn_mutation_generation", event.generation_provenance.task_id)
             self.assertEqual([], calls)
 
+    def test_typed_generation_allows_a_valid_no_change_result_without_staging_or_writing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            provider = self._CandidateProvider({"schema_version": 1, "candidates": []})
+            session = self._session(
+                directory, calls,
+                adventure_turn_mutation_coordinator=AdventureTurnMutationCoordinator(provider),
+            )
+            session.respond("adventure create Quiet Ember")
+            session.respond("adventure load Quiet Ember")
+            record = session.adventure_session.record
+            session.respond("adventure turn begin")
+
+            self.assertIn("no durable typed changes", session.respond(
+                "adventure turn mutations generate The crew waits and considers the hatch."
+            ))
+            self.assertIn("(none; the provider proposed no durable typed changes)", session.respond(
+                "adventure turn mutations"
+            ))
+            self.assertIn("Validated typed candidates: 0", session.respond(
+                "adventure turn mutation generation status"
+            ))
+            self.assertIn("candidate was not found", session.respond(
+                "adventure turn stage mutation candidate TM-001"
+            ))
+            self.assertEqual([], AdventureEventLog(session.adventure_registry, record).events())
+            self.assertEqual([], calls)
+
+    def test_generated_resource_mutation_requires_catalog_validation_before_staging(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            provider = self._CandidateProvider({
+                "schema_version": 1,
+                "candidates": [{
+                    "mutation": {"kind": "resource_change", "id": "fuel", "operation": "increment", "value": 10},
+                    "confidence": 0.8,
+                }],
+            })
+            session = self._session(
+                directory, calls,
+                adventure_turn_mutation_coordinator=AdventureTurnMutationCoordinator(provider),
+            )
+            session.respond("adventure create Quiet Ember")
+            record = session.adventure_registry.resolve_title("Quiet Ember")
+            session.adventure_registry.configure_resource_catalog(record, AdventureResourceCatalog((
+                AdventureResourceDefinition("fuel", "Fuel", "integer", minimum=0, maximum=100),
+            )))
+            session.respond("adventure load Quiet Ember")
+            session.respond("adventure turn begin")
+
+            self.assertIn("Presented 1 untrusted typed", session.respond(
+                "adventure turn mutations generate The crew refuels the ship."
+            ))
+            self.assertIn("TM-001 [resource_change]", session.respond("adventure turn mutations"))
+            self.assertIn("Staged typed adventure-turn candidate TM-001 [resource_change]", session.respond(
+                "adventure turn stage mutation candidate TM-001"
+            ))
+            self.assertIn("Committed 1 staged adventure event", session.respond("adventure turn commit"))
+            event = AdventureEventLog(session.adventure_registry, record).events()[0]
+            self.assertEqual("resource_change", event.event_type)
+            self.assertEqual("fuel", event.resource_id)
+            self.assertEqual("increment", event.resource_operation)
+            self.assertEqual(10, event.resource_value)
+            self.assertEqual("TM-001", event.generation_provenance.candidate_id)
+            self.assertEqual([], calls)
+
+    def test_generated_relationship_and_knowledge_mutations_remain_reviewed_until_one_commit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            provider = self._CandidateProvider({
+                "schema_version": 1,
+                "candidates": [
+                    {
+                        "mutation": {
+                            "kind": "relationship_set", "subject": "Vespera",
+                            "dimension": "trust", "value": "cautious",
+                        },
+                        "confidence": 0.8,
+                    },
+                    {
+                        "mutation": {
+                            "kind": "knowledge_set", "subject": "Rook",
+                            "status": "believes", "fact": "the brass key opens the hatch",
+                        },
+                        "confidence": 0.7,
+                    },
+                ],
+            })
+            session = self._session(
+                directory, calls,
+                adventure_turn_mutation_coordinator=AdventureTurnMutationCoordinator(provider),
+            )
+            session.respond("adventure create Quiet Ember")
+            session.respond("adventure load Quiet Ember")
+            record = session.adventure_session.record
+            session.respond("adventure turn begin")
+
+            self.assertIn("Presented 2 untrusted typed", session.respond(
+                "adventure turn mutations generate Vespera trusts the crew while Rook studies the key."
+            ))
+            self.assertIn("TM-001 [relationship_set]", session.respond("adventure turn mutations"))
+            self.assertIn("TM-002 [knowledge_set]", session.respond("adventure turn mutations"))
+            self.assertEqual([], AdventureEventLog(session.adventure_registry, record).events())
+            self.assertIn("Staged typed adventure-turn candidate TM-001", session.respond(
+                "adventure turn stage mutation candidate TM-001"
+            ))
+            self.assertIn("Staged typed adventure-turn candidate TM-002", session.respond(
+                "adventure turn stage mutation candidate TM-002"
+            ))
+            self.assertIn("Committed 2 staged adventure event(s)", session.respond("adventure turn commit"))
+            self.assertIn("Vespera / trust: cautious", session.respond("adventure relationships"))
+            self.assertIn("Rook believes: the brass key opens the hatch", session.respond("adventure knowledge"))
+            events = AdventureEventLog(session.adventure_registry, record).events()
+            self.assertEqual(["relationship_change", "character_knowledge"], [event.event_type for event in events])
+            self.assertEqual(["TM-001", "TM-002"], [event.generation_provenance.candidate_id for event in events])
+            self.assertEqual([], calls)
+
+    def test_generated_hidden_resource_candidate_never_leaks_from_the_review_surface(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            provider = self._CandidateProvider({
+                "schema_version": 1,
+                "candidates": [{
+                    "mutation": {
+                        "kind": "resource_change", "id": "primary_slot", "operation": "equip", "value": "brass key",
+                    },
+                    "confidence": 0.8,
+                }],
+            })
+            session = self._session(
+                directory, calls,
+                adventure_turn_mutation_coordinator=AdventureTurnMutationCoordinator(provider),
+            )
+            session.respond("adventure create Quiet Ember")
+            record = session.adventure_registry.resolve_title("Quiet Ember")
+            session.adventure_registry.configure_resource_catalog(record, AdventureResourceCatalog((
+                AdventureResourceDefinition("primary_slot", "Primary slot", "equipment", visibility="hidden"),
+            )))
+            session.respond("adventure load Quiet Ember")
+            session.respond("adventure turn begin")
+            session.respond("adventure turn mutations generate The crew finds a brass key.")
+
+            rendered = session.respond("adventure turn mutations")
+            self.assertIn("Hidden resource change", rendered)
+            self.assertNotIn("primary_slot", rendered)
+            self.assertNotIn("brass key", rendered)
+            self.assertEqual([], calls)
+
+    def test_typed_candidates_fail_closed_after_an_authoritative_world_change(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            provider = self._CandidateProvider({
+                "schema_version": 1,
+                "candidates": [{
+                    "mutation": {"kind": "state_set", "key": "current_location", "value": "engine room"},
+                    "confidence": 0.8,
+                }],
+            })
+            session = self._session(
+                directory, calls,
+                adventure_turn_mutation_coordinator=AdventureTurnMutationCoordinator(provider),
+            )
+            session.respond("adventure create Quiet Ember")
+            session.respond("adventure load Quiet Ember")
+            session.respond("adventure turn begin")
+            self.assertIn("Presented 1 untrusted typed", session.respond(
+                "adventure turn mutations generate The crew enters the engine room."
+            ))
+            self.assertIn("Set adventure state current_location: chart room", session.respond(
+                "adventure state set current_location: chart room"
+            ))
+
+            self.assertIn("stale", session.respond("adventure turn mutations"))
+            self.assertIn("stale", session.respond("adventure turn stage mutation candidate TM-001"))
+            self.assertEqual([], calls)
+
+    def test_failed_typed_regeneration_clears_only_its_inbox_and_preserves_manual_staging(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            provider = self._CandidateProvider({
+                "schema_version": 1,
+                "candidates": [{
+                    "mutation": {"kind": "state_set", "key": "current_location", "value": "engine room"},
+                    "confidence": 0.8,
+                }],
+            })
+            session = self._session(
+                directory, calls,
+                adventure_turn_mutation_coordinator=AdventureTurnMutationCoordinator(provider),
+            )
+            session.respond("adventure create Quiet Ember")
+            session.respond("adventure load Quiet Ember")
+            session.respond("adventure turn begin")
+            session.respond("adventure turn stage discovery: A brass key is found.")
+            self.assertIn("Presented 1 untrusted typed", session.respond(
+                "adventure turn mutations generate The crew enters the engine room."
+            ))
+            provider.payload = {"schema_version": 1, "candidates": [{"event_type": "discovery", "summary": "bad", "confidence": 0.8}]}
+
+            self.assertIn("failed safely", session.respond(
+                "adventure turn mutations generate The crew waits."
+            ))
+            self.assertFalse(session.adventure_turn_mutation_candidate_inbox.active)
+            self.assertEqual(1, len(session.adventure_turn.drafts))
+            self.assertEqual("discovery", session.adventure_turn.drafts[0].event_type)
+            self.assertEqual([], calls)
+
     def test_transcript_generation_requires_explicit_completed_pair_and_keeps_it_untrusted(self):
         with tempfile.TemporaryDirectory() as directory:
             calls = []

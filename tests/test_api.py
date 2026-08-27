@@ -17,7 +17,7 @@ from pipeline.application import AssistantApplication
 from pipeline.adventure_events import AdventureEventLog
 from pipeline.adventure_registry import AdventureRegistry
 from pipeline.assistant import AssistantSession
-from pipeline.api import API_MODEL_ID, CONVERSATION_HEADER, DOCUMENT_ADVENTURE_IMPORT_PATH, DOCUMENT_ANNOTATE_PATH, DOCUMENT_CONTEXT_PATH, DOCUMENT_PREPARE_PATH, DOCUMENT_REVIEW_PATH, DOCUMENT_REVIEWS_PATH, PERSONA_RUNTIME_PATH, StarFurAPI, StarFurHTTPServer
+from pipeline.api import APARTMENT_DASHBOARD_PATH, API_MODEL_ID, CONVERSATION_HEADER, DOCUMENT_ADVENTURE_IMPORT_PATH, DOCUMENT_ANNOTATE_PATH, DOCUMENT_CONTEXT_PATH, DOCUMENT_PREPARE_PATH, DOCUMENT_REVIEW_PATH, DOCUMENT_REVIEWS_PATH, MURR_IDLE_ASSET_PATH, PERSONA_RUNTIME_PATH, RESIDENT_SNAPSHOT_PATH, StarFurAPI, StarFurHTTPServer
 
 
 class FakeConfig:
@@ -182,6 +182,48 @@ class APITests(unittest.TestCase):
             "object": "starfur.persona_runtime", "available": False, "persona": None,
         })
         self.assertEqual(self.session.calls, [])
+
+    def test_resident_snapshot_endpoint_is_authenticated_read_only_summary(self):
+        status, raw = self.request("GET", RESIDENT_SNAPSHOT_PATH)
+        payload = json.loads(raw)
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["object"], "starfur.resident_snapshot")
+        self.assertEqual(payload["schema_version"], 1)
+        self.assertEqual(payload["conversation"]["id"], "default")
+        self.assertEqual(payload["activity"], "provider_unavailable")
+        self.assertEqual(payload["presentation"]["animation_slot"], "resident.default.offline")
+        self.assertNotIn("messages", payload)
+        self.assertEqual(self.session.calls, [])
+
+        status, _ = self.request("GET", RESIDENT_SNAPSHOT_PATH, auth=False)
+        self.assertEqual(status, 401)
+
+    def test_apartment_shell_is_public_but_contains_no_runtime_or_token(self):
+        status, raw = self.request("GET", APARTMENT_DASHBOARD_PATH, auth=False)
+        page = raw.decode("utf-8")
+
+        self.assertEqual(status, 200)
+        self.assertIn("StarFur Apartment Prototype", page)
+        self.assertIn(RESIDENT_SNAPSHOT_PATH, page)
+        self.assertIn(CONVERSATION_HEADER, page)
+        self.assertIn(MURR_IDLE_ASSET_PATH, page)
+        self.assertNotIn("local-test", page)
+        self.assertEqual(self.session.calls, [])
+
+        status, _ = self.request("GET", f"{APARTMENT_DASHBOARD_PATH}?token=bad", auth=False)
+        self.assertEqual(status, 400)
+
+    def test_murr_idle_placeholder_is_fixed_public_asset_route(self):
+        status, raw = self.request("GET", MURR_IDLE_ASSET_PATH, auth=False)
+
+        self.assertEqual(status, 200)
+        self.assertTrue(raw.startswith(b"\x89PNG\r\n\x1a\n"))
+        self.assertGreater(len(raw), 1000)
+        self.assertEqual(self.session.calls, [])
+
+        status, _ = self.request("GET", f"{MURR_IDLE_ASSET_PATH}?path=other", auth=False)
+        self.assertEqual(status, 400)
 
     def test_chat_uses_latest_user_message_and_does_not_accept_unknown_model(self):
         status, raw = self.request("POST", "/v1/chat/completions", {

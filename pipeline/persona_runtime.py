@@ -16,6 +16,7 @@ from typing import Iterable
 from pipeline.persona_development import PersonaDevelopmentState
 from pipeline.persona_state import PersonaState
 from pipeline.relationship import RelationshipState
+from pipeline.resident_action import ResidentAction
 
 
 @dataclass(frozen=True)
@@ -23,13 +24,14 @@ class PersonaRuntimeState:
     """One bounded runtime snapshot, isolated by persona identifier.
 
     ``persona_state`` owns dynamic traits and momentary state. Development owns
-    interests/skills/learning evidence. Relationship snapshots are explicitly
-    typed and stay local to this persona; apartment state remains future work.
+    interests/skills/learning evidence. Relationship snapshots and one typed
+    visible resident action stay local to this persona and restart-ephemeral.
     """
 
     persona_state: PersonaState
     development_state: PersonaDevelopmentState
     relationship_states: tuple[RelationshipState, ...] = ()
+    resident_action: ResidentAction | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.persona_state, PersonaState):
@@ -48,6 +50,12 @@ class PersonaRuntimeState:
         if len(set(subjects)) != len(subjects):
             raise ValueError("relationship_states must not repeat a subject_id.")
         object.__setattr__(self, "relationship_states", tuple(sorted(self.relationship_states, key=lambda item: item.subject_id)))
+        action = self.resident_action or ResidentAction.idle(self.persona_state.persona_id)
+        if not isinstance(action, ResidentAction):
+            raise TypeError("resident_action must be a ResidentAction or None")
+        if action.persona_id != self.persona_state.persona_id:
+            raise ValueError("resident_action persona_id must match the runtime persona_id.")
+        object.__setattr__(self, "resident_action", action)
 
     @property
     def persona_id(self) -> str:
@@ -84,6 +92,19 @@ class PersonaRuntimeState:
             updated = (*updated, relationship_state)
         return replace(self, relationship_states=updated)
 
+    def with_resident_action(self, resident_action: ResidentAction) -> "PersonaRuntimeState":
+        """Return this persona's runtime with one already Core-authorized action.
+
+        The registry does not decide when to call this.  In particular, normal
+        chat and provider output may not manufacture an action by invoking this
+        value object directly.
+        """
+        if not isinstance(resident_action, ResidentAction):
+            raise TypeError("resident_action must be a ResidentAction instance.")
+        if resident_action.persona_id != self.persona_id:
+            raise ValueError("resident_action persona_id must match the runtime persona_id.")
+        return replace(self, resident_action=resident_action)
+
     def public_dict(self) -> dict[str, object]:
         """Return a bounded UI-safe snapshot without prompts, evidence, or subjects."""
         return {
@@ -98,6 +119,7 @@ class PersonaRuntimeState:
                 "reference_record_count": len(self.development_state.reference_records),
             },
             "real_world_relationship_count": len(self.relationship_states),
+            "resident_action": self.resident_action.public_dict(),
             "storage": "restart_ephemeral",
         }
 

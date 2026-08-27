@@ -33,6 +33,7 @@ from pipeline.behavior import derive_behavior_guidance
 from pipeline.persona_development import PersonaDevelopmentState
 from pipeline.persona_attention import select_persona_attention
 from pipeline.persona_runtime import PersonaRuntimeRegistry, PersonaRuntimeState
+from pipeline.resident_action import RESIDENT_ACTION_KINDS, ResidentAction
 from pipeline.persona_visibility import (
     SharedMemoryVisibilityPolicy,
     evaluate_shared_memory_scope_visibility,
@@ -955,6 +956,10 @@ class AssistantSession:
             )
         )
         lines.extend([
+            "Resident action:",
+            f"  kind: {self.persona_runtime_state.resident_action.kind}",
+            f"  source: {self.persona_runtime_state.resident_action.source}",
+            "  storage: restart-ephemeral",
             "Persona-local development:",
             f"  interests: {len(development.interests)}",
             f"  verified skills: {len(development.skills)}",
@@ -1000,6 +1005,43 @@ class AssistantSession:
         self.last_turn_diagnostics = None
         self.trace.record("persona_selected", persona_id=package.persona_id)
         return f"Active persona set to: {package.persona_id}. Recent conversation context was cleared."
+
+    def resident_action_status(self):
+        """Return the active persona's explicit, provider-free visual action."""
+        action = self.persona_runtime_state.resident_action
+        return (
+            f"Resident action: {action.kind} ({action.source}; restart-ephemeral). "
+            "It is presentation state only; it does not start work or change memory."
+        )
+
+    def resident_action_set(self, requested_action):
+        """Set one exact Core-authorized visual action for the active persona."""
+        requested_action = requested_action.strip().casefold()
+        if not requested_action:
+            return "Usage: resident action <idle|resting|reading|working|waiting|chatting|adventuring>"
+        if requested_action == "clear":
+            requested_action = "idle"
+            source = "core_default"
+        else:
+            source = "explicit_core"
+        try:
+            action = ResidentAction(
+                persona_id=self.persona_state.persona_id,
+                kind=requested_action,
+                source=source,
+            )
+        except ValueError:
+            return "Resident action is invalid. Use one of: " + ", ".join(sorted(RESIDENT_ACTION_KINDS)) + "."
+        runtime = self.persona_runtime_state.with_resident_action(action)
+        self.persona_runtime_registry.replace(runtime)
+        self.persona_runtime_state = runtime
+        self.persona_state = runtime.persona_state
+        self.persona_development_state = runtime.development_state
+        self.trace.record("resident_action_selected", persona_id=action.persona_id, action=action.kind)
+        return (
+            f"Resident action set to: {action.kind}. It is restart-ephemeral presentation state only; "
+            "it does not start work or change memory."
+        )
 
     def _set_roleplay_state(self, state):
         self.roleplay_state = state
@@ -1251,10 +1293,13 @@ class AssistantSession:
             event_count=result.request.event_count,
             provenance=result.request.provenance,
         )
-        return (
-            f"Presented {len(result.batch.candidates)} untrusted typed adventure-turn candidate(s) "
-            f"from {result.generation_id} for review."
-        )
+        count = len(result.batch.candidates)
+        if count == 0:
+            return (
+                f"The provider proposed no durable typed changes for {result.generation_id}. "
+                "Nothing was staged or persisted."
+            )
+        return f"Presented {count} untrusted typed adventure-turn candidate(s) from {result.generation_id} for review."
 
     def generate_adventure_turn_mutation_candidates(
         self, *, user_text: str, narrator_text: str = "", source_record_ids: tuple[str, ...] = (),
@@ -2670,7 +2715,16 @@ class AssistantSession:
             return "No untrusted typed adventure-turn candidates are available for this workspace."
         if inbox.event_count != self.adventure_session.event_count:
             return "Typed adventure-turn candidates are stale after authoritative story changes; regenerate them before review."
-        return render_adventure_turn_mutation_candidate_batch(inbox.batch, generation_id=inbox.generation_id)
+        hidden_resource_ids = frozenset(
+            definition.resource_id
+            for definition in self.adventure_session.resource_catalog.definitions
+            if definition.visibility == "hidden"
+        )
+        return render_adventure_turn_mutation_candidate_batch(
+            inbox.batch,
+            generation_id=inbox.generation_id,
+            hidden_resource_ids=hidden_resource_ids,
+        )
 
     def adventure_turn_generate(self, value):
         """Explicitly request noncanonical ordinary-event candidates for a staged turn."""
@@ -3050,6 +3104,15 @@ class AssistantSession:
             return self.persona_current()
         if lowered == "persona use" or lowered.startswith("persona use "):
             return self.persona_use(text.strip()[len("persona use"):])
+        if lowered in {"resident status", "resident action status"}:
+            return self.resident_action_status()
+        if lowered == "resident action" or lowered.startswith("resident action "):
+            return self.resident_action_set(text.strip()[len("resident action"):])
+        if lowered == "resident" or lowered.startswith("resident "):
+            return (
+                "Unknown or malformed resident command. Use resident status or "
+                "resident action <idle|resting|reading|working|waiting|chatting|adventuring>."
+            )
         if lowered in {"model list", "list models"}:
             try:
                 return self.model_list()

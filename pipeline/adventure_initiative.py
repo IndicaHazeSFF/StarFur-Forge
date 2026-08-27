@@ -68,6 +68,37 @@ class AdventureParticipant:
 
 
 @dataclass(frozen=True)
+class AdventureParticipantRoster:
+    """A validated adventure-local participant set with no persistence or I/O."""
+
+    adventure_id: str
+    participants: tuple[AdventureParticipant, ...]
+
+    def __post_init__(self) -> None:
+        adventure_id = _bounded_text(self.adventure_id, field="adventure_id", maximum=96).casefold()
+        if not isinstance(self.participants, tuple) or len(self.participants) > 32:
+            raise AdventureInitiativeError("participant roster must contain at most 32 participants")
+        if not all(isinstance(participant, AdventureParticipant) for participant in self.participants):
+            raise TypeError("participant roster requires AdventureParticipants")
+        identifiers = [participant.participant_id for participant in self.participants]
+        if len(identifiers) != len(set(identifiers)):
+            raise AdventureInitiativeError("participant roster identifiers must be unique")
+        expected_prefix = f"adventure:{adventure_id}:participant:"
+        if any(not participant.memory_namespace.startswith(expected_prefix) for participant in self.participants):
+            raise AdventureInitiativeError("participant roster memory namespace does not match adventure")
+        object.__setattr__(self, "adventure_id", adventure_id)
+        object.__setattr__(self, "participants", tuple(sorted(self.participants, key=lambda item: item.participant_id)))
+
+    def resolve(self, participant_id: object) -> AdventureParticipant:
+        """Resolve one exact normalized participant ID without fuzzy matching."""
+        identifier = _bounded_text(participant_id, field="participant_id", maximum=96).casefold()
+        for participant in self.participants:
+            if participant.participant_id == identifier:
+                return participant
+        raise AdventureInitiativeError("adventure participant was not found")
+
+
+@dataclass(frozen=True)
 class PersonaInitiativePolicy:
     """Explicit permission and pacing limits for a persona's initiative."""
 
@@ -121,6 +152,6 @@ def evaluate_initiative(policy: PersonaInitiativePolicy, *, trigger: str,
     return InitiativeDecision(True, "eligible for bounded initiative proposal")
 
 
-__all__ = ["AdventureInitiativeError", "AdventureParticipant", "AdventureParticipantMemoryPolicy",
+__all__ = ["AdventureInitiativeError", "AdventureParticipant", "AdventureParticipantMemoryPolicy", "AdventureParticipantRoster",
            "INITIATIVE_ACTIONS", "INITIATIVE_TRIGGERS", "InitiativeDecision", "PARTICIPANT_KINDS",
            "PersonaInitiativePolicy", "evaluate_initiative"]

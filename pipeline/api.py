@@ -11,6 +11,7 @@ import sys
 import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Callable
 from urllib.parse import parse_qs, urlsplit
 
@@ -49,6 +50,11 @@ DOCUMENT_REVIEWS_PATH = "/v1/starfur/documents/reviews"
 DOCUMENT_CONTEXT_PATH = "/v1/starfur/documents/context"
 DOCUMENT_ADVENTURE_IMPORT_PATH = "/v1/starfur/documents/adventure-import"
 PERSONA_RUNTIME_PATH = "/v1/starfur/persona-runtime"
+RESIDENT_SNAPSHOT_PATH = "/v1/starfur/resident-snapshot"
+APARTMENT_DASHBOARD_PATH = "/starfur/apartment"
+_APARTMENT_DASHBOARD_FILE = Path(__file__).resolve().parents[1] / "presentation" / "apartment.html"
+MURR_IDLE_ASSET_PATH = "/starfur/assets/murr/Murr_S_Idle.png"
+_MURR_IDLE_ASSET_FILE = Path(__file__).resolve().parents[1] / "Assets" / "Murr" / "Murr_S_Idle.png"
 MAX_DOCUMENT_REQUEST_BYTES = DEFAULT_MAX_DOCUMENT_BYTES * 6 + 64 * 1024
 
 
@@ -564,6 +570,28 @@ class _Handler(BaseHTTPRequestHandler):
             # into a server traceback.
             self.close_connection = True
 
+    def _send_html(self, status, body: str):
+        payload = body.encode("utf-8")
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            self.close_connection = True
+
+    def _send_png(self, status, payload: bytes):
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Length", str(len(payload)))
+            self.send_header("Cache-Control", "public, max-age=300")
+            self.end_headers()
+            self.wfile.write(payload)
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            self.close_connection = True
+
     def _send_terminal_annotation(self, payload):
         """Stream one opt-in terminal-progress annotation response.
 
@@ -616,9 +644,33 @@ class _Handler(BaseHTTPRequestHandler):
         return False
 
     def do_GET(self):  # noqa: N802
+        parsed = urlsplit(self.path)
+        # The shell itself contains no runtime data and deliberately does not
+        # accept a key through query text. It requests the authenticated JSON
+        # snapshot only after the local user enters a token into the page.
+        if parsed.path == APARTMENT_DASHBOARD_PATH:
+            if parsed.query:
+                self._send_json(400, {"error": {"message": "Apartment shell does not accept query parameters.", "type": "invalid_request_error"}})
+                return
+            try:
+                self._send_html(200, _APARTMENT_DASHBOARD_FILE.read_text(encoding="utf-8"))
+            except OSError:
+                self._send_json(500, {"error": {"message": "Apartment shell is unavailable.", "type": "server_error"}})
+            return
+        # This is one reviewed, fixed placeholder asset route, not a generic
+        # filesystem/static-file server. Future package assets require their
+        # own validated manifest and installation boundary.
+        if parsed.path == MURR_IDLE_ASSET_PATH:
+            if parsed.query:
+                self._send_json(400, {"error": {"message": "Apartment asset does not accept query parameters.", "type": "invalid_request_error"}})
+                return
+            try:
+                self._send_png(200, _MURR_IDLE_ASSET_FILE.read_bytes())
+            except OSError:
+                self._send_json(404, {"error": {"message": "Apartment placeholder asset is unavailable.", "type": "invalid_request_error"}})
+            return
         if not self._authorized():
             return
-        parsed = urlsplit(self.path)
         if parsed.path == "/health":
             self._send_json(200, {"status": "ok", "service": "starfur"})
         elif parsed.path == "/v1/models":
@@ -641,6 +693,15 @@ class _Handler(BaseHTTPRequestHandler):
         elif parsed.path == PERSONA_RUNTIME_PATH:
             try:
                 self._send_json(200, self.api.application.persona_runtime_snapshot(
+                    conversation_id=self.headers.get(CONVERSATION_HEADER),
+                ))
+            except ValueError as error:
+                self._send_json(400, {"error": {"message": str(error), "type": "invalid_request_error"}})
+        elif parsed.path == RESIDENT_SNAPSHOT_PATH:
+            try:
+                if parse_qs(parsed.query, keep_blank_values=True):
+                    raise ValueError("Resident snapshot does not accept query parameters.")
+                self._send_json(200, self.api.application.resident_snapshot(
                     conversation_id=self.headers.get(CONVERSATION_HEADER),
                 ))
             except ValueError as error:
@@ -815,4 +876,4 @@ def serve(*, host="127.0.0.1", port=8000, config_path=None, api_key=None, quiet=
         server.server_close()
 
 
-__all__ = ["API_MODEL_ID", "CONVERSATION_HEADER", "DOCUMENT_ADVENTURE_IMPORT_PATH", "DOCUMENT_ANNOTATE_PATH", "DOCUMENT_CONTEXT_PATH", "DOCUMENT_PREPARE_PATH", "DOCUMENT_REVIEW_PATH", "DOCUMENT_REVIEWS_PATH", "PERSONA_RUNTIME_PATH", "StarFurAPI", "StarFurHTTPServer", "create_api_application", "create_api_session", "serve"]
+__all__ = ["API_MODEL_ID", "CONVERSATION_HEADER", "DOCUMENT_ADVENTURE_IMPORT_PATH", "DOCUMENT_ANNOTATE_PATH", "DOCUMENT_CONTEXT_PATH", "DOCUMENT_PREPARE_PATH", "DOCUMENT_REVIEW_PATH", "DOCUMENT_REVIEWS_PATH", "PERSONA_RUNTIME_PATH", "RESIDENT_SNAPSHOT_PATH", "APARTMENT_DASHBOARD_PATH", "MURR_IDLE_ASSET_PATH", "StarFurAPI", "StarFurHTTPServer", "create_api_application", "create_api_session", "serve"]

@@ -31,6 +31,7 @@ class AdventureTurnMutationCandidateTests(unittest.TestCase):
         self.assertEqual("resource_change", batch.candidates[3].mutation.kind)
         rendered = render_adventure_turn_mutation_candidate_batch(batch, generation_id="TG-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
         self.assertIn("TM-001 [state_set]", rendered)
+        self.assertIn("Model-declared confidence (advisory)", rendered)
         self.assertIn("untrusted; not staged", rendered)
 
     def test_ordinary_event_data_cannot_enter_the_typed_mutation_path(self):
@@ -50,6 +51,10 @@ class AdventureTurnMutationCandidateTests(unittest.TestCase):
         self.assertEqual("engine room", batch.candidates[0].mutation.state_value)
         no_change = parse_untrusted_adventure_turn_mutation_candidates({"schema_version": 1, "candidates": []})
         self.assertEqual((), no_change.candidates)
+        self.assertIn(
+            "provider proposed no durable typed changes",
+            render_adventure_turn_mutation_candidate_batch(no_change),
+        )
         with self.assertRaisesRegex(AdventureTurnMutationCandidateError, "payload fields"):
             parse_untrusted_adventure_turn_mutation_candidates({
                 "schema_version": 1,
@@ -66,6 +71,21 @@ class AdventureTurnMutationCandidateTests(unittest.TestCase):
                     "reasoning": "hidden",
                 }],
             })
+
+    def test_hidden_resource_candidate_can_be_redacted_at_presentation_boundary(self):
+        batch = parse_untrusted_adventure_turn_mutation_candidates({
+            "schema_version": 1,
+            "candidates": [{
+                "mutation": {"kind": "resource_change", "id": "primary_slot", "operation": "equip", "value": "brass key"},
+                "confidence": 0.8,
+            }],
+        })
+        rendered = render_adventure_turn_mutation_candidate_batch(
+            batch, hidden_resource_ids=frozenset({"primary_slot"}),
+        )
+        self.assertIn("TM-001 [resource_change] Hidden resource change", rendered)
+        self.assertNotIn("primary_slot", rendered)
+        self.assertNotIn("brass key", rendered)
         with self.assertRaisesRegex(AdventureTurnMutationCandidateError, "between 0 and 1"):
             parse_untrusted_adventure_turn_mutation_candidates({
                 "schema_version": 1,

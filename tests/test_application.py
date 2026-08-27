@@ -10,6 +10,7 @@ sys.modules.setdefault("ollama", types.ModuleType("ollama"))
 
 from pipeline.application import AssistantApplication, create_assistant_application
 from pipeline.document_intake import prepare_document_text
+from pipeline.system_metrics import SystemMetricsSnapshot
 
 
 class FakeConfig:
@@ -159,6 +160,60 @@ class AssistantApplicationTests(unittest.TestCase):
         self.assertEqual(app.persona_runtime_snapshot(), {
             "object": "starfur.persona_runtime", "available": False, "persona": None,
         })
+
+    def test_resident_snapshot_is_read_only_and_summary_only(self):
+        class Runtime:
+            def public_dict(self):
+                return {"persona_id": "murr", "display_name": "Murr", "static_identity": "hidden"}
+
+        class Lifecycle:
+            def public_dict(self):
+                return {"state": "idle", "error": "hidden", "transition_count": 2}
+
+        class Adventure:
+            def public_dict(self):
+                return {"mounted": True, "title": "Quiet Ember", "hidden_resource": "ammo"}
+
+        class Roleplay:
+            def public_dict(self):
+                return {"active": True, "title": "Quiet Ember", "storage": "session_ephemeral"}
+
+        class Turn:
+            active = True
+            drafts = (object(), object())
+
+        class Inbox:
+            active = True
+            batch = type("Batch", (), {"candidates": (object(),)})()
+
+        session = FakeSession()
+        session.persona_runtime_state = Runtime()
+        session.provider = type("Provider", (), {"name": "fake"})()
+        session.provider_lifecycle = Lifecycle()
+        session.adventure_session = Adventure()
+        session.roleplay_state = Roleplay()
+        session.adventure_turn = Turn()
+        session.adventure_turn_candidate_inbox = Inbox()
+        session.adventure_turn_mutation_candidate_inbox = Inbox()
+        class Metrics:
+            def snapshot(self):
+                return SystemMetricsSnapshot("partial", platform_name="test", cpu_logical_cores=4)
+
+        app = AssistantApplication(session, system_metrics_provider=Metrics())
+
+        result = app.resident_snapshot()
+
+        self.assertEqual(result["object"], "starfur.resident_snapshot")
+        self.assertEqual(result["conversation"]["id"], "default")
+        self.assertEqual(result["activity"], "reviewing_candidates")
+        self.assertEqual(result["adventure_turn"], {"active": True, "staged_count": 2})
+        self.assertEqual(result["candidate_inbox"]["ordinary_count"], 1)
+        self.assertEqual(result["presentation"]["animation_slot"], "resident.murr.reviewing")
+        self.assertEqual(result["system_metrics"]["cpu"]["logical_cores"], 4)
+        self.assertNotIn("static_identity", result["persona"])
+        self.assertNotIn("error", result["lifecycle"])
+        self.assertNotIn("hidden_resource", result["adventure"])
+        self.assertEqual(session.calls, [])
 
     def test_application_isolates_ephemeral_state_per_conversation(self):
         default = FakeSession()

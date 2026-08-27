@@ -12,6 +12,7 @@ from pipeline.persona_development import PersonaDevelopmentState
 from pipeline.persona_runtime import PersonaRuntimeRegistry, PersonaRuntimeState
 from pipeline.persona_state import DynamicTraits, PersonaState
 from pipeline.relationship import RelationshipState
+from pipeline.resident_action import ResidentAction
 
 
 def persona(persona_id):
@@ -75,9 +76,21 @@ class PersonaRuntimeTests(unittest.TestCase):
         self.assertEqual(snapshot["persona_id"], "murr")
         self.assertEqual(snapshot["development"]["interest_count"], 0)
         self.assertEqual(snapshot["real_world_relationship_count"], 1)
+        self.assertEqual(snapshot["resident_action"]["kind"], "idle")
         self.assertEqual(snapshot["storage"], "restart_ephemeral")
         self.assertNotIn("static_identity", snapshot)
         self.assertNotIn("user", str(snapshot))
+
+    def test_resident_action_is_persona_local_and_cannot_cross_namespaces(self):
+        registry = PersonaRuntimeRegistry()
+        murr = registry.ensure(persona("murr"))
+        registry.ensure(persona("nova"))
+        registry.replace(murr.with_resident_action(ResidentAction("murr", "reading", "explicit_core")))
+
+        self.assertEqual(registry.snapshot("murr").resident_action.kind, "reading")
+        self.assertEqual(registry.snapshot("nova").resident_action.kind, "idle")
+        with self.assertRaisesRegex(ValueError, "persona_id"):
+            murr.with_resident_action(ResidentAction("nova", "reading"))
 
 
 if __name__ == "__main__":

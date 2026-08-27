@@ -160,11 +160,11 @@ Permissioned one-shot screen/window/image/PDF inspection, TTS/STT, image generat
 
 ## Stage H — Apartment/dashboard prototype (LATER; read-only first)
 
-### H0. ResidentSnapshot contract — prerequisite
+### H0. ResidentSnapshot contract — COMPLETED INITIAL SLICE
 
 Compose a versioned presentation-neutral `ResidentSnapshot` under the application/session lock. It should include active persona public state, provider/model lifecycle, capability availability, selected conversation/storage class, loaded adventure summary, authoritative/context counts, roleplay and staging state, candidate-inbox status, and explicit current activity. It must not include prompts, raw evidence, hidden resources, private memory content, relationship subjects, or provider payloads.
 
-Expose the snapshot through `AssistantApplication` and an authenticated API endpoint. CLI, OpenWebUI, TUI, dashboard, and future Steam clients consume it rather than parsing chat prose. Polling is sufficient for the first shell; event streaming can follow.
+**COMPLETED INITIAL SLICE:** `AssistantApplication` exposes the snapshot through authenticated `GET /v1/starfur/resident-snapshot`; the dependency-free local `/starfur/apartment` shell polls it only after the local user supplies a token in browser memory. A pure mapper supplies generic stable visual/animation slots from the public activity, without asset loading or state authority. CLI, OpenWebUI, TUI, dashboard, and future Steam clients consume this read model rather than parsing chat prose. Polling is sufficient for the first shell; event streaming can follow.
 
 ### H1. Read-only apartment
 
