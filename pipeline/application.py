@@ -16,13 +16,15 @@ import re
 import threading
 from typing import Callable, Iterator
 
-from pipeline.assistant import AssistantSession, load_config, load_persona, load_policy
+from pipeline.assistant import PROJECT_ROOT, AssistantSession, load_config, load_persona, load_policy
 from pipeline.capabilities import CapabilityManifest, CapabilityRegistry, build_core_capability_registry
 from pipeline.db import upsert_assistant_memory_proposal
 from pipeline.document_annotation import DocumentProposalAnnotator
 from pipeline.document_intake import PreparedDocument, extract_document_memory_candidates_resilient
 from pipeline.retrieval import DeterministicMemoryRetriever, MemoryRetriever
 from pipeline.task_profiles import TASK_DOCUMENT_ANNOTATION, TaskProfiles, provider_matches
+from pipeline.persona_asset_resolver import InstalledPersonaAssetPackage, PersonaAssetResolver
+from pipeline.persona_assets import BUILTIN_MURR_ASSET_MANIFEST
 from pipeline.persona_registry import PersonaRegistry, load_persona_package
 from pipeline.persona_runtime import PersonaRuntimeRegistry
 from pipeline.resident_presentation import ResidentPresentationPlan
@@ -78,6 +80,7 @@ class AssistantApplication:
         max_conversations: int = DEFAULT_MAX_CONVERSATIONS,
         retriever: MemoryRetriever | None = None,
         system_metrics_provider: SystemMetricsProvider | None = None,
+        persona_asset_resolver: PersonaAssetResolver | None = None,
     ):
         if max_conversations <= 0:
             raise ValueError("max_conversations must be positive.")
@@ -86,6 +89,9 @@ class AssistantApplication:
         self.system_metrics_provider = system_metrics_provider or NullSystemMetricsProvider()
         if not callable(getattr(self.system_metrics_provider, "snapshot", None)):
             raise TypeError("system_metrics_provider must provide a callable snapshot method.")
+        if persona_asset_resolver is not None and not isinstance(persona_asset_resolver, PersonaAssetResolver):
+            raise TypeError("persona_asset_resolver must be a PersonaAssetResolver or None.")
+        self.persona_asset_resolver = persona_asset_resolver or PersonaAssetResolver()
         self.capability_manifest = capability_manifest or build_core_capability_registry().build_manifest()
         # The registry lock protects only lookup, creation, LRU ordering, and
         # eviction.  Individual conversations retain their own locks so a
@@ -534,6 +540,15 @@ def create_assistant_application(
     # with canonical user memory.  New UI/API sessions can select personas
     # without accidentally adopting another persona's runtime snapshot.
     persona_runtime_registry = PersonaRuntimeRegistry()
+    installed_asset_packages = tuple(
+        InstalledPersonaAssetPackage(
+            package.asset_manifest
+            or (BUILTIN_MURR_ASSET_MANIFEST if package.persona_id == "murr" else None),
+            PROJECT_ROOT,
+        )
+        for package in persona_registry.packages()
+        if package.asset_manifest is not None or package.persona_id == "murr"
+    )
     def make_session():
         kwargs = dict(
             policy=load_policy(config.policy_path),
@@ -562,6 +577,7 @@ def create_assistant_application(
         max_conversations=max_conversations,
         retriever=shared_retriever,
         system_metrics_provider=system_metrics_provider or LocalSystemMetricsProvider(),
+        persona_asset_resolver=PersonaAssetResolver(installed_asset_packages),
     )
 
 

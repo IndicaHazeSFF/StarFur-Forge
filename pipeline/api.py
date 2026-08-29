@@ -54,7 +54,6 @@ RESIDENT_SNAPSHOT_PATH = "/v1/starfur/resident-snapshot"
 APARTMENT_DASHBOARD_PATH = "/starfur/apartment"
 _APARTMENT_DASHBOARD_FILE = Path(__file__).resolve().parents[1] / "presentation" / "apartment.html"
 MURR_IDLE_ASSET_PATH = "/starfur/assets/murr/Murr_S_Idle.png"
-_MURR_IDLE_ASSET_FILE = Path(__file__).resolve().parents[1] / "Assets" / "Murr" / "Murr_S_Idle.png"
 MAX_DOCUMENT_REQUEST_BYTES = DEFAULT_MAX_DOCUMENT_BYTES * 6 + 64 * 1024
 
 
@@ -665,7 +664,10 @@ class _Handler(BaseHTTPRequestHandler):
                 self._send_json(400, {"error": {"message": "Apartment asset does not accept query parameters.", "type": "invalid_request_error"}})
                 return
             try:
-                self._send_png(200, _MURR_IDLE_ASSET_FILE.read_bytes())
+                asset_file = self.api.application.persona_asset_resolver.resolve("murr", "idle")
+                if asset_file is None:
+                    raise OSError("Murr idle asset is not installed.")
+                self._send_png(200, asset_file.read_bytes())
             except OSError:
                 self._send_json(404, {"error": {"message": "Apartment placeholder asset is unavailable.", "type": "invalid_request_error"}})
             return

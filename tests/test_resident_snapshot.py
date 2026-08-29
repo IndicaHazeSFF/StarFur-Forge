@@ -24,6 +24,12 @@ class ResidentSnapshotTests(unittest.TestCase):
             adventure_turn_active=False, ordinary_candidate_count=0,
             mutation_candidate_count=0, roleplay_active=False, adventure_mounted=False,
         ), "provider_unavailable")
+        self.assertEqual(derive_resident_activity(
+            provider_lifecycle=None, provider_configured=False,
+            adventure_turn_active=False, ordinary_candidate_count=0,
+            mutation_candidate_count=0, roleplay_active=False, adventure_mounted=False,
+            explicit_resident_action=True,
+        ), "idle")
 
     def test_public_payload_excludes_sensitive_and_unbounded_inputs(self):
         snapshot = ResidentSnapshot(
@@ -50,6 +56,17 @@ class ResidentSnapshotTests(unittest.TestCase):
         self.assertNotIn("hidden_resource", payload["adventure"])
         self.assertNotIn("drafts", payload["adventure_turn"])
         self.assertNotIn("body", payload["candidate_inbox"])
+
+    def test_explicit_resident_action_keeps_zero_provider_presentation_available(self):
+        snapshot = ResidentSnapshot(
+            conversation_id="zero-provider", persona={"persona_id": "murr", "resident_action": {"kind": "reading"}},
+            provider={"configured": False}, lifecycle=None, system_metrics={}, capability_ids=(),
+            adventure={"mounted": False}, roleplay={"active": False}, turn={"active": False},
+            candidates={"ordinary_count": 0, "mutation_count": 0},
+        )
+
+        self.assertEqual(snapshot.activity, "idle")
+        self.assertEqual(snapshot.public_dict()["provider"], {"configured": False})
 
 
 if __name__ == "__main__":

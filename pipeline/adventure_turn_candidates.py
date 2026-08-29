@@ -13,18 +13,15 @@ import re
 from typing import Mapping
 
 from pipeline.adventure_events import AdventureEventDraft
+from pipeline.adventure_turn_policy import ORDINARY_ADVENTURE_EVENT_TYPES
 from pipeline.adventure_turn_provenance import AdventureTurnGenerationProvenance
 
 
 TURN_CANDIDATE_SCHEMA_VERSION = 1
 MAX_ADVENTURE_TURN_CANDIDATES = 16
-# This deliberately does not derive from every event type Core can write.  Adding
-# a generated type is an explicit policy change, not an accidental side effect of
-# expanding the event-log schema.
-ORDINARY_GENERATED_EVENT_TYPES = frozenset({
-    "choice", "discovery", "promise", "lie", "emotional_transition",
-    "unresolved_hook", "inventory_change", "location_change",
-})
+# Compatibility name retained for callers and fixtures. The policy itself lives
+# in one shared module so prompt/parser changes cannot silently diverge.
+ORDINARY_GENERATED_EVENT_TYPES = ORDINARY_ADVENTURE_EVENT_TYPES
 TURN_GENERATION_ID_PATTERN = re.compile(r"^TG-[0-9a-f]{32}$")
 
 

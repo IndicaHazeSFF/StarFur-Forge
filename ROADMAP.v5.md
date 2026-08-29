@@ -112,6 +112,11 @@ Before model-backed smoke, complete these gates:
 7. Define retry, interruption, timeout, empty-output, and failed-regeneration semantics. Failed generation creates no write and cannot abort unrelated manual staging.
 8. Preserve bounded candidate/task/provider provenance through explicit selection and canonical commit, either on events or an adjacent append-only decision record.
 
+**COMPLETED INITIAL C3 POLICY SLICE:** The ordinary generated-event whitelist is
+now one immutable Core policy constant shared by candidate parsing, generation
+prompt construction, and fixtures. It remains narrower than the event-log
+write set; adding a generated type requires an explicit policy change.
+
 ### C3 typed proposals — LATER C3 extension
 
 State, relationship, character-knowledge, and resource proposals get separate schemas and policies. They are never added by widening the ordinary parser. Resource proposals validate against the immutable catalog before review/staging. Generated corrections/retractions are separate proposal types and must target an active exact event ID.
@@ -170,6 +175,8 @@ Compose a versioned presentation-neutral `ResidentSnapshot` under the applicatio
 
 Use placeholder/human-authored assets and show identity, activity, provider state, adventure state, safe diagnostics, and permissions. The surface may display or request Core actions but cannot infer or mutate canonical state.
 
+**COMPLETED DECLARATIVE-ASSET FOUNDATION:** Persona packages may now carry a typed manifest of stable visual-state slots and safe package-relative PNG/WebP references. This metadata remains inert until a later installer/package resolver validates and materializes assets; it does not open files, serve paths, or let package content choose activity.
+
 ### H2/H3 presentation and ambient features — LATER
 
 Stable sprite/animation slots, accessibility fallbacks, TTS/STT, notifications, and an opt-in cached idle adventure scene display. “Murr is thinking” must come from lifecycle/activity state, not text parsing. An idle image is an illustration, never an event.
@@ -178,7 +185,7 @@ Stable sprite/animation slots, accessibility fallbacks, TTS/STT, notifications, 
 
 With chat, embedding, vision, image, speech, and hosted providers disabled, Core must still boot the selected persona, restore allowed durable resident state, run deterministic activities/reactions, render human-authored assets, and expose inspection/settings. Open-ended reasoning and generated media are optional enhancements.
 
-Use deterministic finite-state/utility/schedule/event behavior to produce a structured `ResidentAction` (activity, animation, expression, movement, cue, duration, priority). Providers may enrich wording but never own identity or reset continuity. Required tests include no-provider startup, unavailable provider, provider swap/unload, seeded behavior, authored-dialogue fallback, missing assets, restart continuity, and no-provider-call assertions.
+**COMPLETED FOUNDATION SLICE:** Core now owns a closed-vocabulary, persona-local, restart-ephemeral `ResidentAction` with exact `resident status`, `resident action <kind>`, and `resident action clear` controls. The read-only apartment reports authored activity labels/cues and keeps explicit actions visible even when no provider is configured, while still reporting provider unavailability honestly. Provider output, ordinary chat, and dashboard rendering cannot create or mutate actions. Remaining: deterministic finite-state/utility/schedule/event behavior for richer actions (animation, expression, movement, duration, priority), durable continuity policy, package assets, and the full no-provider resident test matrix.
 
 ## Persona and NPC participation (C3/C4 dependency; then later autonomy)
 

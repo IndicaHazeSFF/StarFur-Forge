@@ -10,6 +10,7 @@ sys.modules.setdefault("ollama", types.ModuleType("ollama"))
 
 from pipeline.application import AssistantApplication, create_assistant_application
 from pipeline.document_intake import prepare_document_text
+from pipeline.persona_registry import PersonaRegistry, load_persona_package
 from pipeline.system_metrics import SystemMetricsSnapshot
 
 
@@ -479,6 +480,28 @@ class AssistantApplicationTests(unittest.TestCase):
         self.assertTrue(captured["kwargs"]["stream"])
         self.assertEqual(captured["kwargs"]["debug_level"], "verbose")
         self.assertIsNotNone(captured["kwargs"]["proposal_creator"])
+
+    def test_standard_factory_resolves_only_the_declared_builtin_murr_idle_slot(self):
+        app = create_assistant_application(session_factory=FakeSession)
+
+        asset = app.persona_asset_resolver.resolve("murr", "idle")
+        self.assertIsNotNone(asset)
+        self.assertTrue(asset.is_file())
+        self.assertIsNone(app.persona_asset_resolver.resolve("nova", "idle"))
+
+    def test_factory_preserves_builtin_murr_art_for_a_pre_manifest_stock_config(self):
+        config = FakeConfig()
+        config.persona_registry = PersonaRegistry((load_persona_package(
+            None, persona_id="murr", display_name="Murr",
+        ),))
+        config.active_persona_id = "murr"
+
+        with patch("pipeline.application.load_config", return_value=config), patch(
+            "pipeline.application.load_policy", return_value="policy"
+        ):
+            app = create_assistant_application("legacy-config.json", session_factory=FakeSession)
+
+        self.assertTrue(app.persona_asset_resolver.resolve("murr", "idle").is_file())
 
 
 if __name__ == "__main__":

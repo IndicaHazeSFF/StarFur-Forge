@@ -15,6 +15,8 @@ class ResidentPresentationTests(unittest.TestCase):
 
         self.assertEqual(plan.public_dict(), {
             "visual_state": "thinking",
+            "activity_label": "Thinking",
+            "scene_cue": "A provider turn is in progress.",
             "actor_slot": "resident.murr",
             "animation_slot": "resident.murr.thinking",
             "scene_slot": "apartment.default",
@@ -40,7 +42,10 @@ class ResidentPresentationTests(unittest.TestCase):
         })
 
         self.assertEqual(idle.public_dict()["animation_slot"], "resident.murr.reading")
+        self.assertEqual(idle.public_dict()["activity_label"], "Reading")
+        self.assertEqual(idle.public_dict()["scene_cue"], "A quiet reading cue.")
         self.assertEqual(busy.public_dict()["animation_slot"], "resident.murr.thinking")
+        self.assertEqual(busy.public_dict()["activity_label"], "Thinking")
 
 
 if __name__ == "__main__":

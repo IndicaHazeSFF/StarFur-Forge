@@ -38,13 +38,16 @@ def derive_resident_activity(
     mutation_candidate_count: int,
     roleplay_active: bool,
     adventure_mounted: bool,
+    explicit_resident_action: bool = False,
 ) -> str:
     """Return one deterministic current activity from summary-only state.
 
     The order deliberately favors an actual provider lifecycle state over
     presentation workflow labels.  Candidate review is next because it is an
-    explicit user decision point; staged writes remain below it.  This is
-    descriptive only and never drives a session transition.
+    explicit user decision point; staged writes remain below it. An explicit
+    non-idle ResidentAction is presentation state, so it keeps a zero-provider
+    resident visually available without claiming that a provider is healthy.
+    This is descriptive only and never drives a session transition.
     """
     lifecycle_state = ""
     if isinstance(provider_lifecycle, Mapping):
@@ -54,8 +57,6 @@ def derive_resident_activity(
         return "provider_error"
     if lifecycle_state in _PROVIDER_BUSY_STATES:
         return "streaming" if lifecycle_state == "streaming" else "generating"
-    if not provider_configured:
-        return "provider_unavailable"
     if ordinary_candidate_count or mutation_candidate_count:
         return "reviewing_candidates"
     if adventure_turn_active:
@@ -64,6 +65,8 @@ def derive_resident_activity(
         return "roleplaying"
     if adventure_mounted:
         return "adventure_ready"
+    if not provider_configured and not explicit_resident_action:
+        return "provider_unavailable"
     return "idle"
 
 
@@ -93,6 +96,8 @@ class ResidentSnapshot:
     @property
     def activity(self) -> str:
         provider_configured = self.provider.get("configured") is True
+        resident_action = self.persona.get("resident_action") if isinstance(self.persona, Mapping) else None
+        action_kind = resident_action.get("kind") if isinstance(resident_action, Mapping) else None
         return derive_resident_activity(
             provider_lifecycle=self.lifecycle,
             provider_configured=provider_configured,
@@ -101,6 +106,7 @@ class ResidentSnapshot:
             mutation_candidate_count=int(self.candidates.get("mutation_count", 0)),
             roleplay_active=self.roleplay.get("active") is True,
             adventure_mounted=self.adventure.get("mounted") is True,
+            explicit_resident_action=isinstance(action_kind, str) and action_kind != "idle",
         )
 
     def public_dict(self) -> dict[str, object]:

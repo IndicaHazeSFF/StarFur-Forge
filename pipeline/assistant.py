@@ -983,6 +983,21 @@ class AssistantSession:
     def persona_current(self):
         return f"Active persona: {self.persona_state.persona_id} ({self.persona_state.display_name})"
 
+    def persona_assets(self):
+        """Inspect bounded declarative asset-slot metadata for the active persona."""
+        if self.persona_registry is None:
+            return "No persona packages are configured for this session."
+        package = self.persona_registry.get(self.persona_state.persona_id)
+        if package is None or package.asset_manifest is None:
+            return f"Persona {self.persona_state.persona_id} has no declared asset manifest."
+        manifest = package.asset_manifest.public_dict()
+        states = manifest["visual_states"]
+        return (
+            f"Persona asset manifest: {package.persona_id} (schema v{manifest['schema_version']})\n"
+            f"Visual states: {', '.join(states) if states else '(none)'}\n"
+            "Read-only declarative metadata; asset references and files are not exposed or loaded."
+        )
+
     def persona_use(self, requested_id):
         requested_id = requested_id.strip().casefold()
         if not requested_id:
@@ -3102,6 +3117,8 @@ class AssistantSession:
             return self.persona_list()
         if lowered == "persona current":
             return self.persona_current()
+        if lowered in {"persona assets", "persona asset slots"}:
+            return self.persona_assets()
         if lowered == "persona use" or lowered.startswith("persona use "):
             return self.persona_use(text.strip()[len("persona use"):])
         if lowered in {"resident status", "resident action status"}:

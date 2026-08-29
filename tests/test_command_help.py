@@ -93,6 +93,23 @@ class CommandHelpTests(unittest.TestCase):
 
         self.assertIn("persona inspect", payload.render())
 
+    def test_resident_action_help_is_exact_and_provider_free(self):
+        payload = detect_command_help("How do I change what Murr is doing?")
+
+        self.assertEqual(payload.intent, "resident_action")
+        rendered = payload.render()
+        self.assertIn("resident status", rendered)
+        self.assertIn("resident action <idle|resting|reading|working|waiting|chatting|adventuring>", rendered)
+        self.assertIn("resident action clear", rendered)
+        self.assertIn("does not start work", rendered)
+
+    def test_persona_asset_help_exposes_only_the_read_only_command(self):
+        payload = detect_command_help("How do I inspect persona assets?")
+
+        self.assertEqual(payload.intent, "persona_assets")
+        self.assertEqual(payload.commands, ("persona assets",))
+        self.assertIn("does not expose paths", payload.render())
+
 
 
     def test_memory_help_returns_real_memory_commands(self):

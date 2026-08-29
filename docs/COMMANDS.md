@@ -82,6 +82,8 @@ Configured persona packages can be inspected and switched for the current sessio
     persona use <persona-id>
     persona inspect
 
+    persona assets
+
 Switching clears only the current session's recent conversation context so one
 persona does not inherit another's in-progress chat. It does not modify shared
 assistant memories, providers, tools, permissions, or the configuration file.
@@ -979,6 +981,8 @@ Persona Runtime diagnostics:
     persona inspect
 
 This is read-only and shows bounded state metadata plus derived behavior controls without displaying the full persona prompt or changing runtime state. Normal chat receives the same Core-provided presentation-only behavior guidance; it cannot override engine policy, factual grounding, provenance, commands, or permissions.
+
+`persona assets` shows only declared visual-state names from the active persona package's manifest. It never exposes package-relative paths, opens files, or loads assets.
 
 Resident apartment activity:
 

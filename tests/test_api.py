@@ -13,6 +13,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.modules.setdefault("ollama", types.ModuleType("ollama"))
 
 from pipeline.application import AssistantApplication
+from pipeline.persona_asset_resolver import InstalledPersonaAssetPackage, PersonaAssetResolver
+from pipeline.persona_assets import PersonaAssetManifest
 
 from pipeline.adventure_events import AdventureEventLog
 from pipeline.adventure_registry import AdventureRegistry
@@ -83,6 +85,10 @@ class APITests(unittest.TestCase):
             proposal_creator=proposal_creator,
             session_factory=session_factory,
             max_conversations=2,
+            persona_asset_resolver=PersonaAssetResolver((InstalledPersonaAssetPackage(
+                PersonaAssetManifest("murr", {"idle": "Assets/Murr/Murr_S_Idle.png"}),
+                Path(__file__).resolve().parents[1],
+            ),)),
         )
         self.adventure_directory = tempfile.TemporaryDirectory()
         self.adventure_registry = AdventureRegistry(self.adventure_directory.name)
@@ -208,6 +214,7 @@ class APITests(unittest.TestCase):
         self.assertIn(RESIDENT_SNAPSHOT_PATH, page)
         self.assertIn(CONVERSATION_HEADER, page)
         self.assertIn(MURR_IDLE_ASSET_PATH, page)
+        self.assertIn("dataset.failed", page)
         self.assertNotIn("local-test", page)
         self.assertEqual(self.session.calls, [])
 

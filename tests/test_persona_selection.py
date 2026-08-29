@@ -113,6 +113,29 @@ class PersonaSelectionTests(unittest.TestCase):
             ["murr", "neutral", "nova"],
         )
 
+    def test_persona_asset_inspection_is_read_only_and_hides_references(self):
+        temporary, _, nova = self._packages()
+        self.addCleanup(temporary.cleanup)
+        murr_path = Path(temporary.name) / "murr.md"
+        murr = load_persona_package(
+            murr_path,
+            asset_slots={"idle": "sprites/murr-idle.png", "reading": "sprites/murr-reading.webp"},
+        )
+        calls = []
+        session = AssistantSession(
+            self._config(), murr, persona_registry=PersonaRegistry((murr, nova)),
+            chat=lambda **kwargs: calls.append(kwargs) or {"message": {"content": "model output"}},
+            memory_loader=lambda **kwargs: [], policy="Policy",
+        )
+
+        result = session.respond("persona assets")
+
+        self.assertIn("Visual states: idle, reading", result)
+        self.assertNotIn("sprites/murr-idle.png", result)
+        self.assertEqual(calls, [])
+        session.persona_use("nova")
+        self.assertIn("has no declared asset manifest", session.respond("persona assets"))
+
 
 if __name__ == "__main__":
     unittest.main()

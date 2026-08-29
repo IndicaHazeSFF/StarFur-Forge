@@ -138,6 +138,16 @@ def detect_command_help(query: str) -> CommandHelp | None:
             notes=("This shows bounded state metadata and does not display the full persona prompt or change state.",),
         )
     if _contains_any(value, (
+        "how do i inspect persona assets", "how can i inspect persona assets",
+        "how do i see persona asset slots", "how can i see persona asset slots",
+    )):
+        return CommandHelp(
+            intent="persona_assets",
+            title="To inspect the active persona's declared visual asset slots, use:",
+            commands=("persona assets",),
+            notes=("This is read-only package metadata; it does not expose paths or load asset files.",),
+        )
+    if _contains_any(value, (
         "how do i change resident action", "how can i change resident action",
         "how do i change what murr is doing", "how can i change what murr is doing",
         "how do i set apartment activity", "how can i set apartment activity",

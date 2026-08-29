@@ -28,6 +28,36 @@ _VISUAL_BY_RESIDENT_ACTION = {
     "working": "working", "waiting": "waiting", "chatting": "chatting",
     "adventuring": "adventuring",
 }
+_ACTIVITY_LABEL_BY_VISUAL = {
+    "idle": "Idle",
+    "resting": "Resting",
+    "reading": "Reading",
+    "working": "Working",
+    "waiting": "Waiting",
+    "chatting": "Chatting",
+    "adventuring": "Adventuring",
+    "thinking": "Thinking",
+    "reviewing": "Reviewing",
+    "planning": "Planning",
+    "roleplaying": "Roleplaying",
+    "provider_error": "Provider error",
+    "offline": "Offline",
+}
+_SCENE_CUE_BY_VISUAL = {
+    "idle": "A quiet apartment moment.",
+    "resting": "A restful apartment cue.",
+    "reading": "A quiet reading cue.",
+    "working": "A focused work cue.",
+    "waiting": "A patient waiting cue.",
+    "chatting": "A conversation-ready cue.",
+    "adventuring": "An adventure-ready cue.",
+    "thinking": "A provider turn is in progress.",
+    "reviewing": "Core is holding reviewed candidates for confirmation.",
+    "planning": "An adventure turn is being staged.",
+    "roleplaying": "Roleplay mode is active.",
+    "provider_error": "The configured provider reported an error.",
+    "offline": "No provider is currently available.",
+}
 
 
 @dataclass(frozen=True)
@@ -74,6 +104,8 @@ class ResidentPresentationPlan:
         actor_slot = "resident.default" if self.persona_id is None else f"resident.{self.persona_id}"
         return {
             "visual_state": self.visual_state,
+            "activity_label": _ACTIVITY_LABEL_BY_VISUAL[self.visual_state],
+            "scene_cue": _SCENE_CUE_BY_VISUAL[self.visual_state],
             "actor_slot": actor_slot,
             "animation_slot": f"{actor_slot}.{self.visual_state}",
             "scene_slot": "apartment.default",

@@ -6,7 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from pipeline.persona import NEUTRAL_PERSONA
-from pipeline.persona_registry import PersonaPackage, PersonaRegistry, load_persona_package
+from pipeline.persona_registry import PersonaPackage, PersonaRegistry, load_persona_package, load_persona_packages
 
 
 class PersonaRegistryTests(unittest.TestCase):
@@ -41,6 +41,28 @@ class PersonaRegistryTests(unittest.TestCase):
             PersonaPackage("other", package.display_name, package.persona, package.initial_state)
         with self.assertRaisesRegex(TypeError, "Persona"):
             PersonaPackage(package.persona_id, package.display_name, "not-persona", package.initial_state)
+
+    def test_package_accepts_only_persona_local_declarative_asset_slots(self):
+        package = load_persona_package(
+            None, persona_id="murr", display_name="Murr",
+            asset_slots={"idle": "sprites/murr-idle.png", "reading": "sprites/murr-reading.webp"},
+        )
+
+        self.assertEqual(package.public_dict(), {
+            "persona_id": "murr", "display_name": "Murr", "asset_visual_states": ["idle", "reading"],
+        })
+        self.assertEqual(package.asset_manifest.reference_for("idle"), "sprites/murr-idle.png")
+        with self.assertRaisesRegex(ValueError, "persona_id"):
+            PersonaPackage(
+                package.persona_id, package.display_name, package.persona, package.initial_state,
+                asset_manifest=package.asset_manifest.__class__("nova", {"idle": "sprites/nova.png"}),
+            )
+
+    def test_package_spec_rejects_unknown_or_nonmapping_asset_slots(self):
+        with self.assertRaisesRegex(TypeError, "asset_slots"):
+            load_persona_packages(None, ({"persona_path": "missing.md", "asset_slots": "sprite.png"},))
+        with self.assertRaisesRegex(ValueError, "Unknown"):
+            load_persona_packages(None, ({"persona_path": "missing.md", "asset_path": "sprite.png"},))
 
 
 if __name__ == "__main__":

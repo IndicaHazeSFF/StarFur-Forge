@@ -11,6 +11,7 @@ from pipeline.adventure_turn_candidates import (
     parse_untrusted_adventure_turn_candidates,
     render_adventure_turn_candidate_batch,
 )
+from pipeline.adventure_turn_policy import ORDINARY_ADVENTURE_EVENT_TYPES
 
 
 class AdventureTurnCandidateTests(unittest.TestCase):
@@ -67,6 +68,7 @@ class AdventureTurnCandidateTests(unittest.TestCase):
             })
 
     def test_generated_event_allowlist_is_explicit_and_ordinary_only(self):
+        self.assertIs(ORDINARY_GENERATED_EVENT_TYPES, ORDINARY_ADVENTURE_EVENT_TYPES)
         self.assertEqual({
             "choice", "discovery", "promise", "lie", "emotional_transition",
             "unresolved_hook", "inventory_change", "location_change",
