@@ -90,12 +90,19 @@ from pipeline.document_review import DEFAULT_REVIEW_TTL_SECONDS
 from pipeline.capabilities import CapabilityManifest
 from pipeline.command_help import detect_command_help
 from pipeline.providers import CallableChatProvider, ChatProvider, OllamaChatProvider
+from pipeline.provider_registry import ChatProviderRegistration, ChatProviderRegistry
 from pipeline.provider_state import ProviderLifecycle
 from pipeline.retrieval import DeterministicMemoryRetriever, MemoryLoaderRetriever, MemoryRetriever
+from pipeline.task_execution import RoutedChatExecutor, RoutedTaskExecutionError
 from pipeline.task_profiles import (
     TASK_ADVENTURE_TURN_GENERATION, TASK_ADVENTURE_TURN_MUTATION_GENERATION,
     TASK_ASSISTANT_CHAT, TASK_ASSISTANT_PROPOSAL, TaskProfiles,
-    load_task_profiles, provider_matches, validate_generation_options,
+    load_task_profiles, validate_generation_options,
+)
+from pipeline.task_routing import (
+    ProviderRouteRegistry,
+    TaskRoutePlanner,
+    provider_route_status_from_runtime,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -587,19 +594,47 @@ class AssistantSession:
             return "provider defaults"
         return ", ".join(f"{name}={options[name]}" for name in sorted(options))
 
-    def _task_profile(self, task_id, *, model=None):
-        profiles = getattr(self.config, "task_profiles", TaskProfiles())
-        profile = profiles.resolve(
+    def _routed_chat_executor(self):
+        """Build one request-local route executor around the active adapter only.
+
+        This preserves the current single-provider behavior while making route
+        selection explicit. Provider health is read only when an application
+        attached its bounded snapshot; a previous lifecycle error does not
+        suppress an explicit future retry.
+        """
+        health = getattr(self, "provider_health_snapshot", {})
+        status = provider_route_status_from_runtime(
+            self._provider_name,
+            configured=self.provider is not None,
+            health_status=health.get("status", "not_probed"),
+        )
+        provider_id = status.provider_id
+        return RoutedChatExecutor(
+            TaskRoutePlanner(
+                getattr(self.config, "task_profiles", TaskProfiles()),
+                ProviderRouteRegistry({provider_id: status}),
+            ),
+            ChatProviderRegistry({
+                provider_id: ChatProviderRegistration(provider_id, self.provider),
+            }),
+        )
+
+    def _task_route(self, task_id, *, model=None):
+        executor = self._routed_chat_executor()
+        decision = executor.plan(
             task_id,
             default_model=model or self.active_model,
+            default_provider_id=self._provider_name,
             base_options=self._ollama_options(),
         )
-        if not provider_matches(profile.provider, getattr(self.provider, "name", None)):
-            raise RuntimeError(
-                f"Task profile {task_id!r} requires provider {profile.provider!r}; "
-                f"active provider is {getattr(self.provider, 'name', 'unknown')!r}."
-            )
-        return profile
+        if decision.selected is None:
+            raise RuntimeError(f"Task profile {task_id!r} has no configured provider route.")
+        return executor, decision
+
+    def _task_profile(self, task_id, *, model=None):
+        """Compatibility accessor for the selected profile of one route plan."""
+        _, decision = self._task_route(task_id, model=model)
+        return decision.selected.profile
 
     def _model_request_kwargs(self, messages, *, model=None, task_id=TASK_ASSISTANT_CHAT):
         profile = self._task_profile(task_id, model=model)
@@ -611,18 +646,17 @@ class AssistantSession:
 
     def _provider_complete(self, messages, *, model=None, stream=False, task_id=TASK_ASSISTANT_CHAT):
         """Call the selected provider through the stable chat boundary."""
-        kwargs = self._model_request_kwargs(messages, model=model, task_id=task_id)
-        self.provider_lifecycle.begin_generation(stream=stream, model=kwargs["model"])
+        executor, decision = self._task_route(task_id, model=model)
+        selected = decision.selected
+        self.provider_lifecycle.begin_generation(stream=stream, model=selected.profile.model)
         try:
-            response = self.provider.complete(
-                kwargs["messages"],
-                model=kwargs["model"],
-                options=kwargs.get("options"),
-                stream=stream,
-            )
+            execution = executor.execute_planned(decision, messages, stream=stream)
             if not stream:
                 self.provider_lifecycle.finish()
-            return response
+            return execution.response
+        except RoutedTaskExecutionError as error:
+            self.provider_lifecycle.fail(error)
+            raise RuntimeError(str(error)) from error
         except Exception as error:
             self.provider_lifecycle.fail(error)
             raise

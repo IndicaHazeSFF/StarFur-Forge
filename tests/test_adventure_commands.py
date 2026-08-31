@@ -557,7 +557,7 @@ class AdventureCommandTests(unittest.TestCase):
 
             provider.payload = {"schema_version": 1, "candidates": []}
             self.assertIn(
-                "failed safely", session.respond("adventure turn generate I wait."),
+                "Presented 0 untrusted", session.respond("adventure turn generate I wait."),
             )
             self.assertFalse(session.adventure_turn_candidate_inbox.active)
             self.assertTrue(session.adventure_turn.active)

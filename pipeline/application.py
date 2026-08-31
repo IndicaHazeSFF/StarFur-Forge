@@ -10,19 +10,30 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import re
 import threading
+from time import perf_counter
 from typing import Callable, Iterator
 
 from pipeline.assistant import PROJECT_ROOT, AssistantSession, load_config, load_persona, load_policy
 from pipeline.capabilities import CapabilityManifest, CapabilityRegistry, build_core_capability_registry
 from pipeline.db import upsert_assistant_memory_proposal
-from pipeline.document_annotation import DocumentProposalAnnotator
+from pipeline.document_annotation import DocumentProposalAnnotator, FailoverDocumentProposalAnnotator
 from pipeline.document_intake import PreparedDocument, extract_document_memory_candidates_resilient
 from pipeline.retrieval import DeterministicMemoryRetriever, MemoryRetriever
-from pipeline.task_profiles import TASK_DOCUMENT_ANNOTATION, TaskProfiles, provider_matches
+from pipeline.task_profiles import (
+    TASK_DOCUMENT_ANNOTATION,
+    TASK_DOCUMENT_ANNOTATION_FALLBACK,
+    TaskProfiles,
+    provider_matches,
+)
+from pipeline.task_routing import (
+    ProviderRouteRegistry,
+    TaskRoutePlanner,
+    provider_route_status_from_runtime,
+)
 from pipeline.persona_asset_resolver import InstalledPersonaAssetPackage, PersonaAssetResolver
 from pipeline.persona_assets import BUILTIN_MURR_ASSET_MANIFEST
 from pipeline.persona_registry import PersonaRegistry, load_persona_package
@@ -395,6 +406,7 @@ class AssistantApplication:
         ``annotator`` is injectable so presentation/API tests never need Ollama.
         """
         with self._locked_session_for() as session:
+            max_attempts = 3
             if annotator is None:
                 provider = getattr(session, "provider", None)
                 if provider is None:
@@ -405,28 +417,68 @@ class AssistantApplication:
                     default_model=self._active_model_for_session(session),
                     base_options={},
                 )
-                if not provider_matches(profile.provider, getattr(provider, "name", None)):
+                provider_name = getattr(provider, "name", None)
+                if not provider_matches(profile.provider, provider_name):
                     raise RuntimeError(
                         f"Task profile {TASK_DOCUMENT_ANNOTATION!r} requires provider {profile.provider!r}; "
-                        f"active provider is {getattr(provider, 'name', 'unknown')!r}."
+                        f"active provider is {provider_name or 'unknown'!r}."
                     )
-                annotator = DocumentProposalAnnotator(
+                primary = DocumentProposalAnnotator(
                     provider,
                     profile.model,
                     options=profile.options,
                     max_output_tokens=profile.options.get("num_predict", 1024),
                 )
+                if profile.fallback_task is None:
+                    annotator = primary
+                else:
+                    if profile.fallback_task != TASK_DOCUMENT_ANNOTATION_FALLBACK:
+                        raise RuntimeError(
+                            "Document annotation fallback must use the explicit "
+                            f"{TASK_DOCUMENT_ANNOTATION_FALLBACK!r} profile."
+                        )
+                    fallback_config = profiles.get(TASK_DOCUMENT_ANNOTATION_FALLBACK)
+                    if fallback_config is None or fallback_config.fallback_task is not None:
+                        raise RuntimeError("Document annotation fallback profile is invalid.")
+                    fallback_profile = profiles.resolve(
+                        TASK_DOCUMENT_ANNOTATION_FALLBACK,
+                        default_model=self._active_model_for_session(session),
+                        base_options={},
+                    )
+                    if not provider_matches(fallback_profile.provider, provider_name):
+                        raise RuntimeError(
+                            f"Task profile {TASK_DOCUMENT_ANNOTATION_FALLBACK!r} requires provider "
+                            f"{fallback_profile.provider!r}; active provider is {provider_name or 'unknown'!r}."
+                        )
+                    annotator = FailoverDocumentProposalAnnotator(
+                        primary,
+                        DocumentProposalAnnotator(
+                            provider,
+                            fallback_profile.model,
+                            options=fallback_profile.options,
+                            max_output_tokens=fallback_profile.options.get("num_predict", 1024),
+                        ),
+                    )
+                    max_attempts = annotator.max_attempts
             lifecycle = getattr(session, "provider_lifecycle", None)
             if lifecycle is not None:
                 lifecycle.begin_generation(stream=False, model=getattr(annotator, "model", self._active_model_for_session(session)))
+            started_at = perf_counter()
             try:
-                result = extract_document_memory_candidates_resilient(document, annotator, progress=progress)
+                result = extract_document_memory_candidates_resilient(
+                    document, annotator, max_attempts=max_attempts, progress=progress,
+                )
             except Exception as error:
                 if lifecycle is not None:
                     lifecycle.fail(error)
                 raise
             if lifecycle is not None:
                 lifecycle.finish()
+            if result.execution is not None:
+                result = replace(
+                    result,
+                    execution=replace(result.execution, elapsed_ms=(perf_counter() - started_at) * 1000),
+                )
             return result
 
     def create_document_pending_proposal(self, candidate):
@@ -482,6 +534,11 @@ class AssistantApplication:
                     "phase_timings": phase_timings,
                 }
             manifest = self.capability_manifest
+            routing = self._route_diagnostics_for_session(
+                session,
+                provider_name=provider_name,
+                provider_health=provider_health,
+            )
             return {
                 "status": "ready" if provider is not None else "provider_unavailable",
                 "provider": {
@@ -497,6 +554,7 @@ class AssistantApplication:
                     "active": self._active_model_for_session(session),
                     "startup": getattr(session.config, "chat_model", None),
                 },
+                "routing": routing,
                 "capabilities": {
                     "schema_version": manifest.schema_version,
                     "fingerprint": manifest.fingerprint,
@@ -510,6 +568,32 @@ class AssistantApplication:
                 "fallback": {"used": False, "reason": None},
                 "latest_turn": latest_turn,
             }
+
+    def _route_diagnostics_for_session(self, session, *, provider_name, provider_health):
+        """Build a passive route preview without probing or calling a provider."""
+        provider = getattr(session, "provider", None)
+        lifecycle = getattr(session, "provider_lifecycle", None)
+        snapshot = lifecycle.snapshot() if callable(getattr(lifecycle, "snapshot", None)) else None
+        status = provider_route_status_from_runtime(
+            provider_name or "unknown",
+            configured=provider is not None,
+            health_status=provider_health.get("status"),
+            lifecycle_state=getattr(snapshot, "state", None),
+        )
+        profiles = getattr(session.config, "task_profiles", TaskProfiles())
+        planner = TaskRoutePlanner(profiles, ProviderRouteRegistry({status.provider_id: status}))
+        task_ids = tuple(sorted(profiles.profiles)) or ("assistant_chat",)
+        return {
+            "provider": {"id": status.provider_id, "status": status.status},
+            "tasks": {
+                task_id: planner.plan(
+                    task_id,
+                    default_model=self._active_model_for_session(session),
+                    default_provider_id=status.provider_id,
+                ).public_dict()
+                for task_id in task_ids
+            },
+        }
 
 
 def create_assistant_application(

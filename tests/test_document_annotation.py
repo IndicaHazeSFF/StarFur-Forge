@@ -12,6 +12,7 @@ sys.modules.setdefault("ollama", types.ModuleType("ollama"))
 from pipeline.document_annotation import (
     DOCUMENT_ANNOTATION_MAX_OUTPUT_TOKENS,
     DocumentProposalAnnotator,
+    FailoverDocumentProposalAnnotator,
     build_document_annotation_messages,
 )
 from pipeline.document_intake import (
@@ -133,7 +134,30 @@ class DocumentAnnotationTests(unittest.TestCase):
 
         self.assertEqual(len(result.candidates), 1)
         self.assertEqual(result.failures, ())
+        self.assertEqual(2, result.execution.primary_attempts)
         self.assertIn("Previous output was invalid", provider.calls[1]["messages"][0]["content"])
+
+    def test_failover_uses_a_fixed_primary_budget_then_one_fallback_attempt(self):
+        document = self._prepared()
+        primary = FakeProvider({"message": {"content": "not json"}})
+        fallback = FakeProvider({"message": {"content": json.dumps(self._valid_payload())}})
+        annotator = FailoverDocumentProposalAnnotator(
+            DocumentProposalAnnotator(primary, "phi4-mini:latest"),
+            DocumentProposalAnnotator(fallback, "qwen3:8b"),
+        )
+
+        result = extract_document_memory_candidates_resilient(
+            document, annotator, max_attempts=annotator.max_attempts,
+        )
+
+        self.assertEqual(1, len(result.candidates))
+        self.assertEqual(2, len(primary.calls))
+        self.assertEqual(1, len(fallback.calls))
+        self.assertEqual("phi4-mini:latest", result.execution.primary_model)
+        self.assertEqual(2, result.execution.primary_attempts)
+        self.assertEqual("qwen3:8b", result.execution.fallback_model)
+        self.assertEqual(1, result.execution.fallback_attempts)
+        self.assertTrue(result.execution.fallback_used)
     def test_invalid_provider_outputs_are_chunk_scoped_and_do_not_persist(self):
         document = self._prepared()
         for response, phrase in (

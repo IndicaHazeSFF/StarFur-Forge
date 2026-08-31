@@ -49,6 +49,36 @@ def sample_candidate_result():
     }
 
 
+def sample_adventure_turn_result():
+    return {
+        "benchmark_version": "adventure-turn-smoke-v1", "repeatability": True,
+        "generation_success_rate": 1.0, "candidate_validation_success_rate": 1.0,
+        "core_use_success_rate": 1.0, "canonical_commit_success_rate": 1.0,
+        "results": [{
+            "name": "ordinary_candidate_commit", "kind": "adventure_turn",
+            "expected_generation": "completed", "actual_generation": "completed",
+            "expected_candidates": 1, "actual_candidates": 1,
+            "expected_staged": 1, "actual_staged": 1,
+            "expected_committed": 1, "actual_committed": 1,
+            "pass": True, "failure_category": "none",
+        }],
+    }
+
+
+def sample_annotation_quality_result():
+    return {
+        "benchmark_version": "document-annotation-quality-v1",
+        "annotation_quality_recall": 1.0, "annotation_quality_precision": 0.75,
+        "annotation_false_positive_count": 1, "annotation_missed_target_count": 0,
+        "results": [{
+            "name": "model-comparison-facts", "kind": "document_annotation_quality",
+            "expected_target_count": 3, "matched_target_count": 3,
+            "candidate_count": 4, "false_positive_count": 1,
+            "missed_target_count": 0, "pass": False,
+        }],
+    }
+
+
 class ExperimentLedgerTests(unittest.TestCase):
     def test_record_is_append_only_and_omits_query_content(self):
         record = build_benchmark_result_record(sample_manifest(), sample_result(), run_id="smoke-1")
@@ -99,6 +129,39 @@ class ExperimentLedgerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaises(ValueError):
                 append_benchmark_result(Path(directory) / "ledger.jsonl", record)
+
+    def test_adventure_turn_results_separate_core_outcomes_without_turn_text(self):
+        record = build_benchmark_result_record(sample_manifest(), sample_adventure_turn_result())
+        case = record["cases"][0]
+        self.assertEqual("adventure_turn", case["kind"])
+        self.assertEqual(1, case["actual_committed"])
+        self.assertEqual(1.0, record["metrics"]["canonical_commit_success_rate"])
+        self.assertNotIn("prompt", case)
+        self.assertNotIn("response", case)
+
+    def test_adventure_turn_failure_categories_remain_bounded_and_operational(self):
+        result = sample_adventure_turn_result()
+        result["results"][0].update({
+            "expected_generation": "failed",
+            "actual_generation": "failed",
+            "expected_candidates": 0,
+            "actual_candidates": 0,
+            "expected_staged": 0,
+            "actual_staged": 0,
+            "expected_committed": 0,
+            "actual_committed": 0,
+            "failure_category": "response_too_large",
+        })
+        record = build_benchmark_result_record(sample_manifest(), result)
+        self.assertEqual("response_too_large", record["cases"][0]["failure_category"])
+
+    def test_annotation_quality_results_record_counts_without_candidate_content(self):
+        record = build_benchmark_result_record(sample_manifest(), sample_annotation_quality_result())
+        case = record["cases"][0]
+        self.assertEqual("document_annotation_quality", case["kind"])
+        self.assertEqual(1, case["false_positive_count"])
+        self.assertEqual(0.75, record["metrics"]["annotation_quality_precision"])
+        self.assertNotIn("details", case)
 
 
 if __name__ == "__main__":

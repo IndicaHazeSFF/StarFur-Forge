@@ -22,7 +22,7 @@ class AdventureTurnCandidateEvaluationTests(unittest.TestCase):
         self.assertEqual(BENCHMARK_VERSION, first["benchmark_version"])
         self.assertEqual(first, second)
         self.assertEqual(first["cases"], first["passed"])
-        self.assertEqual(8, first["cases"])
+        self.assertEqual(9, first["cases"])
         self.assertEqual(1.0, first["candidate_schema_pass_rate"])
         self.assertEqual(1.0, first["candidate_ordinary_schema_pass_rate"])
         self.assertEqual(1.0, first["candidate_typed_schema_pass_rate"])

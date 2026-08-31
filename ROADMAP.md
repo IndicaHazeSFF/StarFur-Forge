@@ -335,6 +335,15 @@ whitelist is now one immutable Core policy constant shared by candidate parsing,
 generation prompt construction, and fixtures. It remains narrower than the
 event-log write set; adding a generated type requires an explicit policy change.
 
+**COMPLETED INITIAL C3 NO-CHANGE SLICE:** A strict ordinary-candidate envelope
+may explicitly contain zero candidates. Core renders that as a bounded,
+untrusted no-durable-change outcome; it cannot stage or commit an event.
+
+**COMPLETED INITIAL C3 ORCHESTRATION-EVAL SLICE:** A deterministic temporary-
+workspace benchmark now verifies ordinary candidate generation/validation,
+explicit staging and append-only commit, explicit no-change output, invalid
+envelope rejection, and stale-origin rejection as separately bounded outcomes.
+
 ### Current dependency-ordered execution path
 
 The older numbered stages above preserve the project history. Active implementation now follows this dependency order so an adventure-import prototype and a read-only Murr apartment arrive early without bypassing safety boundaries:
@@ -345,6 +354,32 @@ The older numbered stages above preserve the project history. Active implementat
 4. **Deliver reviewed adventure import before automatic extraction:** route large documents, `details.md`, and exported conversations through canonical prechunking, provenance, review, and an explicit adventure-scoped handoff. This creates a usable “import, load, and continue” path without silently producing personal memories or trusting model prose as state.
 5. **COMPLETED INITIAL H0/H1 SLICE:** A versioned, authenticated, conversation-aware `ResidentSnapshot` now composes only bounded public persona/runtime/provider/adventure/roleplay/staging/candidate summaries plus passive aggregate host metrics under the normal application lock. The initial host sampler reports logical CPU count, available/total RAM where exposed, and workspace-disk capacity without subprocesses; GPU/VRAM/temperature remain honestly unavailable pending an explicit adapter. A generic asset-slot mapper derives presentation states such as idle, thinking, reviewing, and adventuring without inspecting prompts or loading assets. `/starfur/apartment` is a dependency-free static, read-only local prototype shell; it embeds no token/runtime data and obtains the snapshot only after the local user supplies a token in browser memory. The fixed human-authored `Assets/Murr/Murr_S_Idle.png` placeholder is exposed through one allowlisted art route, not a generic filesystem server. Explicit persona-local ResidentAction controls and authored apartment cues remain available with no provider, while the provider card still reports unavailability honestly. Remaining: validated human-authored sprite/theme package slots, richer deterministic action scheduling, and a richer desktop client.
 6. **Add provider registry and measured routing, then the tool/permission engine:** task/profile configuration becomes actual provider selection only after benchmarks; filesystem, screen, process, network, and external services remain separately permissioned.
+
+**COMPLETED INITIAL PROVIDER-ROUTE PLANNING SLICE:** A pure `TaskRoutePlanner`
+can now evaluate declarative task profiles and caller-supplied bounded provider
+statuses into an acyclic inspectable primary/fallback plan. It neither probes,
+constructs, nor calls providers and cannot access prompts, memory, adventures,
+permissions, or execution. Runtime diagnostics expose a passive preview of
+configured task routes from existing provider health/lifecycle observations.
+
+**COMPLETED INITIAL ROUTE-CAPABILITY SLICE:** Core now maps provider-facing
+task IDs through one explicit capability table (`chat`, `vision`, or
+`image_generation`). Unknown/provider-free work cannot be guessed into a route
+merely because a task profile exists.
+
+**COMPLETED INITIAL ROUTED-CHAT EXECUTOR SLICE:** Explicit Core-injected chat
+adapters can be registered by stable ID and one preplanned route can invoke one
+selected adapter. It does not construct providers from config, probe, retry,
+silently switch after a failure, persist telemetry, or yet alter the existing
+session provider path; that integration requires its own smoke-tested slice.
+
+**COMPLETED INITIAL SESSION-ROUTING SLICE:** Normal assistant chat, proposal
+extraction, and explicit generated-adventure-turn calls now plan before one
+provider request through the injected adapter registry. An explicitly
+unavailable provider fails before receiving a request; a request failure never
+silently retries or switches providers. This preserves the present one-adapter
+runtime and leaves document annotation on its separately bounded current path
+until annotation-specific routing and benchmarks are ready.
 7. **Add vision, image, and speech adapters:** one-shot vision first; then image generation, STT, TTS, voice-activity detection, transcript confidence, and interruption/barge-in behavior behind the same provider/permission boundaries.
 8. **Harden resident continuity before polish/release:** durable persona-local continuity, zero-provider resident behavior, deterministic `ResidentAction` presentation, restart/recovery, package validation, and Workshop/Steam release engineering.
 
@@ -388,6 +423,14 @@ adventure state remain separate. Add simulation, offline-catch-up, recap, and bo
    **COMPLETED STRUCTURAL PRECHUNK SLICE:** Added deterministic, model-free document profiles before external annotation. Legacy `assistant_note` behavior remains stable; `technical_document` and `adventure_state` preserve heading/state boundaries before bounded chunking, and the OpenWebUI bridge can safely select `auto` from explicit structure. This improves large narrative-document throughput without changing review, proposal approval, shared memory, or source-context boundaries. Remaining: selective/query-driven annotation, asynchronous or pollable processing, multi-file intake, and semantic document indexing.
 
    **COMPLETED TERMINAL OBSERVABILITY SLICE:** Terminal callers may opt into a bounded completed-chunk progress bar while annotation runs, followed by the normal final review JSON. The standard JSON endpoint remains unchanged for OpenWebUI and future clients; later asynchronous/pollable or structured UI progress must be a separate transport contract.
+
+   **COMPLETED SMALL-MODEL RELIABILITY SLICE:** Document annotation now uses a bounded content-validation sequence when an explicit fallback profile is configured: two primary-model attempts followed by one declared fallback-model attempt. The current local profile uses Phi-4 Mini as the fast primary and Qwen3 8B as fallback. Only invalid/empty/model-malformed outputs consume this sequence; valid empty results end normally, no retry is unbounded, and all candidates remain review-only. The response exposes bounded model labels/attempt counts and fallback use, never raw model output. Remaining: repeated model-quality benchmarks, per-model latency comparison, and a separately benchmarked multi-provider routing path for annotation.
+   **COMPLETED ANNOTATION-LEDGER SLICE:** Explicit local annotation observations can now be appended to the existing privacy-bounded experiment ledger with only chunk/candidate/failure counts, model labels, attempt counts, optional latency, and fallback use. Source text, review IDs, candidate content, prompts, and raw provider outputs are excluded. This measures transport/schema reliability; reviewed fact quality remains a separate benchmark family.
+   **COMPLETED ANNOTATION-COMPARISON SLICE:** The local CLI can now produce a read-only aggregate comparison of recorded annotation observations by primary model, including pass rate, failed chunks, candidate count, bounded attempts/fallback use, configured fallback labels, and optional mean latency. It remains a reliability report only; it does not reopen source documents or score extraction quality.
+   **COMPLETED ANNOTATION-TIMING SLICE:** Successful or partially failed live annotation responses now expose only end-to-end extraction elapsed time alongside existing bounded model/attempt metadata. The timer covers candidate extraction/validation after document preparation and never retains source text, prompts, provider output, or per-chunk timings.
+   **COMPLETED ANNOTATION-QUALITY CONTRACT SLICE:** Checked-in model-comparison contracts can now score a saved standard annotation response by expected fact recall, candidate precision, false positives, and missed targets. The scorer and ledger keep aggregate counts only; it never records source text, candidate wording, review IDs, prompts, or raw provider output. Remaining: more diverse public fixtures, repeated runs, and a threshold policy based on accumulated results.
+   **COMPLETED ANNOTATION-QUALITY REPORT SLICE:** The read-only annotation report now renders reliability and extraction-quality aggregates separately by primary model. This makes valid-empty responses visible as reliability successes but quality-recall failures rather than conflating transport/schema conformance with useful fact extraction.
+   **COMPLETED PUBLIC ANNOTATION-RUNNER SLICE:** An explicit CLI runner now evaluates one selected installed model against a checked-in public annotation fixture and records only aggregate quality/reliability counts plus elapsed time. It bypasses reviews and persistence entirely; it is benchmarking infrastructure, not an alternate intake route.
 3. Add one-shot VisionProvider screen/window/region/image/PDF inspection.
 4. Add image, speech, and media provider interfaces and explicit capability routing.
 5. Build the low-resource apartment as a state visualization: workbench for active projects, bookshelf for installed models, newspaper for feeds, calendar for schedule, window for permissioned desktop state, and frames for artwork.
@@ -441,6 +484,13 @@ The full instrumentation ledger and cross-system comparison reports mature after
 ### Experiment ledger
 
 **FIRST SLICE COMPLETED:** An explicit local JSONL ledger records privacy-bounded retrieval-fixture benchmark results with versioned manifests, run/commit/model/hardware metadata when supplied, expected/returned memory IDs, retrieval scores/reasons, pass/fail outcome, and aggregate metrics. It never records raw prompts or responses; fixture evaluation remains temporary-DB-only.
+
+**ADVENTURE-TURN RESULT SLICE COMPLETED:** The same bounded ledger accepts adventure-turn benchmark cases and separates generation completion, candidate validation, Core-use/staging, and canonical-commit outcomes. It stores only bounded statuses/counts and rates, never turn text, provider payloads, or narrative prose.
+
+Adventure-turn failures use a closed operational category set (empty, non-JSON,
+oversized, invalid-envelope, stale-origin, unavailable-profile, or provider
+failure) so permanent regressions remain comparable without retaining a model
+response.
 
 Extend this into an append-only local experiment ledger with versioned structured events and aggregate reports. Every run should identify an experiment/run ID, benchmark case, configuration and policy hashes, provider/model versions, hardware profile, random seed, timestamps, outcome, and failure category. Store raw prompts/responses only when explicitly enabled and privacy-approved; aggregate metrics must remain useful without retaining unrestricted conversation content.
 

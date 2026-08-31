@@ -63,7 +63,14 @@ class AdventureTurnCoordinatorTests(unittest.TestCase):
         self.assertFalse(hasattr(result, "event_id"))
 
     def test_unmounted_or_invalid_provider_output_fails_before_any_candidate_result(self):
-        provider = _Provider({"schema_version": 1, "candidates": []})
+        provider = _Provider({
+            "schema_version": 1,
+            "candidates": [{
+                "event_type": "state_change",
+                "summary": "This is not an ordinary candidate.",
+                "confidence": 0.8,
+            }],
+        })
         coordinator = AdventureTurnCoordinator(provider)
 
         with self.assertRaisesRegex(AdventureTurnCoordinatorError, "failed safely"):

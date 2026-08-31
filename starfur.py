@@ -344,6 +344,57 @@ def main():
     candidate_eval_parser.add_argument("--run-id", help="Optional reproducible benchmark run identifier")
     candidate_eval_parser.add_argument("--git-commit", help="Optional source commit recorded with this benchmark run")
     candidate_eval_parser.add_argument("--hardware-profile", help="Optional non-sensitive hardware profile label")
+    orchestration_eval_parser = subparsers.add_parser(
+        "adventure-turn-eval", help="Run deterministic generated-adventure-turn orchestration fixtures",
+    )
+    orchestration_eval_parser.add_argument("--record-ledger", metavar="PATH", help="Explicitly append this fixture result to a local JSONL experiment ledger")
+    orchestration_eval_parser.add_argument("--run-id", help="Optional reproducible benchmark run identifier")
+    orchestration_eval_parser.add_argument("--git-commit", help="Optional source commit recorded with this benchmark run")
+    orchestration_eval_parser.add_argument("--hardware-profile", help="Optional non-sensitive hardware profile label")
+    annotation_eval_parser = subparsers.add_parser(
+        "annotation-eval-record",
+        help="Record one explicit, privacy-bounded external-document annotation observation",
+    )
+    annotation_eval_parser.add_argument("--primary-model", required=True, help="Primary annotation model label")
+    annotation_eval_parser.add_argument("--primary-attempts", required=True, type=int, help="Total primary attempts returned by the annotation result")
+    annotation_eval_parser.add_argument("--fallback-model", help="Declared fallback model label, if configured")
+    annotation_eval_parser.add_argument("--fallback-attempts", default=0, type=int, help="Total fallback attempts returned by the annotation result")
+    annotation_eval_parser.add_argument("--chunks", required=True, type=int, help="Prepared chunk count")
+    annotation_eval_parser.add_argument("--failed-chunks", default=0, type=int, help="Final failed chunk count")
+    annotation_eval_parser.add_argument("--candidates", required=True, type=int, help="Returned candidate count")
+    annotation_eval_parser.add_argument("--latency-ms", type=float, help="Optional end-to-end annotation latency")
+    annotation_eval_parser.add_argument("--case-name", default="external-document-annotation", help="Bounded non-sensitive case label")
+    annotation_eval_parser.add_argument("--record-ledger", metavar="PATH", required=True, help="Explicit local JSONL experiment ledger path")
+    annotation_eval_parser.add_argument("--run-id", help="Optional reproducible benchmark run identifier")
+    annotation_eval_parser.add_argument("--git-commit", help="Optional source commit recorded with this benchmark run")
+    annotation_eval_parser.add_argument("--hardware-profile", help="Optional non-sensitive hardware profile label")
+    annotation_report_parser = subparsers.add_parser(
+        "annotation-eval-report",
+        help="Read a privacy-bounded document-annotation comparison from a local experiment ledger",
+    )
+    annotation_report_parser.add_argument("--ledger", required=True, help="Local JSONL experiment ledger path to read")
+    annotation_quality_parser = subparsers.add_parser(
+        "annotation-quality-eval",
+        help="Score one saved annotation API response against a checked-in quality contract",
+    )
+    annotation_quality_parser.add_argument("--response", required=True, help="Saved standard JSON annotation response")
+    annotation_quality_parser.add_argument("--case", required=True, help="Checked-in annotation quality case name")
+    annotation_quality_parser.add_argument("--primary-model", required=True, help="Primary annotation model used for the response")
+    annotation_quality_parser.add_argument("--record-ledger", metavar="PATH", required=True, help="Explicit local JSONL experiment ledger path")
+    annotation_quality_parser.add_argument("--run-id", help="Optional reproducible benchmark run identifier")
+    annotation_quality_parser.add_argument("--git-commit", help="Optional source commit recorded with this benchmark run")
+    annotation_quality_parser.add_argument("--hardware-profile", help="Optional non-sensitive hardware profile label")
+    annotation_quality_run_parser = subparsers.add_parser(
+        "annotation-quality-run",
+        help="Explicitly run one checked-in public annotation quality fixture through a selected model",
+    )
+    annotation_quality_run_parser.add_argument("--model", required=True, help="Installed model to benchmark")
+    annotation_quality_run_parser.add_argument("--case", default="model-comparison-facts", help="Checked-in annotation quality case name")
+    annotation_quality_run_parser.add_argument("--fixture", default="tests/fixtures/document_annotation_quality_note.md", help="Public fixture document path")
+    annotation_quality_run_parser.add_argument("--record-ledger", metavar="PATH", required=True, help="Explicit local JSONL experiment ledger path")
+    annotation_quality_run_parser.add_argument("--run-id", help="Optional reproducible benchmark run identifier")
+    annotation_quality_run_parser.add_argument("--git-commit", help="Optional source commit recorded with this benchmark run")
+    annotation_quality_run_parser.add_argument("--hardware-profile", help="Optional non-sensitive hardware profile label")
 
     context_parser = subparsers.add_parser("assistant-context", help="Show ranked assistant memory context")
     context_parser.add_argument("query", help="Question or query text")
@@ -603,6 +654,158 @@ def main():
             record = build_benchmark_result_record(manifest, result, run_id=args.run_id)
             append_benchmark_result(args.record_ledger, record)
             print(f"\nRecorded benchmark result: {record['record_id']} -> {args.record_ledger}")
+
+    elif args.command == "adventure-turn-eval":
+        from pipeline.adventure_turn_orchestration_eval import (
+            format_adventure_turn_orchestration_result,
+            run_adventure_turn_orchestration_benchmark,
+        )
+        result = run_adventure_turn_orchestration_benchmark()
+        print(format_adventure_turn_orchestration_result(result))
+        if args.record_ledger:
+            from pipeline.benchmark import BenchmarkModelProfile, BenchmarkRunManifest
+            from pipeline.experiment_ledger import append_benchmark_result, build_benchmark_result_record
+            manifest = BenchmarkRunManifest(
+                benchmark_id="adventure-turn-orchestration-fixture",
+                workload="adventure-turn-orchestration-fixture",
+                model_profile=BenchmarkModelProfile("internal", "fixture"),
+                architecture_fingerprint="adventure-turn-orchestration-v1",
+                git_commit=args.git_commit,
+                run_id=args.run_id,
+                hardware={"profile": args.hardware_profile} if args.hardware_profile else {},
+            )
+            record = build_benchmark_result_record(manifest, result, run_id=args.run_id)
+            append_benchmark_result(args.record_ledger, record)
+            print(f"\nRecorded benchmark result: {record['record_id']} -> {args.record_ledger}")
+
+    elif args.command == "annotation-eval-record":
+        from pipeline.benchmark import BenchmarkModelProfile, BenchmarkRunManifest
+        from pipeline.document_annotation_eval import (
+            DocumentAnnotationObservation,
+            build_document_annotation_benchmark_result,
+            format_document_annotation_benchmark_result,
+        )
+        from pipeline.experiment_ledger import append_benchmark_result, build_benchmark_result_record
+        if args.fallback_attempts and not args.fallback_model:
+            parser.error("--fallback-model is required when --fallback-attempts is non-zero")
+        observation = DocumentAnnotationObservation(
+            chunk_count=args.chunks,
+            failed_chunk_count=args.failed_chunks,
+            candidate_count=args.candidates,
+            primary_attempt_count=args.primary_attempts,
+            fallback_attempt_count=args.fallback_attempts,
+            latency_ms=args.latency_ms,
+        )
+        result = build_document_annotation_benchmark_result(
+            observation, case_name=args.case_name, fallback_model=args.fallback_model,
+        )
+        print(format_document_annotation_benchmark_result(result))
+        manifest = BenchmarkRunManifest(
+            benchmark_id="external-document-annotation-observation",
+            workload="external-document-annotation-reliability",
+            model_profile=BenchmarkModelProfile("Ollama", args.primary_model),
+            architecture_fingerprint="document-annotation-reliability-v1-2-primary-1-fallback",
+            git_commit=args.git_commit,
+            run_id=args.run_id,
+            hardware={"profile": args.hardware_profile} if args.hardware_profile else {},
+        )
+        record = build_benchmark_result_record(manifest, result, run_id=args.run_id)
+        append_benchmark_result(args.record_ledger, record)
+        print(f"\nRecorded annotation result: {record['record_id']} -> {args.record_ledger}")
+
+    elif args.command == "annotation-eval-report":
+        from pipeline.document_annotation_eval import (
+            format_document_annotation_summary,
+            summarize_document_annotation_records,
+        )
+        from pipeline.document_annotation_quality_eval import (
+            format_document_annotation_quality_summary,
+            summarize_document_annotation_quality_records,
+        )
+        from pipeline.experiment_ledger import load_benchmark_results
+        records = load_benchmark_results(args.ledger)
+        print(format_document_annotation_summary(
+            summarize_document_annotation_records(records)
+        ))
+        print()
+        print(format_document_annotation_quality_summary(
+            summarize_document_annotation_quality_records(records)
+        ))
+
+    elif args.command == "annotation-quality-eval":
+        import json
+        from pipeline.benchmark import BenchmarkModelProfile, BenchmarkRunManifest
+        from pipeline.document_annotation_quality_eval import (
+            evaluate_document_annotation_quality,
+            format_document_annotation_quality_result,
+            load_document_annotation_quality_cases,
+            select_document_annotation_quality_case,
+        )
+        from pipeline.experiment_ledger import append_benchmark_result, build_benchmark_result_record
+        try:
+            payload = json.loads(Path(args.response).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            parser.error(f"--response must be a readable standard JSON annotation response: {error}")
+        if not isinstance(payload, dict):
+            parser.error("--response must contain one JSON object")
+        execution = payload.get("execution")
+        if isinstance(execution, dict) and isinstance(execution.get("primary_model"), str):
+            if execution["primary_model"] != args.primary_model:
+                parser.error("--primary-model must match the annotation response execution metadata")
+        case = select_document_annotation_quality_case(
+            args.case, load_document_annotation_quality_cases(),
+        )
+        result = evaluate_document_annotation_quality(payload, case)
+        if isinstance(execution, dict) and isinstance(execution.get("elapsed_ms"), (int, float)):
+            result["latency_ms"] = execution["elapsed_ms"]
+        print(format_document_annotation_quality_result(result))
+        manifest = BenchmarkRunManifest(
+            benchmark_id=f"document-annotation-quality-{args.case}",
+            workload="external-document-annotation-quality",
+            model_profile=BenchmarkModelProfile("Ollama", args.primary_model),
+            architecture_fingerprint="document-annotation-quality-v1-keyword-contract",
+            git_commit=args.git_commit,
+            run_id=args.run_id,
+            hardware={"profile": args.hardware_profile} if args.hardware_profile else {},
+        )
+        record = build_benchmark_result_record(manifest, result, run_id=args.run_id)
+        append_benchmark_result(args.record_ledger, record)
+        print(f"\nRecorded annotation quality result: {record['record_id']} -> {args.record_ledger}")
+
+    elif args.command == "annotation-quality-run":
+        import ollama
+        from pipeline.benchmark import BenchmarkModelProfile, BenchmarkRunManifest
+        from pipeline.document_annotation_quality_eval import (
+            format_document_annotation_quality_result,
+            load_document_annotation_quality_cases,
+            select_document_annotation_quality_case,
+        )
+        from pipeline.document_annotation_quality_runner import run_document_annotation_quality_case
+        from pipeline.experiment_ledger import append_benchmark_result, build_benchmark_result_record
+        from pipeline.providers import OllamaChatProvider
+        case = select_document_annotation_quality_case(
+            args.case, load_document_annotation_quality_cases(),
+        )
+        run = run_document_annotation_quality_case(
+            args.fixture, case, OllamaChatProvider(ollama), args.model,
+        )
+        print(format_document_annotation_quality_result(run.result))
+        print(
+            f"Attempts:           {run.primary_attempts} primary; "
+            f"failed chunks: {run.failed_chunk_count}; elapsed: {run.elapsed_ms:.2f} ms"
+        )
+        manifest = BenchmarkRunManifest(
+            benchmark_id=f"document-annotation-quality-{args.case}",
+            workload="public-external-document-annotation-quality",
+            model_profile=BenchmarkModelProfile("Ollama", args.model),
+            architecture_fingerprint="document-annotation-quality-v1-public-fixture",
+            git_commit=args.git_commit,
+            run_id=args.run_id,
+            hardware={"profile": args.hardware_profile} if args.hardware_profile else {},
+        )
+        record = build_benchmark_result_record(manifest, run.result, run_id=args.run_id)
+        append_benchmark_result(args.record_ledger, record)
+        print(f"Recorded annotation quality run: {record['record_id']} -> {args.record_ledger}")
 
     elif args.command == "assistant-context":
         from pipeline.db import retrieve_assistant_memories, explain_assistant_memory_retrieval

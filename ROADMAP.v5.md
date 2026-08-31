@@ -117,6 +117,15 @@ now one immutable Core policy constant shared by candidate parsing, generation
 prompt construction, and fixtures. It remains narrower than the event-log
 write set; adding a generated type requires an explicit policy change.
 
+**COMPLETED INITIAL C3 NO-CHANGE SLICE:** A strict ordinary-candidate envelope
+may explicitly contain zero candidates. Core renders that as a bounded,
+untrusted no-durable-change outcome; it cannot stage or commit an event.
+
+**COMPLETED INITIAL C3 ORCHESTRATION-EVAL SLICE:** A deterministic temporary-
+workspace benchmark now verifies ordinary candidate generation/validation,
+explicit staging and append-only commit, explicit no-change output, invalid
+envelope rejection, and stale-origin rejection as separately bounded outcomes.
+
 ### C3 typed proposals — LATER C3 extension
 
 State, relationship, character-knowledge, and resource proposals get separate schemas and policies. They are never added by widening the ordinary parser. Resource proposals validate against the immutable catalog before review/staging. Generated corrections/retractions are separate proposal types and must target an active exact event ID.
@@ -140,13 +149,74 @@ First behavioral families:
 - latency, TTFT, load/unload, and resource utilization;
 - long-session, LRU, restart, WSL/Windows, and recovery behavior.
 
-The ledger needs a bounded versioned adventure/routing result schema; current v1 is retrieval-shaped. Preserve sanitized permanent regression fixtures for real failures. Keep retrieval success, candidate extraction success, Core acceptance, canonical projection, and final narration/model-use success as separate outcomes.
+**ADVENTURE-TURN LEDGER SLICE COMPLETED:** The privacy-bounded v1 ledger now accepts a bounded adventure-turn case shape and records generation completion, candidate validation, Core-use/staging, and canonical-commit outcomes separately as counts and aggregate rates. It retains no turn text, provider payload, or narrative prose. Preserve sanitized permanent regression fixtures for real failures. Keep retrieval success, candidate extraction success, Core acceptance, canonical projection, and final narration/model-use success as separate outcomes.
+
+Failure records use only a closed operational category set (for example empty,
+non-JSON, oversized, invalid-envelope, stale-origin, unavailable-profile, or
+provider failures), so real regressions remain comparable without retaining a
+provider response.
 
 Later ablations compare full StarFur with retrieval, association, persona runtime, structured adventure state, or other components disabled, plus a raw-model baseline.
 
 ## Stage E — Provider registry and measured routing (LATER; after C3 coordinator)
 
-1. Add stable task IDs, beginning with `adventure_turn_extraction`, to declarative profiles.
+**COMPLETED INITIAL E1 PLANNING SLICE:** `TaskRoutePlanner` now turns
+declarative task profiles plus caller-supplied bounded provider-status records
+into an acyclic, inspectable route decision. It can identify a primary or
+configured fallback as routable, unavailable, unregistered, or
+capability-incompatible without probing, constructing, or calling a provider.
+It has no access to prompts, memory, adventures, permissions, or execution.
+Runtime diagnostics now expose this plan as a passive preview for configured
+tasks using only existing provider health/lifecycle observations.
+
+**COMPLETED INITIAL E1 CAPABILITY-POLICY SLICE:** Provider-facing task IDs now
+map through one Core-owned capability table (`chat`, `vision`, or
+`image_generation`). Unknown and provider-free tasks are not guessed into a
+route, preventing a profile alone from widening provider authority.
+
+**COMPLETED INITIAL E1 ADAPTER/EXECUTOR SLICE:** Core can now register already-
+constructed chat adapters by stable ID and explicitly execute one preplanned
+route. It does not construct adapters from config, probe health, retry after a
+failure, silently call a fallback after a request starts, persist telemetry, or
+yet replace the existing session provider path. Session integration is the next
+separate smoke-tested gate.
+
+**COMPLETED INITIAL E1 SESSION-ROUTING SLICE:** Normal assistant chat,
+proposal extraction, and explicit generated-adventure-turn calls now resolve
+their bounded route before exactly one request reaches the injected adapter.
+An explicitly unavailable provider is rejected before a call, and a submitted
+request never silently retries or switches provider. The current runtime still
+has one adapter; document annotation retains its separately bounded
+single-provider path pending annotation-specific routing benchmarks.
+
+**COMPLETED INITIAL ANNOTATION RELIABILITY SLICE:** The separate document
+annotation path now permits one explicit bounded content-validation failover:
+two primary attempts followed by one `document_annotation_fallback` attempt.
+An explicit privacy-bounded annotation reliability observation can be written to
+the existing experiment ledger with chunk/candidate/failure counts, model and
+attempt metadata, fallback use, and optional latency only. It never retains
+source text, review IDs, candidates, prompts, or raw provider responses.
+The local CLI can render a read-only aggregate comparison by primary model from
+those ledger observations, exposing only reliability counts, bounded attempt
+metadata, fallback configuration/use, and optional latency.
+Live annotation responses now provide a single bounded extraction elapsed-time
+value for optional ledger recording; structural preparation and raw provider
+details remain outside the public result.
+Checked-in quality contracts can score saved standard annotation responses by
+expected-fact recall, candidate precision, false positives, and missed targets.
+Only aggregate counts enter the ledger; source text and candidate wording stay
+out of it. More fixtures and an evidence-based acceptance policy remain later work.
+The read-only report renders reliability and extraction-quality aggregates
+separately so schema-valid empty output cannot be mistaken for useful recall.
+An explicit CLI benchmark runner can invoke one selected installed model against
+a checked-in public fixture while bypassing reviews and all persistence; it
+records aggregate counts and elapsed time only.
+The stock local profile is Phi-4 Mini primary and Qwen3 8B fallback. It is not
+general provider routing: it neither probes, constructs adapters, persists raw
+output, retries indefinitely, nor grants provider output authority before the
+existing review boundary.
+
+1. Preserve the existing stable task IDs, beginning with `adventure_turn_generation` and `adventure_turn_mutation_generation`, in declarative profiles; add new IDs only through the same validation boundary.
 2. Add a provider/capability registry and pure route planner returning a bounded route decision, profile, budgets, and finite fallback candidates.
 3. Keep Core responsible for sanitized input, validation, permissions, candidate selection, staging, commits, memory, and persona continuity.
 4. Distinguish configured, unprobed, unavailable, unsupported, failed, degraded, and fallback states.

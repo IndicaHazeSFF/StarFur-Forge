@@ -16,6 +16,13 @@
       "expected_ids": []
     },
     {
+      "name": "ordinary_no_change",
+      "kind": "ordinary",
+      "payload": {"schema_version": 1, "candidates": []},
+      "expect_accept": true,
+      "expected_ids": []
+    },
+    {
       "name": "typed_canonical_state",
       "kind": "typed",
       "payload": {"schema_version": 1, "candidates": [{"mutation": {"kind": "state_set", "key": "current_location", "value": "engine room"}, "confidence": 0.8}]},

@@ -1,0 +1,10 @@
+[
+  {
+    "name": "model-comparison-facts",
+    "targets": [
+      {"id": "rice_preference", "memory_type": "preference", "required_terms": ["rice", "jasmine", "basmati"]},
+      {"id": "desktop_gpu", "memory_type": "personal_fact", "required_terms": ["desktop", "rtx", "4070"]},
+      {"id": "starfur_project", "memory_type": "project_context", "required_terms": ["starfur", "forge", "long-term"]}
+    ]
+  }
+]

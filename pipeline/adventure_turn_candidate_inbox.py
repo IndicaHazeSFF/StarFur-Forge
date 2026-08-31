@@ -68,6 +68,11 @@ class AdventureTurnCandidateInbox:
         """Replace this session's noncanonical candidates for one workspace."""
         if not isinstance(result, AdventureTurnGenerationResult):
             raise TypeError("candidate inbox result must be an AdventureTurnGenerationResult")
+        # A valid no-change result is informative in diagnostics, but it is not
+        # a selectable review batch.  Clearing here also guarantees a retry
+        # cannot leave an earlier candidate available for accidental staging.
+        if not result.batch.candidates:
+            return type(self).empty()
         return type(self)(
             record=result.request.record,
             batch=result.batch,

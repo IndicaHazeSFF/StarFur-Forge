@@ -85,14 +85,19 @@ class AdventureTurnProviderTests(unittest.TestCase):
         with self.assertRaisesRegex(AdventureTurnProviderError, "invalid candidate envelope"):
             validate_adventure_turn_provider_result({"schema_version": 1, "candidates": []})
 
-    def test_adapter_accepts_typed_ollama_style_responses_and_fenced_json_before_schema_validation(self):
+    def test_adapter_rejects_fenced_json_before_schema_validation(self):
         content = "```json\n{\"schema_version\":1,\"candidates\":[{\"event_type\":\"discovery\",\"summary\":\"The hatch opens.\",\"confidence\":0.8}]}\n```"
         adapter = ChatAdventureTurnCandidateProvider(_FakeChatProvider(_TypedResponse(content)))
 
-        decoded = adapter.propose(self._request())
-        batch = validate_adventure_turn_provider_result(decoded)
+        with self.assertRaisesRegex(AdventureTurnProviderError, "strict JSON"):
+            adapter.propose(self._request())
 
-        self.assertEqual("TC-001", batch.candidates[0].candidate_id)
+    def test_adapter_rejects_prose_wrappers_before_schema_validation(self):
+        content = 'Here is the JSON: {"schema_version":1,"candidates":[]}'
+        adapter = ChatAdventureTurnCandidateProvider(_FakeChatProvider(_TypedResponse(content)))
+
+        with self.assertRaisesRegex(AdventureTurnProviderError, "strict JSON"):
+            adapter.propose(self._request())
 
     def test_empty_or_oversized_provider_text_fails_before_json_decoding(self):
         for content, expected in (

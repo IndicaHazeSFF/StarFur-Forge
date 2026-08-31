@@ -89,6 +89,39 @@ class DocumentAnnotationResult:
 
     candidates: tuple["DocumentMemoryCandidate", ...]
     failures: tuple[DocumentAnnotationFailure, ...]
+    execution: "DocumentAnnotationExecution | None" = None
+
+
+@dataclass(frozen=True)
+class DocumentAnnotationExecution:
+    """Bounded model-attempt accounting for one non-persistent annotation run."""
+
+    primary_model: str
+    primary_attempts: int
+    fallback_model: str | None = None
+    fallback_attempts: int = 0
+    elapsed_ms: float | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.primary_model, str) or not self.primary_model.strip():
+            raise ValueError("document annotation primary model is invalid")
+        if self.fallback_model is not None and (
+            not isinstance(self.fallback_model, str) or not self.fallback_model.strip()
+        ):
+            raise ValueError("document annotation fallback model is invalid")
+        for value in (self.primary_attempts, self.fallback_attempts):
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ValueError("document annotation attempt count is invalid")
+        if self.elapsed_ms is not None and (
+            isinstance(self.elapsed_ms, bool)
+            or not isinstance(self.elapsed_ms, (int, float))
+            or self.elapsed_ms < 0
+        ):
+            raise ValueError("document annotation elapsed time is invalid")
+
+    @property
+    def fallback_used(self) -> bool:
+        return self.fallback_attempts > 0
 
 @dataclass(frozen=True)
 class DocumentMemoryCandidate:
@@ -358,7 +391,11 @@ def extract_document_memory_candidates_resilient(
                     ))
                     if progress is not None:
                         progress(chunk_number, total_chunks)
-    return DocumentAnnotationResult(tuple(candidates), tuple(failures))
+    summary = getattr(annotator, "execution_summary", None)
+    execution = summary() if callable(summary) else None
+    if execution is not None and not isinstance(execution, DocumentAnnotationExecution):
+        raise TypeError("document annotator execution summary is invalid")
+    return DocumentAnnotationResult(tuple(candidates), tuple(failures), execution)
 
 __all__ = [
     "DEFAULT_MAX_DOCUMENT_BYTES",
@@ -366,6 +403,7 @@ __all__ = [
     "EXTERNAL_UPLOAD_SOURCE",
     "SUPPORTED_DOCUMENT_SUFFIXES",
     "DocumentAnnotationError",
+    "DocumentAnnotationExecution",
     "DocumentAnnotationFailure",
     "DocumentAnnotationResult",
     "DocumentIntakeError",

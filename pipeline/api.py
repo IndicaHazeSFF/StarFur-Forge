@@ -216,6 +216,14 @@ class StarFurAPI:
                 }
                 for failure in annotation.failures
             ],
+            "execution": None if annotation.execution is None else {
+                "primary_model": annotation.execution.primary_model,
+                "primary_attempts": annotation.execution.primary_attempts,
+                "fallback_model": annotation.execution.fallback_model,
+                "fallback_attempts": annotation.execution.fallback_attempts,
+                "fallback_used": annotation.execution.fallback_used,
+                "elapsed_ms": annotation.execution.elapsed_ms,
+            },
             "candidates": [
                 review_candidate_public_payload(candidate_public_id(index), "pending", candidate)
                 for index, candidate in enumerate(candidates)

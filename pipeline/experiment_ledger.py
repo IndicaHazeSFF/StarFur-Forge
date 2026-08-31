@@ -24,6 +24,13 @@ _METRIC_FIELDS = {
     "candidate_acceptance_rate", "candidate_schema_pass_rate",
     "candidate_ordinary_schema_pass_rate", "candidate_typed_schema_pass_rate",
     "candidate_no_change_pass_rate",
+    "generation_success_rate", "candidate_validation_success_rate",
+    "core_use_success_rate", "canonical_commit_success_rate",
+    "annotation_success_rate", "annotation_failed_chunk_count",
+    "annotation_candidate_count", "annotation_primary_attempt_count",
+    "annotation_fallback_attempt_count", "annotation_fallback_used_count",
+    "annotation_quality_recall", "annotation_quality_precision",
+    "annotation_false_positive_count", "annotation_missed_target_count",
 }
 
 
@@ -117,7 +124,104 @@ def _sanitize_case_result(value: Mapping[str, Any]) -> dict[str, Any]:
         return _sanitize_retrieval_case_result(value)
     if {"kind", "expected_accept", "accepted", "expected_ids", "returned_ids"}.issubset(value):
         return _sanitize_candidate_case_result(value)
+    if {"kind", "expected_generation", "actual_generation", "expected_candidates", "actual_candidates", "expected_staged", "actual_staged", "expected_committed", "actual_committed"}.issubset(value):
+        return _sanitize_adventure_turn_case_result(value)
+    if {"kind", "chunk_count", "successful_chunk_count", "failed_chunk_count", "candidate_count", "primary_attempt_count", "fallback_attempt_count", "fallback_used", "pass"}.issubset(value):
+        return _sanitize_document_annotation_case_result(value)
+    if {"kind", "expected_target_count", "matched_target_count", "candidate_count", "false_positive_count", "missed_target_count", "pass"}.issubset(value):
+        return _sanitize_document_annotation_quality_case_result(value)
     raise ValueError("case result schema is unsupported")
+
+
+def _sanitize_adventure_turn_case_result(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Keep orchestration outcomes without retaining turn text or event prose."""
+    name = _bounded_text(value.get("name"), "case name", required=True)
+    if value.get("kind") != "adventure_turn":
+        raise ValueError("adventure-turn case kind is unsupported")
+    allowed_statuses = {"completed", "failed"}
+    expected_generation = value.get("expected_generation")
+    actual_generation = value.get("actual_generation")
+    if expected_generation not in allowed_statuses or actual_generation not in allowed_statuses:
+        raise ValueError("adventure-turn generation status is invalid")
+    counts = {}
+    for field in ("expected_candidates", "actual_candidates", "expected_staged", "actual_staged", "expected_committed", "actual_committed"):
+        count = value.get(field)
+        if isinstance(count, bool) or not isinstance(count, int) or not 0 <= count <= 16:
+            raise ValueError("adventure-turn counts must be integers from 0 through 16")
+        counts[field] = count
+    passed = value.get("pass")
+    if not isinstance(passed, bool):
+        raise ValueError("adventure-turn case pass must be boolean")
+    sanitized = {
+        "name": name, "kind": "adventure_turn",
+        "expected_generation": expected_generation, "actual_generation": actual_generation,
+        **counts, "pass": passed,
+    }
+    if "failure_category" in value and value["failure_category"] is not None:
+        category = _bounded_text(value["failure_category"], "failure_category")
+        if category not in {
+            "response_empty", "response_missing_content", "response_not_json",
+            "response_too_large", "candidate_envelope_invalid",
+            "provider_request_failed", "context_invalid", "stale_origin",
+            "task_profile_unavailable", "none",
+        }:
+            raise ValueError("adventure-turn failure category is unsupported")
+        sanitized["failure_category"] = category
+    return sanitized
+
+
+def _sanitize_document_annotation_case_result(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Keep annotation reliability counts, never source text or model output."""
+    name = _bounded_text(value.get("name"), "case name", required=True)
+    if value.get("kind") != "document_annotation":
+        raise ValueError("document-annotation case kind is unsupported")
+    counts: dict[str, int] = {}
+    for field in (
+        "chunk_count", "successful_chunk_count", "failed_chunk_count", "candidate_count",
+        "primary_attempt_count", "fallback_attempt_count",
+    ):
+        count = value.get(field)
+        if isinstance(count, bool) or not isinstance(count, int) or not 0 <= count <= _MAX_CASES:
+            raise ValueError("document-annotation counts must be bounded non-negative integers")
+        counts[field] = count
+    if counts["successful_chunk_count"] + counts["failed_chunk_count"] != counts["chunk_count"]:
+        raise ValueError("document-annotation chunk totals are inconsistent")
+    if not isinstance(value.get("fallback_used"), bool) or not isinstance(value.get("pass"), bool):
+        raise ValueError("document-annotation fallback_used and pass must be boolean")
+    if value["fallback_used"] != (counts["fallback_attempt_count"] > 0):
+        raise ValueError("document-annotation fallback usage is inconsistent")
+    sanitized = {
+        "name": name, "kind": "document_annotation", **counts,
+        "fallback_used": value["fallback_used"], "pass": value["pass"],
+    }
+    if "fallback_model" in value and value["fallback_model"] is not None:
+        sanitized["fallback_model"] = _bounded_text(value["fallback_model"], "fallback_model")
+    return sanitized
+
+
+def _sanitize_document_annotation_quality_case_result(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Keep quality aggregate counts, never target/candidate wording."""
+    name = _bounded_text(value.get("name"), "case name", required=True)
+    if value.get("kind") != "document_annotation_quality":
+        raise ValueError("document-annotation quality case kind is unsupported")
+    counts: dict[str, int] = {}
+    for field in (
+        "expected_target_count", "matched_target_count", "candidate_count",
+        "false_positive_count", "missed_target_count",
+    ):
+        count = value.get(field)
+        if isinstance(count, bool) or not isinstance(count, int) or not 0 <= count <= _MAX_CASES:
+            raise ValueError("document-annotation quality counts must be bounded non-negative integers")
+        counts[field] = count
+    if not counts["expected_target_count"]:
+        raise ValueError("document-annotation quality expected target count must be positive")
+    if (
+        counts["matched_target_count"] + counts["missed_target_count"] != counts["expected_target_count"]
+        or counts["matched_target_count"] + counts["false_positive_count"] != counts["candidate_count"]
+        or not isinstance(value.get("pass"), bool)
+    ):
+        raise ValueError("document-annotation quality counts are inconsistent")
+    return {"name": name, "kind": "document_annotation_quality", **counts, "pass": value["pass"]}
 
 
 def build_benchmark_result_record(
@@ -145,7 +249,14 @@ def build_benchmark_result_record(
         "irrelevant_result_count", "latency_ms", "time_to_first_token_ms",
         "candidate_acceptance_rate", "candidate_schema_pass_rate",
         "candidate_ordinary_schema_pass_rate", "candidate_typed_schema_pass_rate",
-        "candidate_no_change_pass_rate",
+        "candidate_no_change_pass_rate", "generation_success_rate",
+        "candidate_validation_success_rate", "core_use_success_rate",
+        "canonical_commit_success_rate",
+        "annotation_success_rate", "annotation_failed_chunk_count",
+        "annotation_candidate_count", "annotation_primary_attempt_count",
+        "annotation_fallback_attempt_count", "annotation_fallback_used_count",
+        "annotation_quality_recall", "annotation_quality_precision",
+        "annotation_false_positive_count", "annotation_missed_target_count",
     ):
         if field in result and result[field] is not None:
             metrics[field] = _number(result[field], field)

@@ -100,7 +100,7 @@ class AdventureTurnCandidateBatch:
     def __post_init__(self) -> None:
         if self.schema_version != TURN_CANDIDATE_SCHEMA_VERSION:
             raise AdventureTurnCandidateError("turn candidate schema is unsupported")
-        if not isinstance(self.candidates, tuple) or not self.candidates or len(self.candidates) > MAX_ADVENTURE_TURN_CANDIDATES:
+        if not isinstance(self.candidates, tuple) or len(self.candidates) > MAX_ADVENTURE_TURN_CANDIDATES:
             raise AdventureTurnCandidateError("turn candidate batch size is invalid")
         if not all(isinstance(candidate, AdventureTurnCandidate) for candidate in self.candidates):
             raise TypeError("turn candidate batch contains an invalid candidate")
@@ -155,14 +155,17 @@ def render_adventure_turn_candidate_batch(
     ]
     if generation_id is not None:
         lines.append(f"Generation: {normalize_turn_generation_id(generation_id)}")
-    for candidate in batch.candidates:
-        lines.append(
-            f"{candidate.candidate_id} [{candidate.draft.event_type}] "
-            f"{candidate.draft.summary}"
-        )
-        if candidate.draft.details:
-            lines.append(f"  Details: {candidate.draft.details}")
-        lines.append(f"  Candidate confidence: {candidate.confidence:.2f}")
+    if not batch.candidates:
+        lines.append("(none; the provider proposed no durable ordinary event)")
+    else:
+        for candidate in batch.candidates:
+            lines.append(
+                f"{candidate.candidate_id} [{candidate.draft.event_type}] "
+                f"{candidate.draft.summary}"
+            )
+            if candidate.draft.details:
+                lines.append(f"  Details: {candidate.draft.details}")
+            lines.append(f"  Candidate confidence: {candidate.confidence:.2f}")
     lines.append(
         "Review output only; Core must explicitly validate and stage any "
         "selected candidate before it can be committed."

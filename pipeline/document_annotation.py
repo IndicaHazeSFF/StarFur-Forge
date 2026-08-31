@@ -13,11 +13,17 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping
 
 from pipeline.db import assistant_memory_type_prompt
-from pipeline.document_intake import DocumentAnnotationError, IntakeChunk
+from pipeline.document_intake import (
+    DocumentAnnotationError,
+    DocumentAnnotationExecution,
+    IntakeChunk,
+)
 from pipeline.providers import ChatProvider
 
 
 DOCUMENT_ANNOTATION_MAX_OUTPUT_TOKENS = 1024
+DOCUMENT_ANNOTATION_PRIMARY_RETRY_ATTEMPTS = 2
+DOCUMENT_ANNOTATION_FALLBACK_RETRY_ATTEMPTS = 1
 
 
 def build_document_annotation_messages(chunk: IntakeChunk, *, retry_attempt: int = 1) -> list[dict[str, str]]:
@@ -100,6 +106,7 @@ class DocumentProposalAnnotator:
     options: Mapping[str, Any] | None = None
     max_output_tokens: int = DOCUMENT_ANNOTATION_MAX_OUTPUT_TOKENS
     _options: dict[str, Any] = field(init=False, repr=False)
+    _calls: int = field(default=0, init=False, repr=False)
 
     def __post_init__(self) -> None:
         if not isinstance(self.model, str) or not self.model.strip():
@@ -114,6 +121,7 @@ class DocumentProposalAnnotator:
     def annotate_with_retry(self, chunk: IntakeChunk, *, attempt: int = 1) -> object:
         """Annotate one chunk; later attempts receive an explicit JSON repair cue."""
         messages = build_document_annotation_messages(chunk, retry_attempt=attempt)
+        self._calls += 1
         try:
             response = self.provider.complete(
                 messages, model=self.model, options=self._options, stream=False,
@@ -142,8 +150,79 @@ class DocumentProposalAnnotator:
     def __call__(self, chunk: IntakeChunk) -> object:
         return self.annotate_with_retry(chunk)
 
+    def execution_summary(self) -> DocumentAnnotationExecution:
+        """Return bounded accounting even when no fallback profile is used."""
+        return DocumentAnnotationExecution(
+            primary_model=self.model,
+            primary_attempts=self._calls,
+        )
+
+
+@dataclass
+class FailoverDocumentProposalAnnotator:
+    """Use a bounded primary/fallback sequence for retryable annotation calls.
+
+    The outer document-intake retry loop supplies a monotonically increasing
+    attempt number. This adapter maps its first fixed budget to the faster
+    primary model and its remaining fixed budget to one explicitly configured
+    fallback. It never retries indefinitely, constructs providers, persists
+    candidates, or treats a fallback response as trusted.
+    """
+
+    primary: DocumentProposalAnnotator
+    fallback: DocumentProposalAnnotator
+    primary_attempts: int = DOCUMENT_ANNOTATION_PRIMARY_RETRY_ATTEMPTS
+    fallback_attempts: int = DOCUMENT_ANNOTATION_FALLBACK_RETRY_ATTEMPTS
+    _primary_calls: int = field(default=0, init=False, repr=False)
+    _fallback_calls: int = field(default=0, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.primary, DocumentProposalAnnotator):
+            raise TypeError("document annotation primary adapter is invalid")
+        if not isinstance(self.fallback, DocumentProposalAnnotator):
+            raise TypeError("document annotation fallback adapter is invalid")
+        for value in (self.primary_attempts, self.fallback_attempts):
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                raise ValueError("document annotation retry budget is invalid")
+
+    @property
+    def max_attempts(self) -> int:
+        return self.primary_attempts + self.fallback_attempts
+
+    @property
+    def model(self) -> str:
+        """Expose the initial selected model to existing lifecycle callers."""
+        return self.primary.model
+
+    def annotate_with_retry(self, chunk: IntakeChunk, *, attempt: int = 1) -> object:
+        if isinstance(attempt, bool) or not isinstance(attempt, int) or attempt <= 0:
+            raise ValueError("document annotation attempt is invalid")
+        if attempt <= self.primary_attempts:
+            self._primary_calls += 1
+            return self.primary.annotate_with_retry(chunk, attempt=attempt)
+        if attempt <= self.max_attempts:
+            self._fallback_calls += 1
+            return self.fallback.annotate_with_retry(
+                chunk, attempt=attempt - self.primary_attempts,
+            )
+        raise ValueError("document annotation attempt exceeds the retry budget")
+
+    def __call__(self, chunk: IntakeChunk) -> object:
+        return self.annotate_with_retry(chunk)
+
+    def execution_summary(self) -> DocumentAnnotationExecution:
+        return DocumentAnnotationExecution(
+            primary_model=self.primary.model,
+            primary_attempts=self._primary_calls,
+            fallback_model=self.fallback.model,
+            fallback_attempts=self._fallback_calls,
+        )
+
 __all__ = [
     "DOCUMENT_ANNOTATION_MAX_OUTPUT_TOKENS",
+    "DOCUMENT_ANNOTATION_PRIMARY_RETRY_ATTEMPTS",
+    "DOCUMENT_ANNOTATION_FALLBACK_RETRY_ATTEMPTS",
     "DocumentProposalAnnotator",
+    "FailoverDocumentProposalAnnotator",
     "build_document_annotation_messages",
 ]

@@ -962,7 +962,7 @@ Lists timestamped backups, asks for a backup selection, and requires typing `Sta
 
 ### Shared runtime diagnostics
 
-The local API exposes the bounded, read-only diagnostics snapshot at `GET /v1/starfur/diagnostics` (with the same bearer token as the other endpoints). It reports provider configuration and whether health was probed, active/startup model, capability manifest fingerprint and IDs, fallback state, lifecycle readiness, and the latest recorded turn timings. Normal diagnostics never call Ollama or read/write memory stores. To explicitly run one non-generating provider availability probe, use `GET /v1/starfur/diagnostics?probe=provider`; it reports only health status, timestamp, model count when available, and a bounded error message.
+The local API exposes the bounded, read-only diagnostics snapshot at `GET /v1/starfur/diagnostics` (with the same bearer token as the other endpoints). It reports provider configuration and whether health was probed, active/startup model, capability manifest fingerprint and IDs, fallback state, lifecycle readiness, and the latest recorded turn timings. Its `routing` section is a passive preview of whether configured task profiles would be routable through the current provider status; it does not switch, probe, or call a provider. Normal diagnostics never call Ollama or read/write memory stores. To explicitly run one non-generating provider availability probe, use `GET /v1/starfur/diagnostics?probe=provider`; it reports only health status, timestamp, model count when available, and a bounded error message.
 
 `GET /v1/starfur/persona-runtime` returns the active conversation's bounded persona-runtime snapshot for future dashboard, TUI, and apartment presentation. It includes public identity/trait/state metadata and local record counts only. It does not call a model, seed a persona state, reveal prompts or raw evidence, modify memory stores, or edit configuration.
 ## Capability-aware assistant explanations
@@ -1020,8 +1020,50 @@ A reviewed document candidate affects assistant chat only after normal proposal 
 
 The ledger stores versioned manifest metadata, expected/returned fixture memory IDs, retrieval scores/reasons, aggregate metrics, and pass/fail results. It deliberately rejects raw prompts and responses, and does not read production assistant memory or Chroma.
 
+Adventure-turn benchmark results use the same opt-in ledger and keep the pipeline outcomes separate: generation completion, candidate validation, Core-use/staging, and canonical commit are recorded as bounded counts and rates. Turn text, provider payloads, and narrative prose are never retained by this result schema. This distinction lets a failed model response be measured separately from a successful Core commit or final narration-quality review.
+
+`python starfur.py adventure-turn-eval` runs the deterministic C3 orchestration fixture suite in temporary adventure workspaces. It tests valid candidate review/stage/commit, explicit no-change output, invalid envelopes, and stale-origin rejection without invoking a model or touching an installed adventure. Add `--record-ledger <path>` to retain the bounded outcome record.
+
 ### Task/provider profiles
 
-`config/assistant.json` may declare validated `task_profiles` for workloads such as `assistant_chat`, `assistant_proposal`, `adventure_turn_generation`, `document_annotation`, `coding`, `vision`, and `image_generation`. A profile may declare a provider label, model, bounded generation settings, context size, output ceiling, and a future fallback task name. Profiles do not route requests or construct providers yet; `adventure_turn_generation` is the narrow explicit generated-candidate path through the current active provider.
+`config/assistant.json` may declare validated `task_profiles` for workloads such as `assistant_chat`, `assistant_proposal`, `adventure_turn_generation`, `document_annotation`, `coding`, `vision`, and `image_generation`. A profile may declare a provider label, model, bounded generation settings, context size, output ceiling, and a fallback task name. Profiles do not construct or probe providers. Normal session chat, proposal extraction, and generated-adventure-turn calls now form a deterministic route from bounded provider status and submit it through one already-injected chat adapter. The route is chosen before the request; a provider failure never triggers an implicit second request or model fallback.
+
+Document annotation has its own bounded content-validation policy: the configured `document_annotation` profile receives two attempts for a chunk, then the explicit `document_annotation_fallback` profile receives one attempt only when the primary output remained invalid. The current stock configuration is Phi-4 Mini first and Qwen3 8B fallback. A valid empty proposal list ends the sequence normally. Annotation results expose only model labels, bounded attempt counts, and whether fallback ran; no provider output is retained. Both paths remain review-only and create no memory until the existing explicit review/approval flow.
+
+After an explicit annotation request, record its bounded reliability outcome without retaining source text, review IDs, candidates, prompts, or provider output:
+
+    python starfur.py annotation-eval-record \
+      --primary-model phi4-mini:latest --primary-attempts 2 \
+      --fallback-model qwen3:8b --fallback-attempts 1 \
+      --chunks 1 --failed-chunks 0 --candidates 3 \
+      --record-ledger data/experiment_ledger.jsonl
+
+Use the `execution` object returned by `/documents/annotate` for attempt counts and `elapsed_ms` for the optional latency value. A valid empty candidate list is still a successful reliability result; fact quality remains a separate reviewed benchmark concern.
+
+Compare all recorded annotation observations without reading source documents or model output:
+
+    python starfur.py annotation-eval-report --ledger data/experiment_ledger.jsonl
+
+The report shows reliability and extraction quality separately: a schema-valid
+empty candidate list can pass reliability but correctly fail quality recall.
+
+For checked-in quality fixtures, save a standard (non-progress-streaming) API
+annotation response locally, then score only its structured candidates. The
+ledger receives recall, precision, false-positive, missed-target, and optional
+latency counts—not candidate wording or source text:
+
+    python starfur.py annotation-quality-eval \
+      --response /tmp/phi4-model-comparison.json \
+      --case model-comparison-facts \
+      --primary-model phi4-mini:latest \
+      --record-ledger data/experiment_ledger.jsonl
+
+Run the checked-in public fixture directly against one installed Ollama model.
+This is an explicit provider call, but it creates no review, proposal, memory,
+or semantic entry:
+
+    python starfur.py annotation-quality-run \
+      --model phi4-mini:latest \
+      --record-ledger data/experiment_ledger.jsonl
 
 An `assistant_chat` profile model establishes Assistant Mode's startup default; later `model use` selections still control chat and proposal calls for that session. Document annotation may use its own configured model. If a profile names a provider other than the already active provider, StarFur fails clearly rather than silently substituting a backend.

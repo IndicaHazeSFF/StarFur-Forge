@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.modules.setdefault("ollama", types.ModuleType("ollama"))
 
 from pipeline.application import AssistantApplication, create_assistant_application
-from pipeline.document_intake import prepare_document_text
+from pipeline.document_intake import DocumentAnnotationExecution, prepare_document_text
 from pipeline.persona_registry import PersonaRegistry, load_persona_package
 from pipeline.system_metrics import SystemMetricsSnapshot
 
@@ -367,6 +367,22 @@ class AssistantApplicationTests(unittest.TestCase):
         self.assertEqual(candidates[0].proposal["source"], "external_document_annotation")
         self.assertEqual(session.calls, [])
         self.assertEqual(lifecycle.events, [("begin", False, "fake:latest"), ("finish",)])
+
+    def test_document_annotation_adds_elapsed_time_to_bounded_execution_accounting(self):
+        class TimedAnnotator:
+            def __call__(self, _chunk):
+                return {"proposals": []}
+
+            def execution_summary(self):
+                return DocumentAnnotationExecution("phi4-mini:latest", 1, "qwen3:8b", 0)
+
+        app = AssistantApplication(FakeSession())
+        document = prepare_document_text("No durable facts.", "notes.md", domain="personal")
+        with patch("pipeline.application.perf_counter", side_effect=(10.0, 11.25)):
+            result = app.annotate_document(document, annotator=TimedAnnotator())
+        self.assertEqual("phi4-mini:latest", result.execution.primary_model)
+        self.assertEqual(1250.0, result.execution.elapsed_ms)
+
     def test_document_proposal_handoff_uses_existing_writer_with_original_provenance(self):
         writes = []
 
@@ -413,6 +429,20 @@ class AssistantApplicationTests(unittest.TestCase):
         self.assertIsNone(snapshot["latest_turn"])
         self.assertTrue(snapshot["capabilities"]["ids"])
         self.assertIsNone(snapshot["lifecycle"])
+        self.assertEqual("unavailable", snapshot["routing"]["provider"]["status"])
+        self.assertEqual("unavailable", snapshot["routing"]["tasks"]["assistant_chat"]["status"])
+
+    def test_runtime_diagnostics_include_passive_provider_route_preview(self):
+        session = FakeSession()
+        session.provider = HealthyProvider()
+        app = AssistantApplication(session)
+
+        snapshot = app.runtime_diagnostics()
+
+        self.assertEqual("unprobed", snapshot["routing"]["provider"]["status"])
+        chat = snapshot["routing"]["tasks"]["assistant_chat"]
+        self.assertEqual("routable", chat["status"])
+        self.assertEqual("unprobed", chat["candidates"][0]["provider_status"])
 
     def test_explicit_provider_probe_records_only_bounded_health_metadata(self):
         session = FakeSession()

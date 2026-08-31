@@ -217,26 +217,16 @@ def _response_content(response: object) -> str:
 
 
 def _parse_json_content(content: str) -> object:
-    """Parse direct, fenced, or prose-wrapped JSON before schema validation.
+    """Parse only a direct JSON document, never a wrapper or prose fragment.
 
-    Local models sometimes add a short preamble despite the JSON-only contract.
-    This only recovers one outer object; the closed candidate schema remains the
-    authority and rejects anything unsafe or unsupported afterward.
+    Candidate output is an authority-sensitive boundary. Fences, preambles,
+    suffixes, and multiple documents are rejected instead of being heuristically
+    recovered, so provider formatting failures remain visible and retry-safe.
     """
     text = content.strip()
-    if text.startswith("```"):
-        lines = text.splitlines()
-        lines = lines[1:]
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        text = "\n".join(lines).strip()
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        start, end = text.find("{"), text.rfind("}")
-        if start < 0 or end <= start:
-            raise
-        return json.loads(text[start:end + 1])
+    if not text:
+        raise json.JSONDecodeError("empty provider response", text, 0)
+    return json.loads(text)
 
 
 __all__ = [

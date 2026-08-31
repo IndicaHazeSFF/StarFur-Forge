@@ -13,7 +13,7 @@ from pipeline.adventure_registry import AdventureRegistry
 from pipeline.assistant import AssistantConfig, AssistantSession, load_config
 from pipeline.document_intake import prepare_document_text
 from pipeline.task_profiles import (
-    TASK_ADVENTURE_TURN_GENERATION, TASK_ADVENTURE_TURN_MUTATION_GENERATION, TASK_ASSISTANT_CHAT, TASK_DOCUMENT_ANNOTATION, TaskProfile, TaskProfiles,
+    TASK_ADVENTURE_TURN_GENERATION, TASK_ADVENTURE_TURN_MUTATION_GENERATION, TASK_ASSISTANT_CHAT, TASK_DOCUMENT_ANNOTATION, TASK_DOCUMENT_ANNOTATION_FALLBACK, TaskProfile, TaskProfiles,
     load_task_profiles,
 )
 
@@ -106,6 +106,36 @@ class TaskProfileTests(unittest.TestCase):
         self.assertEqual(provider.calls[0]["model"], "annotation-model")
         self.assertEqual(provider.calls[0]["options"], {"temperature": 0.1, "num_predict": 333})
 
+    def test_document_annotation_uses_explicit_bounded_fallback_profile(self):
+        profiles = TaskProfiles({
+            TASK_DOCUMENT_ANNOTATION: TaskProfile(
+                TASK_DOCUMENT_ANNOTATION, provider="ollama", model="phi4-mini:latest",
+                fallback_task=TASK_DOCUMENT_ANNOTATION_FALLBACK,
+            ),
+            TASK_DOCUMENT_ANNOTATION_FALLBACK: TaskProfile(
+                TASK_DOCUMENT_ANNOTATION_FALLBACK, provider="ollama", model="qwen3:8b",
+            ),
+        })
+        provider = FakeProvider()
+        calls = []
+
+        def complete(messages, *, model=None, options=None, stream=False):
+            calls.append(model)
+            content = "not json" if model == "phi4-mini:latest" else json.dumps({"proposals": []})
+            return {"message": {"content": content}}
+
+        provider.complete = complete
+        session = AssistantSession(
+            config_with_profiles(profiles), "Persona", provider=provider,
+            memory_loader=lambda **_kwargs: [], policy="Policy",
+        )
+        document = prepare_document_text("No durable facts.", "notes.md", domain="personal")
+        result = AssistantApplication(session).annotate_document(document)
+
+        self.assertEqual((), result.candidates)
+        self.assertEqual(["phi4-mini:latest", "phi4-mini:latest", "qwen3:8b"], calls)
+        self.assertTrue(result.execution.fallback_used)
+
     def test_mismatched_profile_provider_fails_instead_of_routing_silently(self):
         profiles = TaskProfiles({
             TASK_ASSISTANT_CHAT: TaskProfile(TASK_ASSISTANT_CHAT, provider="another-provider"),
@@ -114,8 +144,20 @@ class TaskProfileTests(unittest.TestCase):
             config_with_profiles(profiles), "Persona", provider=FakeProvider(),
             memory_loader=lambda **_kwargs: [], policy="Policy",
         )
-        with self.assertRaisesRegex(RuntimeError, "requires provider"):
+        with self.assertRaisesRegex(RuntimeError, "no configured provider route"):
             session.respond("hello")
+
+    def test_explicitly_unavailable_provider_never_receives_a_routed_session_call(self):
+        provider = FakeProvider()
+        session = AssistantSession(
+            config_with_profiles(TaskProfiles()), "Persona", provider=provider,
+            memory_loader=lambda **_kwargs: [], policy="Policy",
+        )
+        session.provider_health_snapshot = {"status": "unavailable"}
+
+        with self.assertRaisesRegex(RuntimeError, "no configured provider route"):
+            session.respond("hello")
+        self.assertEqual([], provider.calls)
 
     def test_adventure_turn_profile_uses_its_own_model_and_options(self):
         profiles = TaskProfiles({

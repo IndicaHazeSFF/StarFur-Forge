@@ -45,6 +45,14 @@ class AdventureTurnCandidateTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             render_adventure_turn_candidate_batch(object())
 
+    def test_empty_ordinary_batch_is_a_valid_no_durable_change_outcome(self):
+        batch = parse_untrusted_adventure_turn_candidates({
+            "schema_version": 1,
+            "candidates": [],
+        })
+        self.assertEqual((), batch.candidates)
+        self.assertIn("no durable ordinary event", render_adventure_turn_candidate_batch(batch))
+
     def test_structured_or_malformed_provider_data_fails_before_any_staging_or_write(self):
         with self.assertRaisesRegex(AdventureTurnCandidateError, "not permitted"):
             parse_untrusted_adventure_turn_candidates({
