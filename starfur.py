@@ -704,7 +704,7 @@ def main():
             benchmark_id="external-document-annotation-observation",
             workload="external-document-annotation-reliability",
             model_profile=BenchmarkModelProfile("Ollama", args.primary_model),
-            architecture_fingerprint="document-annotation-reliability-v1-2-primary-1-fallback",
+            architecture_fingerprint="document-annotation-reliability-v1-bounded-validation",
             git_commit=args.git_commit,
             run_id=args.run_id,
             hardware={"profile": args.hardware_profile} if args.hardware_profile else {},

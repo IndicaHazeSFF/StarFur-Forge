@@ -444,6 +444,41 @@ class AssistantApplicationTests(unittest.TestCase):
         self.assertEqual("routable", chat["status"])
         self.assertEqual("unprobed", chat["candidates"][0]["provider_status"])
 
+    def test_runtime_diagnostics_expose_only_bounded_completed_turn_route_trace(self):
+        session = FakeSession()
+        session.last_turn_diagnostics = {
+            "turn_status": "completed", "completed": True,
+            "model": "qwen3:8b", "provider": "Ollama",
+            "response_characters": 12, "response_latency_ms": 24.0,
+            "time_to_first_token_ms": None, "proposal_outcome": "skipped",
+            "task_routes": [{
+                "requested_task_id": "assistant_chat", "selected_task_id": "assistant_chat",
+                "provider": "ollama", "model": "qwen3:8b",
+                "fallback_used": False, "outcome": "submitted",
+            }],
+        }
+        snapshot = AssistantApplication(session).runtime_diagnostics()
+
+        self.assertEqual([{
+            "requested_task_id": "assistant_chat", "selected_task_id": "assistant_chat",
+            "provider": "ollama", "model": "qwen3:8b",
+            "fallback_used": False, "outcome": "submitted",
+        }], snapshot["latest_turn"]["task_routes"])
+
+    def test_runtime_diagnostics_drop_malformed_or_unbounded_turn_route_trace_data(self):
+        session = FakeSession()
+        session.last_turn_diagnostics = {
+            "task_routes": [
+                {"requested_task_id": "assistant_chat", "selected_task_id": "assistant_chat", "provider": "ollama", "model": "qwen3:8b", "fallback_used": False, "outcome": "submitted"},
+                {"requested_task_id": "assistant_chat", "selected_task_id": "assistant_chat", "provider": "ollama", "model": "x" * 257, "fallback_used": False, "outcome": "submitted", "raw_provider_output": "must not leak"},
+                {"requested_task_id": "assistant_chat", "selected_task_id": "assistant_chat", "provider": "ollama", "model": "qwen3:8b", "fallback_used": "no", "outcome": "submitted"},
+            ],
+        }
+        snapshot = AssistantApplication(session).runtime_diagnostics()
+
+        self.assertEqual(1, len(snapshot["latest_turn"]["task_routes"]))
+        self.assertNotIn("raw_provider_output", snapshot["latest_turn"]["task_routes"][0])
+
     def test_explicit_provider_probe_records_only_bounded_health_metadata(self):
         session = FakeSession()
         provider = HealthyProvider()

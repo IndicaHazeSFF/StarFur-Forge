@@ -61,6 +61,7 @@
       <div class="card"><span class="label">Persona</span><span id="persona" class="value">—</span></div>
       <div class="card"><span class="label">Resident action</span><span id="resident-action" class="value">—</span></div>
       <div class="card"><span class="label">Provider / model</span><span id="provider" class="value">—</span></div>
+      <div class="card"><span class="label">Last routed task</span><span id="last-route" class="value">—</span></div>
       <div class="card"><span class="label">Adventure</span><span id="adventure" class="value">—</span></div>
       <div class="card"><span class="label">Roleplay</span><span id="roleplay" class="value">—</span></div>
       <div class="card"><span class="label">Turn staging</span><span id="turn" class="value">—</span></div>
@@ -96,6 +97,11 @@
         const residentAction = p.resident_action || {};
         value(byId('resident-action'), `${residentAction.kind || 'idle'} · ${residentAction.source || 'core_default'}`);
         value(byId('provider'), `${provider.name || 'unavailable'} · ${provider.model || '—'} · ${provider.health || 'unknown'}`);
+        const routes = Array.isArray(turn.last_task_routes) ? turn.last_task_routes : [];
+        const lastRoute = routes.at(-1);
+        value(byId('last-route'), lastRoute
+          ? `${lastRoute.requested_task_id || 'task'} · ${lastRoute.model || '—'} · ${lastRoute.outcome || 'unknown'}`
+          : 'No routed task yet');
         value(byId('adventure'), adventure.mounted ? `${adventure.title || 'Untitled'} · ${adventure.event_count || 0} events` : 'No adventure mounted');
         value(byId('roleplay'), roleplay.active ? `Active${roleplay.title ? ` · ${roleplay.title}` : ''}` : 'Inactive');
         value(byId('turn'), turn.active ? `Active · ${turn.staged_count || 0} staged` : 'No staged turn');

@@ -89,7 +89,7 @@ from pipeline.document_review import DEFAULT_REVIEW_TTL_SECONDS
 
 from pipeline.capabilities import CapabilityManifest
 from pipeline.command_help import detect_command_help
-from pipeline.providers import CallableChatProvider, ChatProvider, OllamaChatProvider
+from pipeline.providers import CallableChatProvider, ChatProvider, OllamaChatProvider, provider_health_snapshot
 from pipeline.provider_registry import ChatProviderRegistration, ChatProviderRegistry
 from pipeline.provider_state import ProviderLifecycle
 from pipeline.retrieval import DeterministicMemoryRetriever, MemoryLoaderRetriever, MemoryRetriever
@@ -324,6 +324,7 @@ class AssistantSession:
         self.last_turn_diagnostics = None
         self._current_context_diagnostics = None
         self._current_proposal_diagnostics = {"ran": False, "outcome": "skipped"}
+        self._current_task_routes = []
         self._generation_started_at = None
         self._first_token_seconds = None
         self._turn_started_at = None
@@ -415,6 +416,7 @@ class AssistantSession:
         return visible, decisions
 
     def _begin_turn_diagnostics(self, plan: ContextPlan, retrieved, phase_timings=None, visibility_decisions=()):
+        self._current_task_routes = []
         selected = []
         for item in retrieved:
             memory = item.get("memory", {})
@@ -467,10 +469,12 @@ class AssistantSession:
             ),
             "proposal_ran": bool((proposal or {}).get("ran")),
             "proposal_outcome": (proposal or {}).get("outcome", "skipped"),
+            "task_routes": list(self._current_task_routes),
             "completion_estimated_tokens": estimate_tokens(response or ""),
             "total_turn_ms": round((time.perf_counter() - self._turn_started_at) * 1000, 2) if self._turn_started_at is not None else None,
         }
         self._current_context_diagnostics = None
+        self._current_task_routes = []
         self._generation_started_at = None
         self._first_token_seconds = None
         self._turn_started_at = None
@@ -543,6 +547,16 @@ class AssistantSession:
         capability_ids = snapshot.get("selected_capability_ids", [])
         if capability_ids:
             lines.append("Capability context: " + ", ".join(capability_ids))
+        task_routes = snapshot.get("task_routes") or []
+        if task_routes:
+            lines.append("Task routes:")
+            for item in task_routes:
+                fallback = " (configured fallback)" if item.get("fallback_used") else ""
+                lines.append(
+                    f"  {item.get('requested_task_id', 'unknown')} -> "
+                    f"{item.get('provider', 'unknown')} / {item.get('model', 'unknown')} "
+                    f"[{item.get('outcome', 'unknown')}]" + fallback
+                )
         document_chunks = snapshot.get("selected_document_chunk_ids", [])
         if document_chunks:
             lines.append(
@@ -636,6 +650,60 @@ class AssistantSession:
         _, decision = self._task_route(task_id, model=model)
         return decision.selected.profile
 
+    def routing_status(self):
+        """Render configured task routes without probing or calling a provider."""
+        health = getattr(self, "provider_health_snapshot", {})
+        lifecycle = self.provider_lifecycle.snapshot()
+        status = provider_route_status_from_runtime(
+            self._provider_name or "unknown",
+            configured=self.provider is not None,
+            health_status=health.get("status", "not_probed"),
+            lifecycle_state=lifecycle.state,
+        )
+        profiles = getattr(self.config, "task_profiles", TaskProfiles())
+        planner = TaskRoutePlanner(profiles, ProviderRouteRegistry({status.provider_id: status}))
+        task_ids = tuple(sorted(profiles.profiles)) or (TASK_ASSISTANT_CHAT,)
+        lines = [f"Task routing status: provider {status.provider_id} ({status.status})"]
+        for task_id in task_ids:
+            try:
+                decision = planner.plan(
+                    task_id,
+                    default_model=self.active_model,
+                    default_provider_id=status.provider_id,
+                    base_options=self._ollama_options(),
+                )
+            except Exception as error:
+                lines.append(f"{task_id}: invalid route ({error})")
+                continue
+            selected = decision.selected
+            if selected is None:
+                reason = decision.candidates[0].reason if decision.candidates else "unavailable"
+                lines.append(f"{task_id}: unavailable ({reason})")
+                continue
+            marker = " via configured fallback" if decision.selected_index else ""
+            lines.append(
+                f"{task_id}: {selected.provider_id} / {selected.profile.model} "
+                f"[{selected.provider_status or 'unknown'}]{marker}"
+            )
+        return "\n".join(lines) + "\nRead-only route preview; no provider was probed or called."
+
+    def routing_probe(self):
+        """Explicitly probe the active provider without generating text."""
+        snapshot = provider_health_snapshot(self.provider)
+        self.provider_health_snapshot = snapshot
+        provider_id = self._provider_name or "unknown"
+        state = provider_route_status_from_runtime(
+            provider_id,
+            configured=self.provider is not None,
+            health_status=snapshot["status"],
+        ).status
+        if state == "available":
+            count = snapshot.get("model_count")
+            suffix = "" if count is None else f" ({count} model(s) reported)"
+            return f"Task routing probe: provider {provider_id} is available{suffix}. No text was generated."
+        detail = snapshot.get("error") or "No additional detail is available."
+        return f"Task routing probe: provider {provider_id} is {state}. {detail} No text was generated."
+
     def _model_request_kwargs(self, messages, *, model=None, task_id=TASK_ASSISTANT_CHAT):
         profile = self._task_profile(task_id, model=model)
         kwargs = {"model": profile.model, "messages": messages}
@@ -651,10 +719,26 @@ class AssistantSession:
         self.provider_lifecycle.begin_generation(stream=stream, model=selected.profile.model)
         try:
             execution = executor.execute_planned(decision, messages, stream=stream)
+            self._current_task_routes.append({
+                "requested_task_id": decision.requested_task_id,
+                "selected_task_id": execution.task_id,
+                "provider": execution.provider_id,
+                "model": selected.profile.model,
+                "fallback_used": decision.selected_index not in (None, 0),
+                "outcome": "submitted",
+            })
             if not stream:
                 self.provider_lifecycle.finish()
             return execution.response
         except RoutedTaskExecutionError as error:
+            self._current_task_routes.append({
+                "requested_task_id": decision.requested_task_id,
+                "selected_task_id": selected.task_id,
+                "provider": selected.provider_id,
+                "model": selected.profile.model,
+                "fallback_used": decision.selected_index not in (None, 0),
+                "outcome": error.reason,
+            })
             self.provider_lifecycle.fail(error)
             raise RuntimeError(str(error)) from error
         except Exception as error:
@@ -2991,6 +3075,10 @@ class AssistantSession:
             lowered = "persona current"
         if lowered == "context stats":
             return self.context_stats()
+        if lowered in {"routing status", "route status"}:
+            return self.routing_status()
+        if lowered in {"routing probe", "route probe"}:
+            return self.routing_probe()
         if lowered == "roleplay status":
             return self.roleplay_status()
         if lowered == "roleplay end":
@@ -3164,6 +3252,8 @@ class AssistantSession:
                 "Unknown or malformed resident command. Use resident status or "
                 "resident action <idle|resting|reading|working|waiting|chatting|adventuring>."
             )
+        if lowered == "routing" or lowered.startswith("routing ") or lowered == "route" or lowered.startswith("route "):
+            return "Unknown or malformed routing command. Use routing status or routing probe."
         if lowered in {"model list", "list models"}:
             try:
                 return self.model_list()
@@ -3461,7 +3551,7 @@ def run_interactive(config_path=DEFAULT_CONFIG_PATH, input_fn=input, output_fn=p
         stream_writer=stream_writer,
     )
     session = application.session
-    output_fn("StarFur Assistant (model list/current/use, persona list/current/use/inspect, roleplay begin/end/status, adventure list/create/inspect/load/resume/restart/status/events/checkpoints/corrections/correct/retract/state/relationships/knowledge/turn/pause/end/unload, remember/forget, memory list/search/inspect/scope, proposal list/inspect/approve/reject/approve all/scope, context stats; quit to exit)")
+    output_fn("StarFur Assistant (model list/current/use, routing status/probe, persona list/current/use/inspect, roleplay begin/end/status, adventure list/create/inspect/load/resume/restart/status/events/checkpoints/corrections/correct/retract/state/relationships/knowledge/turn/pause/end/unload, remember/forget, memory list/search/inspect/scope, proposal list/inspect/approve/reject/approve all/scope, context stats; quit to exit)")
     while True:
         try:
             user_text = input_fn("You: ")

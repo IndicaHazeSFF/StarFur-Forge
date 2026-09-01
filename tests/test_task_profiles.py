@@ -23,6 +23,7 @@ class FakeProvider:
 
     def __init__(self):
         self.calls = []
+        self.probe_calls = 0
 
     def complete(self, messages, *, model=None, options=None, stream=False):
         self.calls.append({"model": model, "options": dict(options or {}), "stream": stream})
@@ -30,6 +31,10 @@ class FakeProvider:
 
     def list_models(self):
         return {"models": [{"model": "chat-model"}]}
+
+    def probe_health(self):
+        self.probe_calls += 1
+        return self.list_models()
 
 
 def config_with_profiles(profiles):
@@ -82,6 +87,14 @@ class TaskProfileTests(unittest.TestCase):
         self.assertEqual(session.respond("hello"), "answer")
         self.assertEqual(provider.calls[0]["model"], "chat-model")
         self.assertEqual(provider.calls[0]["options"], {"temperature": 0.4, "top_p": 0.8, "num_ctx": 2048})
+        self.assertEqual([{
+            "requested_task_id": "assistant_chat",
+            "selected_task_id": "assistant_chat",
+            "provider": "ollama",
+            "model": "chat-model",
+            "fallback_used": False,
+            "outcome": "submitted",
+        }], session.last_turn_diagnostics["task_routes"])
 
     def test_document_annotation_uses_its_profile_without_touching_chat(self):
         profiles = TaskProfiles({
@@ -136,6 +149,32 @@ class TaskProfileTests(unittest.TestCase):
         self.assertEqual(["phi4-mini:latest", "phi4-mini:latest", "qwen3:8b"], calls)
         self.assertTrue(result.execution.fallback_used)
 
+    def test_document_annotation_without_fallback_retries_the_selected_primary_only(self):
+        profiles = TaskProfiles({
+            TASK_DOCUMENT_ANNOTATION: TaskProfile(
+                TASK_DOCUMENT_ANNOTATION, provider="ollama", model="qwen3:8b",
+            ),
+        })
+        provider = FakeProvider()
+        calls = []
+
+        def complete(messages, *, model=None, options=None, stream=False):
+            calls.append(model)
+            return {"message": {"content": "not json"}}
+
+        provider.complete = complete
+        session = AssistantSession(
+            config_with_profiles(profiles), "Persona", provider=provider,
+            memory_loader=lambda **_kwargs: [], policy="Policy",
+        )
+        result = AssistantApplication(session).annotate_document(
+            prepare_document_text("No durable facts.", "notes.md", domain="personal"),
+        )
+
+        self.assertEqual(["qwen3:8b", "qwen3:8b", "qwen3:8b"], calls)
+        self.assertIsNone(result.execution.fallback_model)
+        self.assertFalse(result.execution.fallback_used)
+
     def test_mismatched_profile_provider_fails_instead_of_routing_silently(self):
         profiles = TaskProfiles({
             TASK_ASSISTANT_CHAT: TaskProfile(TASK_ASSISTANT_CHAT, provider="another-provider"),
@@ -146,6 +185,41 @@ class TaskProfileTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(RuntimeError, "no configured provider route"):
             session.respond("hello")
+
+    def test_routing_status_is_read_only_and_reports_configured_models(self):
+        profiles = TaskProfiles({
+            TASK_ASSISTANT_CHAT: TaskProfile(TASK_ASSISTANT_CHAT, provider="ollama", model="chat-model"),
+            TASK_DOCUMENT_ANNOTATION: TaskProfile(TASK_DOCUMENT_ANNOTATION, provider="ollama", model="annotation-model"),
+        })
+        provider = FakeProvider()
+        session = AssistantSession(
+            config_with_profiles(profiles), "Persona", provider=provider,
+            memory_loader=lambda **_kwargs: [], policy="Policy",
+        )
+
+        result = session.command("routing status")
+
+        self.assertIn("assistant_chat: ollama / chat-model [unprobed]", result)
+        self.assertIn("document_annotation: ollama / annotation-model [unprobed]", result)
+        self.assertIn("Read-only route preview", result)
+        self.assertEqual([], provider.calls)
+        self.assertEqual(0, provider.probe_calls)
+
+    def test_routing_probe_is_explicit_non_generating_and_updates_route_status(self):
+        provider = FakeProvider()
+        session = AssistantSession(
+            config_with_profiles(TaskProfiles()), "Persona", provider=provider,
+            memory_loader=lambda **_kwargs: [], policy="Policy",
+        )
+
+        result = session.command("routing probe")
+
+        self.assertIn("provider ollama is available (1 model(s) reported)", result)
+        self.assertIn("No text was generated", result)
+        self.assertEqual("healthy", session.provider_health_snapshot["status"])
+        self.assertIn("assistant_chat: ollama / chat-model [available]", session.command("routing status"))
+        self.assertEqual([], provider.calls)
+        self.assertEqual(1, provider.probe_calls)
 
     def test_explicitly_unavailable_provider_never_receives_a_routed_session_call(self):
         provider = FakeProvider()

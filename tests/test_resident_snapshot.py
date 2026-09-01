@@ -41,7 +41,11 @@ class ResidentSnapshotTests(unittest.TestCase):
             capability_ids=("assistant.chat",),
             adventure={"mounted": True, "title": "Quiet Ember", "hidden_resource": "ammo=9"},
             roleplay={"active": True, "title": "Quiet Ember"},
-            turn={"active": True, "staged_count": 2, "drafts": ["private"]},
+            turn={"active": True, "staged_count": 2, "drafts": ["private"], "last_task_routes": [{
+                "requested_task_id": "assistant_chat", "selected_task_id": "assistant_chat",
+                "provider": "ollama", "model": "qwen3:8b", "fallback_used": False, "outcome": "submitted",
+                "raw_provider_output": "private",
+            }, {"requested_task_id": "assistant_chat", "selected_task_id": "assistant_chat", "provider": "ollama", "model": "x" * 257, "fallback_used": False, "outcome": "submitted"}]},
             candidates={"ordinary_count": 1, "mutation_count": 0, "body": "private"},
         )
 
@@ -55,6 +59,9 @@ class ResidentSnapshotTests(unittest.TestCase):
         self.assertNotIn("raw", payload["system_metrics"]["gpu"])
         self.assertNotIn("hidden_resource", payload["adventure"])
         self.assertNotIn("drafts", payload["adventure_turn"])
+        self.assertEqual("assistant_chat", payload["adventure_turn"]["last_task_routes"][0]["requested_task_id"])
+        self.assertEqual(1, len(payload["adventure_turn"]["last_task_routes"]))
+        self.assertNotIn("raw_provider_output", payload["adventure_turn"]["last_task_routes"][0])
         self.assertNotIn("body", payload["candidate_inbox"])
 
     def test_explicit_resident_action_keeps_zero_provider_presentation_available(self):

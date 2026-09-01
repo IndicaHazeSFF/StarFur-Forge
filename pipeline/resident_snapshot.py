@@ -20,6 +20,9 @@ _ACTIVITIES = frozenset({
     "provider_error", "provider_unavailable",
 })
 _PROVIDER_BUSY_STATES = frozenset({"connecting", "loading", "generating", "streaming", "cooling", "unloading"})
+_ROUTE_TRACE_OUTCOMES = frozenset({
+    "submitted", "route_unavailable", "provider_adapter_unavailable", "provider_request_failed",
+})
 
 
 def _bounded_mapping(value: object, *, allowed: frozenset[str]) -> dict[str, Any]:
@@ -27,6 +30,33 @@ def _bounded_mapping(value: object, *, allowed: frozenset[str]) -> dict[str, Any
     if not isinstance(value, Mapping):
         return {}
     return {key: value[key] for key in allowed if key in value}
+
+
+def _bounded_route_trace(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    result = []
+    for item in value[:8]:
+        if not isinstance(item, Mapping):
+            continue
+        fields = {key: item.get(key) for key in (
+            "requested_task_id", "selected_task_id", "provider", "model", "fallback_used", "outcome",
+        )}
+        if not all(isinstance(fields[key], str) and fields[key] for key in ("requested_task_id", "selected_task_id", "provider", "model")):
+            continue
+        if len(fields["model"]) > 256 or not isinstance(fields["fallback_used"], bool) or fields["outcome"] not in _ROUTE_TRACE_OUTCOMES:
+            continue
+        result.append(fields)
+    return result
+
+
+def _resident_turn_public(value: object) -> dict[str, object]:
+    """Render the turn read model without adding an empty compatibility field."""
+    turn = _bounded_mapping(value, allowed=frozenset({"active", "staged_count"}))
+    routes = _bounded_route_trace(value.get("last_task_routes") if isinstance(value, Mapping) else None)
+    if routes:
+        turn["last_task_routes"] = routes
+    return turn
 
 
 def derive_resident_activity(
@@ -147,9 +177,7 @@ class ResidentSnapshot:
             "roleplay": _bounded_mapping(self.roleplay, allowed=frozenset({
                 "active", "title", "storage",
             })),
-            "adventure_turn": _bounded_mapping(self.turn, allowed=frozenset({
-                "active", "staged_count",
-            })),
+            "adventure_turn": _resident_turn_public(self.turn),
             "candidate_inbox": _bounded_mapping(self.candidates, allowed=frozenset({
                 "ordinary_count", "mutation_count", "storage",
             })),

@@ -342,6 +342,18 @@ automatically.
     model use <model-name>
 
 `model list` calls Ollama's Python client API and marks the active model. `model use` verifies the exact installed model (tags such as `qwen3:8b` are supported) and changes only the current assistant session; it does not rewrite configuration, conversation history, proposals, SQLite, or Chroma. The selected model is used for subsequent chat and proposal-extraction calls. `context stats` continues to show the model used for its recorded turn.
+
+Inspect the configured task/profile route preview without calling or probing a provider:
+
+    routing status
+
+This shows the resolved provider/model for each configured typed task and any configured pre-request fallback. It is descriptive only; it cannot switch models, execute a task, or alter configuration.
+
+Run one explicit, non-generating availability check for the already configured provider:
+
+    routing probe
+
+This calls only the provider's supported model-list health method and retains a bounded session-local status, timestamp, optional model count, and bounded error message. It never generates text, changes the selected model, reads or writes memory, or exposes a model-list payload. Run `routing status` afterward to see the updated route availability.
 ## Assistant Proposal Provenance
 
 Automatic assistant-memory proposals are derived from user observations only.
@@ -943,7 +955,7 @@ Assistant chat now reaches Ollama through a narrow `ChatProvider` adapter. This 
 
     context stats
 
-Interactive assistant command that displays the bounded diagnostics snapshot for the latest completed or interrupted conversational turn: model/provider, persona/runtime-state/policy sizes, prompt and response character counts, estimated token counts, recent-context size, selected memory IDs with deterministic scores/reasons, per-persona shared-memory visibility decisions, latency, stream first-token timing, and proposal outcome. It is read-only: it does not invoke a model, query/write memory stores, or retain raw prompts/conversation text.
+Interactive assistant command that displays the bounded diagnostics snapshot for the latest completed or interrupted conversational turn: model/provider, typed task-route summaries, persona/runtime-state/policy sizes, prompt and response character counts, estimated token counts, recent-context size, selected memory IDs with deterministic scores/reasons, per-persona shared-memory visibility decisions, latency, stream first-token timing, and proposal outcome. Route summaries show only task ID, selected provider/model, configured-fallback marker, and submitted/failure category; they never expose prompts, raw provider output, memory content, or provider payloads. The command is read-only: it does not invoke a model, query/write memory stores, or retain raw prompts/conversation text.
 
 
 Hidden development reset (not shown in normal help):
@@ -962,9 +974,9 @@ Lists timestamped backups, asks for a backup selection, and requires typing `Sta
 
 ### Shared runtime diagnostics
 
-The local API exposes the bounded, read-only diagnostics snapshot at `GET /v1/starfur/diagnostics` (with the same bearer token as the other endpoints). It reports provider configuration and whether health was probed, active/startup model, capability manifest fingerprint and IDs, fallback state, lifecycle readiness, and the latest recorded turn timings. Its `routing` section is a passive preview of whether configured task profiles would be routable through the current provider status; it does not switch, probe, or call a provider. Normal diagnostics never call Ollama or read/write memory stores. To explicitly run one non-generating provider availability probe, use `GET /v1/starfur/diagnostics?probe=provider`; it reports only health status, timestamp, model count when available, and a bounded error message.
+The local API exposes the bounded, read-only diagnostics snapshot at `GET /v1/starfur/diagnostics` (with the same bearer token as the other endpoints). It reports provider configuration and whether health was probed, active/startup model, capability manifest fingerprint and IDs, fallback state, lifecycle readiness, and the latest recorded turn timings plus its bounded task-route trace. Its `routing` section is a passive preview of whether configured task profiles would be routable through the current provider status; it does not switch, probe, or call a provider. Normal diagnostics never call Ollama or read/write memory stores. To explicitly run one non-generating provider availability probe, use `GET /v1/starfur/diagnostics?probe=provider`; it reports only health status, timestamp, model count when available, and a bounded error message.
 
-`GET /v1/starfur/persona-runtime` returns the active conversation's bounded persona-runtime snapshot for future dashboard, TUI, and apartment presentation. It includes public identity/trait/state metadata and local record counts only. It does not call a model, seed a persona state, reveal prompts or raw evidence, modify memory stores, or edit configuration.
+`GET /v1/starfur/persona-runtime` returns the active conversation's bounded persona-runtime snapshot for future dashboard, TUI, and apartment presentation. It includes public identity/trait/state metadata and local record counts only. It does not call a model, seed a persona state, reveal prompts or raw evidence, modify memory stores, or edit configuration. `GET /v1/starfur/resident-snapshot` additionally includes the last completed turn's bounded task-route summary in its adventure-turn read model; it is informational and cannot drive provider selection or state mutation.
 ## Capability-aware assistant explanations
 
 StarFur Core owns a structured capability manifest rather than placing feature knowledge in persona files. During ordinary conversation no capability block is added. Explicit questions such as `What can you do?` receive the current public capability manifest; narrowly named features such as memory proposals or model switching receive only matching capability entries. Persona controls presentation, while Core remains authoritative for what is currently supported. This does not expose private databases, hidden reasoning, or unregistered future features.
@@ -1028,17 +1040,17 @@ Adventure-turn benchmark results use the same opt-in ledger and keep the pipelin
 
 `config/assistant.json` may declare validated `task_profiles` for workloads such as `assistant_chat`, `assistant_proposal`, `adventure_turn_generation`, `document_annotation`, `coding`, `vision`, and `image_generation`. A profile may declare a provider label, model, bounded generation settings, context size, output ceiling, and a fallback task name. Profiles do not construct or probe providers. Normal session chat, proposal extraction, and generated-adventure-turn calls now form a deterministic route from bounded provider status and submit it through one already-injected chat adapter. The route is chosen before the request; a provider failure never triggers an implicit second request or model fallback.
 
-Document annotation has its own bounded content-validation policy: the configured `document_annotation` profile receives two attempts for a chunk, then the explicit `document_annotation_fallback` profile receives one attempt only when the primary output remained invalid. The current stock configuration is Phi-4 Mini first and Qwen3 8B fallback. A valid empty proposal list ends the sequence normally. Annotation results expose only model labels, bounded attempt counts, and whether fallback ran; no provider output is retained. Both paths remain review-only and create no memory until the existing explicit review/approval flow.
+Document annotation has its own bounded content-validation policy: the configured `document_annotation` profile may receive two attempts for a chunk, then an explicitly configured `document_annotation_fallback` profile may receive one attempt only when the primary output remained invalid. The current stock configuration uses Qwen3 8B alone for all three bounded attempts. Phi-4 Mini remains an explicit benchmark/experimental model rather than an automatic intake fallback, because the first public quality runs produced schema-valid empty output with zero expected-fact recall. A valid empty proposal list ends the sequence normally. Annotation results expose only model labels, bounded attempt counts, and whether fallback ran; no provider output is retained. Both paths remain review-only and create no memory until the existing explicit review/approval flow.
 
 After an explicit annotation request, record its bounded reliability outcome without retaining source text, review IDs, candidates, prompts, or provider output:
 
     python starfur.py annotation-eval-record \
-      --primary-model phi4-mini:latest --primary-attempts 2 \
-      --fallback-model qwen3:8b --fallback-attempts 1 \
+      --primary-model qwen3:8b --primary-attempts 3 \
+      --fallback-attempts 0 \
       --chunks 1 --failed-chunks 0 --candidates 3 \
       --record-ledger data/experiment_ledger.jsonl
 
-Use the `execution` object returned by `/documents/annotate` for attempt counts and `elapsed_ms` for the optional latency value. A valid empty candidate list is still a successful reliability result; fact quality remains a separate reviewed benchmark concern.
+Use the `execution` object returned by `/documents/annotate` for the exact model labels, attempt counts, fallback use, and `elapsed_ms` latency value. The reliability benchmark fingerprint identifies the bounded-validation contract; the recorded model and attempt fields, rather than a hard-coded primary/fallback label, identify the observed route. A valid empty candidate list is still a successful reliability result; fact quality remains a separate reviewed benchmark concern.
 
 Compare all recorded annotation observations without reading source documents or model output:
 
@@ -1053,9 +1065,9 @@ ledger receives recall, precision, false-positive, missed-target, and optional
 latency counts—not candidate wording or source text:
 
     python starfur.py annotation-quality-eval \
-      --response /tmp/phi4-model-comparison.json \
+      --response /tmp/qwen-model-comparison.json \
       --case model-comparison-facts \
-      --primary-model phi4-mini:latest \
+      --primary-model qwen3:8b \
       --record-ledger data/experiment_ledger.jsonl
 
 Run the checked-in public fixture directly against one installed Ollama model.

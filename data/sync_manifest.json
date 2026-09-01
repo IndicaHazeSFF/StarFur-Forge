@@ -1,21 +1,9 @@
 {
   "annotator_version": 3,
-  "chunker_version": 3,
+  "chunker_version": 2,
   "files": {
-    "canon/chapters/01-routine.md": {
-      "hash": "388dc74332ef8df7548818a25878b45d8fe075d43776603cb90cc3477fc0cf8c"
-    },
-    "canon/chapters/03-classification.md": {
-      "hash": "37d8eff121f1fa5637249820530ef94fed713a9f427a64633ca778cee69c9cb2"
-    },
-    "canon/chapters/07-trunkline.md": {
-      "hash": "a40e01305903c8570cd3f1a24c741fae71b54b7b9c67529e0eaca38c75e75036"
-    },
-    "canon/chapters/10-pressure-points.md": {
-      "hash": "021114dd611b73781389340f473f80586e20fb16d09fbabaad6464fc9adc5c9a"
-    },
-    "canon/chapters/13-another-marker-dimmed-on-the-wall-display.md": {
-      "hash": "47e65269df368e5a66312f987d5600d71035d75c7f998d534525f776448a2036"
+    "canon/manuscript/chapter-prologue.md": {
+      "hash": "8b2469b8303091c846d965fd9c11dba4607e15515f87315d47a5787ad5f61cfe"
     }
   },
   "sync_version": 1

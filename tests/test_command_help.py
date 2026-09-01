@@ -34,6 +34,11 @@ class CommandHelpTests(unittest.TestCase):
         self.assertIn("model current", rendered)
         self.assertIn("model use <model-name>", rendered)
 
+    def test_routing_help_returns_the_read_only_control(self):
+        payload = detect_command_help("How do I inspect routing?")
+        self.assertEqual(payload.intent, "routing_status")
+        self.assertEqual(("routing status", "routing probe"), payload.commands)
+
     def test_adventure_state_help_returns_exact_core_commands(self):
         payload = detect_command_help("How do I set story state?")
         self.assertEqual(payload.intent, "adventure_registry")

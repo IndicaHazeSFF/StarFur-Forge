@@ -130,6 +130,17 @@ def detect_command_help(query: str) -> CommandHelp | None:
             notes=("Changing models affects later chat and proposal-extraction calls in this session.",),
         )
 
+    if _contains_any(value, (
+        "how do i inspect routing", "how can i inspect routing", "how do i see routing",
+        "how can i see routing", "how do i check task routes", "how can i check task routes",
+    )):
+        return CommandHelp(
+            intent="routing_status",
+            title="To view the configured task/provider route preview, use:",
+            commands=("routing status", "routing probe"),
+            notes=("`routing status` is read-only. `routing probe` explicitly performs one non-generating provider availability check; neither command switches a provider.",),
+        )
+
     if _contains_any(value, ("how do i inspect the persona", "how can i inspect the persona", "how do i inspect murr", "how can i inspect murr")):
         return CommandHelp(
             intent="persona_inspection",

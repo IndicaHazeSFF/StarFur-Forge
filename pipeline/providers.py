@@ -7,10 +7,46 @@ tests and integrations.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Callable, Iterable, Mapping, Protocol, runtime_checkable
 
 
 ChatMessages = Iterable[Mapping[str, str]]
+
+
+def provider_health_snapshot(provider: object) -> dict[str, object]:
+    """Run one bounded, non-generating provider health probe.
+
+    The result is caller-owned ephemeral state. It deliberately retains only
+    availability metadata, never a provider payload or exception object.
+    """
+    checked_at = datetime.now(timezone.utc).isoformat()
+    probe = getattr(provider, "probe_health", None)
+    if not callable(probe):
+        return {
+            "status": "unsupported", "probe_performed": True,
+            "checked_at": checked_at, "model_count": None,
+            "error": "Provider health probing is unavailable.",
+        }
+    try:
+        response = probe()
+    except NotImplementedError as error:
+        return {
+            "status": "unsupported", "probe_performed": True,
+            "checked_at": checked_at, "model_count": None, "error": str(error)[:300],
+        }
+    except Exception as error:
+        return {
+            "status": "unavailable", "probe_performed": True,
+            "checked_at": checked_at, "model_count": None, "error": str(error)[:300],
+        }
+    models = response.get("models") if isinstance(response, dict) else getattr(response, "models", None)
+    return {
+        "status": "healthy", "probe_performed": True,
+        "checked_at": checked_at,
+        "model_count": len(models) if isinstance(models, (list, tuple)) else None,
+        "error": None,
+    }
 
 
 @runtime_checkable

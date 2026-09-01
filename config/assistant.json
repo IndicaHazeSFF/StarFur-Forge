@@ -6,21 +6,24 @@
       "persona_id": "murr",
       "display_name": "Murr",
       "persona_path": "persona/default.md",
-      "minimum_shared_memory_confidence": 0,
+      "asset_slots": {
+        "idle": "Assets/Murr/Murr_S_Idle.png"
+      },
+      "minimum_shared_memory_confidence": 0.0,
       "allowed_memory_scopes": null
     },
     {
       "persona_id": "neutral",
       "display_name": "Neutral",
       "persona_path": "persona/neutral.md",
-      "minimum_shared_memory_confidence": 0,
+      "minimum_shared_memory_confidence": 0.0,
       "allowed_memory_scopes": null
     },
     {
       "persona_id": "nova",
       "display_name": "Nova",
       "persona_path": "persona/nova.md",
-      "minimum_shared_memory_confidence": 0,
+      "minimum_shared_memory_confidence": 0.0,
       "allowed_memory_scopes": null
     }
   ],
@@ -36,20 +39,11 @@
     "assistant_chat": {},
     "assistant_proposal": {},
     "document_annotation": {
-      "max_output_tokens": 1024,
-      "model": "phi4-mini:latest",
-      "fallback_task": "document_annotation_fallback"
-    },
-    "adventure_turn_generation": {
-      "max_output_tokens": 1024
-    },
-    "adventure_turn_mutation_generation": {
-      "max_output_tokens": 512
-    },
-    "document_annotation_fallback": {
       "model": "qwen3:8b",
       "max_output_tokens": 1024
-    }
+    },
+      "adventure_turn_generation": {"max_output_tokens": 1024},
+      "adventure_turn_mutation_generation": {"max_output_tokens": 512}
   },
   "policy_path": "config/assistant_policy.md"
 }

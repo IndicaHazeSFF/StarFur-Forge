@@ -11,7 +11,6 @@ from __future__ import annotations
 from collections import OrderedDict
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
-from datetime import datetime, timezone
 import re
 import threading
 from time import perf_counter
@@ -38,6 +37,7 @@ from pipeline.persona_asset_resolver import InstalledPersonaAssetPackage, Person
 from pipeline.persona_assets import BUILTIN_MURR_ASSET_MANIFEST
 from pipeline.persona_registry import PersonaRegistry, load_persona_package
 from pipeline.persona_runtime import PersonaRuntimeRegistry
+from pipeline.providers import provider_health_snapshot
 from pipeline.resident_presentation import ResidentPresentationPlan
 from pipeline.resident_snapshot import ResidentSnapshot
 from pipeline.system_metrics import LocalSystemMetricsProvider, NullSystemMetricsProvider, SystemMetricsProvider, SystemMetricsSnapshot
@@ -46,6 +46,10 @@ from pipeline.system_metrics import LocalSystemMetricsProvider, NullSystemMetric
 DEFAULT_CONVERSATION_ID = "default"
 DEFAULT_MAX_CONVERSATIONS = 16
 _CONVERSATION_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}\Z")
+_ROUTE_TRACE_ID_RE = re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")
+_ROUTE_TRACE_OUTCOMES = frozenset({
+    "submitted", "route_unavailable", "provider_adapter_unavailable", "provider_request_failed",
+})
 
 
 @dataclass
@@ -76,6 +80,37 @@ def normalize_conversation_id(value) -> str:
             "Conversation identifier must use 1-128 letters, numbers, dots, underscores, colons, at-signs, or hyphens."
         )
     return key
+
+
+def _bounded_task_route_trace(value: object) -> list[dict[str, object]]:
+    """Copy only a small, public completed-turn route trace for diagnostics."""
+    if not isinstance(value, (list, tuple)):
+        return []
+    bounded: list[dict[str, object]] = []
+    for item in value[:8]:
+        if not isinstance(item, dict):
+            continue
+        requested = item.get("requested_task_id")
+        selected = item.get("selected_task_id")
+        provider = item.get("provider")
+        model = item.get("model")
+        outcome = item.get("outcome")
+        fallback_used = item.get("fallback_used")
+        if not all(isinstance(part, str) and _ROUTE_TRACE_ID_RE.fullmatch(part) for part in (requested, selected, provider)):
+            continue
+        if not isinstance(model, str) or not model.strip() or len(model) > 256:
+            continue
+        if outcome not in _ROUTE_TRACE_OUTCOMES or not isinstance(fallback_used, bool):
+            continue
+        bounded.append({
+            "requested_task_id": requested,
+            "selected_task_id": selected,
+            "provider": provider,
+            "model": model,
+            "fallback_used": fallback_used,
+            "outcome": outcome,
+        })
+    return bounded
 
 
 class AssistantApplication:
@@ -152,51 +187,9 @@ class AssistantApplication:
             "error": None,
         }))
 
-    @staticmethod
-    def _model_count_from_probe(response):
-        models = response.get("models") if isinstance(response, dict) else getattr(response, "models", None)
-        return len(models) if isinstance(models, (list, tuple)) else None
-
     def _probe_provider_for_session(self, session):
         """Run one explicit non-generating provider probe and retain its result."""
-        provider = getattr(session, "provider", None)
-        checked_at = datetime.now(timezone.utc).isoformat()
-        probe = getattr(provider, "probe_health", None)
-        if not callable(probe):
-            snapshot = {
-                "status": "unsupported",
-                "probe_performed": True,
-                "checked_at": checked_at,
-                "model_count": None,
-                "error": "Provider health probing is unavailable.",
-            }
-        else:
-            try:
-                response = probe()
-            except NotImplementedError as error:
-                snapshot = {
-                    "status": "unsupported",
-                    "probe_performed": True,
-                    "checked_at": checked_at,
-                    "model_count": None,
-                    "error": str(error)[:300],
-                }
-            except Exception as error:
-                snapshot = {
-                    "status": "unavailable",
-                    "probe_performed": True,
-                    "checked_at": checked_at,
-                    "model_count": None,
-                    "error": str(error)[:300],
-                }
-            else:
-                snapshot = {
-                    "status": "healthy",
-                    "probe_performed": True,
-                    "checked_at": checked_at,
-                    "model_count": self._model_count_from_probe(response),
-                    "error": None,
-                }
+        snapshot = provider_health_snapshot(getattr(session, "provider", None))
         session.provider_health_snapshot = snapshot
         return dict(snapshot)
 
@@ -385,6 +378,9 @@ class AssistantApplication:
                 turn={
                     "active": getattr(turn, "active", False) is True,
                     "staged_count": len(getattr(turn, "drafts", ())),
+                    "last_task_routes": _bounded_task_route_trace(
+                        (getattr(session, "last_turn_diagnostics", None) or {}).get("task_routes")
+                    ),
                 },
                 candidates={
                     "ordinary_count": candidate_count(ordinary_inbox),
@@ -531,6 +527,7 @@ class AssistantApplication:
                     "response_latency_ms": snapshot.get("response_latency_ms"),
                     "time_to_first_token_ms": snapshot.get("time_to_first_token_ms"),
                     "proposal_outcome": snapshot.get("proposal_outcome", "skipped"),
+                    "task_routes": _bounded_task_route_trace(snapshot.get("task_routes")),
                     "phase_timings": phase_timings,
                 }
             manifest = self.capability_manifest

@@ -211,10 +211,13 @@ separately so schema-valid empty output cannot be mistaken for useful recall.
 An explicit CLI benchmark runner can invoke one selected installed model against
 a checked-in public fixture while bypassing reviews and all persistence; it
 records aggregate counts and elapsed time only.
-The stock local profile is Phi-4 Mini primary and Qwen3 8B fallback. It is not
-general provider routing: it neither probes, constructs adapters, persists raw
-output, retries indefinitely, nor grants provider output authority before the
-existing review boundary.
+The stock local profile is now Qwen3 8B primary-only after the first checked-in
+quality fixture showed Phi-4 Mini could be transport-valid yet return no
+expected facts. Phi remains an explicit benchmark candidate, not a silent
+fallback, until additional public quality evidence supports a bounded role.
+This is not general provider routing: it neither probes, constructs adapters,
+persists raw output, retries indefinitely, nor grants provider output authority
+before the existing review boundary.
 
 1. Preserve the existing stable task IDs, beginning with `adventure_turn_generation` and `adventure_turn_mutation_generation`, in declarative profiles; add new IDs only through the same validation boundary.
 2. Add a provider/capability registry and pure route planner returning a bounded route decision, profile, budgets, and finite fallback candidates.
