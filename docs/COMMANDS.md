@@ -347,7 +347,7 @@ Inspect the configured task/profile route preview without calling or probing a p
 
     routing status
 
-This shows the resolved provider/model for each configured typed task and any configured pre-request fallback. It is descriptive only; it cannot switch models, execute a task, or alter configuration.
+This shows the resolved provider/model, bounded context/output budgets, and any configured pre-request fallback for each typed task. It is descriptive only; it cannot switch models, execute a task, or alter configuration.
 
 Run one explicit, non-generating availability check for the already configured provider:
 

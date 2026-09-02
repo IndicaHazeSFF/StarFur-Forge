@@ -205,6 +205,18 @@ class TaskProfileTests(unittest.TestCase):
         self.assertEqual([], provider.calls)
         self.assertEqual(0, provider.probe_calls)
 
+        budgeted = AssistantSession(
+            config_with_profiles(TaskProfiles({
+                TASK_DOCUMENT_ANNOTATION: TaskProfile(
+                    TASK_DOCUMENT_ANNOTATION, provider="ollama", model="annotation-model",
+                    context_size=2048, max_output_tokens=333,
+                ),
+            })), "Persona", provider=provider,
+            memory_loader=lambda **_kwargs: [], policy="Policy",
+        )
+        budgeted_status = budgeted.command("routing status")
+        self.assertIn("document_annotation: ollama / annotation-model [unprobed] (context=2048, output=333)", budgeted_status)
+
     def test_routing_probe_is_explicit_non_generating_and_updates_route_status(self):
         provider = FakeProvider()
         session = AssistantSession(
@@ -214,7 +226,7 @@ class TaskProfileTests(unittest.TestCase):
 
         result = session.command("routing probe")
 
-        self.assertIn("provider ollama is available (1 model(s) reported)", result)
+        self.assertIn("provider Ollama is available (1 model(s) reported)", result)
         self.assertIn("No text was generated", result)
         self.assertEqual("healthy", session.provider_health_snapshot["status"])
         self.assertIn("assistant_chat: ollama / chat-model [available]", session.command("routing status"))

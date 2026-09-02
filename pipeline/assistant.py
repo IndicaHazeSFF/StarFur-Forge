@@ -681,9 +681,16 @@ class AssistantSession:
                 lines.append(f"{task_id}: unavailable ({reason})")
                 continue
             marker = " via configured fallback" if decision.selected_index else ""
+            public_candidate = decision.public_dict()["candidates"][decision.selected_index]
+            budgets = []
+            if public_candidate.get("context_size") is not None:
+                budgets.append(f"context={public_candidate['context_size']}")
+            if public_candidate.get("max_output_tokens") is not None:
+                budgets.append(f"output={public_candidate['max_output_tokens']}")
+            budget_text = f" ({', '.join(budgets)})" if budgets else ""
             lines.append(
                 f"{task_id}: {selected.provider_id} / {selected.profile.model} "
-                f"[{selected.provider_status or 'unknown'}]{marker}"
+                f"[{selected.provider_status or 'unknown'}]{budget_text}{marker}"
             )
         return "\n".join(lines) + "\nRead-only route preview; no provider was probed or called."
 

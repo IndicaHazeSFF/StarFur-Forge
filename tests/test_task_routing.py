@@ -32,6 +32,25 @@ class TaskRoutingTests(unittest.TestCase):
         self.assertEqual("unprobed", decision.selected.provider_status)
         self.assertFalse(decision.public_dict()["fallback_used"])
 
+    def test_public_route_candidates_expose_only_bounded_model_budgets(self):
+        planner = self._planner(
+            {"assistant_chat": TaskProfile(
+                "assistant_chat", provider="ollama", model="qwen3:8b",
+                context_size=4096, max_output_tokens=512,
+            )},
+            {"ollama": ProviderRouteStatus("ollama", "available")},
+        )
+
+        candidate = planner.plan(
+            "assistant_chat", default_model="default", default_provider_id="ollama",
+        ).public_dict()["candidates"][0]
+
+        self.assertEqual("qwen3:8b", candidate["model"])
+        self.assertEqual(4096, candidate["context_size"])
+        self.assertEqual(512, candidate["max_output_tokens"])
+        self.assertNotIn("messages", candidate)
+        self.assertNotIn("prompt", candidate)
+
     def test_uses_configured_fallback_when_primary_provider_is_unavailable(self):
         planner = self._planner(
             {

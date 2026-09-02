@@ -98,7 +98,14 @@ def task_required_capability(task_id: object) -> str:
     try:
         return _TASK_CAPABILITIES[normalized]
     except KeyError as error:
-        raise TaskRoutePlanningError("task has no provider-routing capability") from error
+            raise TaskRoutePlanningError("task has no provider-routing capability") from error
+
+
+def _bounded_budget(value: object) -> int | None:
+    """Expose only positive integer provider-budget options in read models."""
+    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+        return min(value, 1_000_000)
+    return None
 
 
 @dataclass(frozen=True)
@@ -186,9 +193,12 @@ class TaskRouteDecision:
                 {
                     "task_id": item.task_id,
                     "provider": item.provider_id,
+                    "model": item.profile.model,
                     "provider_status": item.provider_status,
                     "eligible": item.eligible,
                     "reason": item.reason,
+                    "context_size": _bounded_budget(item.profile.options.get("num_ctx")),
+                    "max_output_tokens": _bounded_budget(item.profile.options.get("num_predict")),
                 }
                 for item in self.candidates
             ],

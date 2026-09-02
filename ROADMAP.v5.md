@@ -236,6 +236,56 @@ Typed tool registry, explicit scopes, read-only versus mutating tools, confirmat
 
 Permissioned one-shot screen/window/image/PDF inspection, TTS/STT, image generation, notifications, and presence signals through the provider registry. Media is bounded and provenance-bearing; generated images are noncanonical. Voice uses explicit push-to-talk/always-listen settings, confidence, cancellation, and interruption policy. Continuous surveillance is never the default.
 
+### Synchronized media companionship — FUTURE G/H SLICE
+
+Add an explicit, opt-in `MediaSession` for watching a movie, episode, or other
+time-based media together. Prefer player/browser metadata, OS media-session data,
+subtitle timing, or an integration adapter to establish title and playback
+position; use one-shot vision only as a fallback verifier. Core must expose only
+events at or before the verified playback timestamp, enforcing a user-selected
+spoiler policy before any provider or persona sees the context. Pause, seek,
+rewind, skip, identity uncertainty, and provider failure must be deterministic
+and fail quiet. Murr may use initiative/attention state to choose between no
+reaction, an expression/animation, or an occasional comment; frequent
+interruption is not a goal. The session may later produce an explicit shared-
+experience memory, but media metadata and reactions are not automatically
+canonical personal memories. Apartment presentation may show `watching_media` and
+safe activity cues; it may not infer content or mutate the session.
+
+Recommended vertical order: manual fixture with title/position -> spoiler-safe
+timeline projection -> pause/seek handling -> resident activity/animation ->
+metadata integration -> optional vision verification -> explicit shared-memory
+capture. This remains separate from the adventure event log, though an adventure
+may later consume the same bounded media-session interface.
+
+### Synchronized reading companionship — FUTURE G/H SLICE
+
+Add an explicit, opt-in `ReadingSession` for reading a novel, ebook, PDF, or
+browser document alongside the active persona. Prefer reader/browser metadata,
+accessibility text, DOM anchors, page/scroll position, and text selections; use
+vision or OCR only as a fallback for unsupported readers. Core keeps the source
+document stable and indexed, then exposes only the current passage plus bounded
+read-so-far continuity and a spoiler boundary to the provider. It must not
+reprocess the entire book on every page turn.
+
+Each book receives an isolated `reading:<book-id>` persona notebook containing
+bounded plot/character notes, themes, reactions, questions, continuity
+observations, and prior comments. A narrowly configured activity policy may let
+Core automatically accept low-risk book-local persona notes without interrupting
+the user; this is not model self-approval and cannot create user facts, alter
+real-world relationships, grant permissions, or escape the book namespace.
+User-approved shared-experience memories may later record that the user and
+persona read a work together. Murr's initiative decides whether a page turn gets
+silence, an expression/animation, or an occasional comment, with interruption
+cooldowns and explicit quiet modes.
+
+Recommended vertical order: reader-neutral fixture with document identity and
+position -> bounded passage/continuity projection -> page/scroll and selection
+events -> persona reading notebook -> quiet/commentary behavior -> browser or
+ebook bridge -> optional vision/OCR fallback -> explicit cross-book preference
+and recommendation support. Keep reader state separate from canonical manuscript
+truth, adventure history, and unrestricted assistant memory.
+
 ## Stage H — Apartment/dashboard prototype (LATER; read-only first)
 
 ### H0. ResidentSnapshot contract — COMPLETED INITIAL SLICE

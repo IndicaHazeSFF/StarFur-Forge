@@ -417,6 +417,52 @@ adventure state remain separate. Add simulation, offline-catch-up, recap, and bo
 
 ### Stage 6 - Tools, perception, and resident environment
 
+#### Synchronized media companionship (future)
+
+Support an explicit, opt-in `MediaSession` for watching a movie, episode, or
+other time-based media with the active persona. Prefer player/browser metadata,
+OS media-session information, subtitle timing, or a dedicated integration to
+identify the work and playback position; vision should be an occasional fallback
+verifier rather than continuous surveillance. Core owns the verified timestamp
+and spoiler boundary, exposing only media events that have already occurred to a
+provider or persona. Pause, seek, rewind, skip, uncertain identity, and provider
+failure must fail safely and quietly. Persona initiative determines whether to
+remain silent, animate, or make an occasional comment. Apartment presentation
+may expose a bounded `watching_media` activity, but cannot infer content or
+mutate canonical state.
+
+Implement this as small vertical slices: a title/position fixture, spoiler-safe
+timeline projection, pause/seek handling, resident activity cues, metadata
+integration, optional vision verification, and finally explicit user-approved
+shared-experience memory. Keep it separate from adventure history; an adventure
+may later consume the same bounded media-session context.
+
+#### Synchronized reading companionship (future)
+
+Add an explicit, opt-in `ReadingSession` for reading a novel, ebook, PDF, or
+browser document alongside the active persona. Prefer reader/browser metadata,
+accessibility text, DOM anchors, page/scroll position, and selections; use vision
+or OCR only as a fallback. Core keeps the source document stable and indexed and
+exposes only the current passage plus bounded read-so-far continuity and a
+spoiler boundary. It must not reprocess the entire book on every page turn.
+
+Each book should have an isolated `reading:<book-id>` persona notebook for
+bounded plot/character notes, themes, reactions, questions, continuity
+observations, and prior comments. A narrowly configured activity policy may let
+Core automatically accept low-risk book-local persona notes without interrupting
+the user; this is not model self-approval and cannot create user facts, alter
+real-world relationships, grant permissions, or escape the book namespace.
+User-approved shared-experience memories may record that the user and persona
+read a work together. Initiative and quiet-mode rules decide whether a page turn
+gets silence, an expression/animation, or an occasional comment.
+
+Implement as small vertical slices: reader-neutral identity/position fixture,
+bounded passage projection, page/scroll/selection events, persona reading
+notebook, quiet/commentary behavior, browser or ebook bridge, optional vision/OCR
+fallback, and explicit cross-book preference/recommendation support. Keep reader
+state separate from canonical manuscript truth, adventure history, and
+unrestricted assistant memory.
+
 1. Add structured tool registry and permission engine with allow-once, always-allow, deny, and confirmation-required policies.
 2. **IN PROGRESS:** Add document intake for large external files: OpenWebUI/API upload -> bounded validation -> Prechunker/Mr. Chonker chunking -> optional annotation/indexing -> provenance-aware retrieval. **COMPLETED INITIAL VERTICAL SLICE:** bounded text preparation, provider-backed annotation, re-annotation-stable candidate provenance, explicit single/batch review handoff, normal proposal approval, deterministic retrieval of approved document memories with safe origin labels, read-only review-scoped lexical source-context packets, explicit API chat-time source-context binding, and an optional OpenWebUI Filter artifact for one authenticated UTF-8 text upload per turn. The Filter disables OpenWebUI's built-in RAG only for the attached StarFur model, routes the source through StarFur annotation/review, binds only the resulting review ID to chat, and exposes exact Core-owned review/approve/reject commands for its short-lived candidates. Remaining: richer visual review controls, canonical manuscript-path integration, multi-file/non-text ingestion, and semantic indexing. Integrate or intercept external UI RAG so uploaded source text remains distinct from the user request, StarFur command routing remains reliable, and the canonical chunk/annotation/provenance pipeline owns document context before release. Do not inject entire documents into every assistant prompt; retain source identity, chunk identity, and domain.
 
