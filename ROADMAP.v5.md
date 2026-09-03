@@ -186,8 +186,23 @@ proposal extraction, and explicit generated-adventure-turn calls now resolve
 their bounded route before exactly one request reaches the injected adapter.
 An explicitly unavailable provider is rejected before a call, and a submitted
 request never silently retries or switches provider. The current runtime still
-has one adapter; document annotation retains its separately bounded
-single-provider path pending annotation-specific routing benchmarks.
+has one adapter; document annotation retains a separately bounded,
+single-provider content-validation retry path.
+
+**COMPLETED INITIAL E1 ANNOTATION ROUTE-PLANNING SLICE:** Document annotation
+now resolves both its primary and explicitly configured content-validation
+fallback profile through the same pure route planner before a request is made.
+Both must resolve to the existing injected adapter; this is compatibility
+validation, not multi-provider selection. The two-primary/one-fallback retry
+sequence remains a separate bounded extraction policy.
+
+**COMPLETED INITIAL E1 BOUNDED TELEMETRY SLICE:** Routed chat execution now
+has a sanitized public outcome record containing only requested/selected task
+IDs, provider/model labels, fallback use, and submitted outcome. Assistant
+turn traces and runtime diagnostics reuse the same bounded shape; provider
+responses, prompts, messages, and payloads remain outside the record. Public
+route previews additionally expose clamped context/output budgets without
+probing or executing a provider.
 
 **COMPLETED INITIAL ANNOTATION RELIABILITY SLICE:** The separate document
 annotation path now permits one explicit bounded content-validation failover:

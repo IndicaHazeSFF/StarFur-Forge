@@ -44,6 +44,20 @@ class RoutedChatExecution:
             raise RuntimeError("routed execution has no selected task")
         return selected.task_id
 
+    def public_dict(self) -> dict[str, object]:
+        """Return bounded execution metadata without exposing the response."""
+        selected = self.decision.selected
+        if selected is None:
+            raise RuntimeError("routed execution has no selected provider")
+        return {
+            "requested_task_id": self.decision.requested_task_id,
+            "selected_task_id": selected.task_id,
+            "provider": selected.provider_id,
+            "model": selected.profile.model,
+            "fallback_used": self.decision.selected_index not in (None, 0),
+            "outcome": "submitted",
+        }
+
 
 class RoutedChatExecutor:
     """Execute exactly one route-selected chat request, with no hidden retry."""

@@ -726,14 +726,7 @@ class AssistantSession:
         self.provider_lifecycle.begin_generation(stream=stream, model=selected.profile.model)
         try:
             execution = executor.execute_planned(decision, messages, stream=stream)
-            self._current_task_routes.append({
-                "requested_task_id": decision.requested_task_id,
-                "selected_task_id": execution.task_id,
-                "provider": execution.provider_id,
-                "model": selected.profile.model,
-                "fallback_used": decision.selected_index not in (None, 0),
-                "outcome": "submitted",
-            })
+            self._current_task_routes.append(execution.public_dict())
             if not stream:
                 self.provider_lifecycle.finish()
             return execution.response

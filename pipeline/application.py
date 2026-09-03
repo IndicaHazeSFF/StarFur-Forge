@@ -26,7 +26,6 @@ from pipeline.task_profiles import (
     TASK_DOCUMENT_ANNOTATION,
     TASK_DOCUMENT_ANNOTATION_FALLBACK,
     TaskProfiles,
-    provider_matches,
 )
 from pipeline.task_routing import (
     ProviderRouteRegistry,
@@ -404,21 +403,10 @@ class AssistantApplication:
         with self._locked_session_for() as session:
             max_attempts = 3
             if annotator is None:
-                provider = getattr(session, "provider", None)
-                if provider is None:
-                    raise RuntimeError("Document annotation provider is unavailable.")
-                profiles = getattr(session.config, "task_profiles", TaskProfiles())
-                profile = profiles.resolve(
-                    TASK_DOCUMENT_ANNOTATION,
-                    default_model=self._active_model_for_session(session),
-                    base_options={},
+                provider, profile = self._document_annotation_route(
+                    session, TASK_DOCUMENT_ANNOTATION,
                 )
-                provider_name = getattr(provider, "name", None)
-                if not provider_matches(profile.provider, provider_name):
-                    raise RuntimeError(
-                        f"Task profile {TASK_DOCUMENT_ANNOTATION!r} requires provider {profile.provider!r}; "
-                        f"active provider is {provider_name or 'unknown'!r}."
-                    )
+                profiles = getattr(session.config, "task_profiles", TaskProfiles())
                 primary = DocumentProposalAnnotator(
                     provider,
                     profile.model,
@@ -436,16 +424,9 @@ class AssistantApplication:
                     fallback_config = profiles.get(TASK_DOCUMENT_ANNOTATION_FALLBACK)
                     if fallback_config is None or fallback_config.fallback_task is not None:
                         raise RuntimeError("Document annotation fallback profile is invalid.")
-                    fallback_profile = profiles.resolve(
-                        TASK_DOCUMENT_ANNOTATION_FALLBACK,
-                        default_model=self._active_model_for_session(session),
-                        base_options={},
+                    _, fallback_profile = self._document_annotation_route(
+                        session, TASK_DOCUMENT_ANNOTATION_FALLBACK,
                     )
-                    if not provider_matches(fallback_profile.provider, provider_name):
-                        raise RuntimeError(
-                            f"Task profile {TASK_DOCUMENT_ANNOTATION_FALLBACK!r} requires provider "
-                            f"{fallback_profile.provider!r}; active provider is {provider_name or 'unknown'!r}."
-                        )
                     annotator = FailoverDocumentProposalAnnotator(
                         primary,
                         DocumentProposalAnnotator(
@@ -476,6 +457,41 @@ class AssistantApplication:
                     execution=replace(result.execution, elapsed_ms=(perf_counter() - started_at) * 1000),
                 )
             return result
+
+    def _document_annotation_route(self, session, task_id):
+        """Select one annotation profile through the pure route planner.
+
+        Annotation's separately configured fallback is a content-validation
+        retry policy, not permission to silently select another live provider.
+        This helper accepts only the requested exact task route; the existing
+        bounded fallback adapter remains below this boundary.
+        """
+        provider = getattr(session, "provider", None)
+        if provider is None:
+            raise RuntimeError("Document annotation provider is unavailable.")
+        provider_name = getattr(session, "_provider_name", None) or getattr(provider, "name", None) or "unknown"
+        lifecycle = getattr(session, "provider_lifecycle", None)
+        lifecycle_snapshot = lifecycle.snapshot() if callable(getattr(lifecycle, "snapshot", None)) else None
+        provider_status = provider_route_status_from_runtime(
+            provider_name,
+            configured=True,
+            health_status=self._provider_health_for_session(session).get("status"),
+            lifecycle_state=getattr(lifecycle_snapshot, "state", None),
+        )
+        profiles = getattr(session.config, "task_profiles", TaskProfiles())
+        decision = TaskRoutePlanner(
+            profiles,
+            ProviderRouteRegistry({provider_status.provider_id: provider_status}),
+        ).plan(
+            task_id,
+            default_model=self._active_model_for_session(session),
+            default_provider_id=provider_status.provider_id,
+            base_options={},
+        )
+        selected = decision.selected
+        if selected is None or selected.task_id != task_id:
+            raise RuntimeError("Document annotation route is unavailable.")
+        return provider, selected.profile
 
     def create_document_pending_proposal(self, candidate):
         """Explicitly hand one server-reviewed candidate to the normal proposal store."""

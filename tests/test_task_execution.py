@@ -66,6 +66,17 @@ class TaskExecutionTests(unittest.TestCase):
         self.assertEqual({"num_predict": 123}, provider.calls[0][2])
         self.assertFalse(provider.calls[0][3])
 
+        public = result.public_dict()
+        self.assertEqual({
+            "requested_task_id": "assistant_chat",
+            "selected_task_id": "assistant_chat",
+            "provider": "local",
+            "model": "small",
+            "fallback_used": False,
+            "outcome": "submitted",
+        }, public)
+        self.assertNotIn("response", public)
+
     def test_unavailable_route_or_missing_adapter_fails_before_any_call(self):
         unavailable, provider = self._executor(primary_status="unavailable")
         with self.assertRaisesRegex(RoutedTaskExecutionError, "no configured") as captured:

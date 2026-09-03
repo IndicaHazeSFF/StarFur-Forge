@@ -12,6 +12,7 @@ from pipeline.application import AssistantApplication, create_assistant_applicat
 from pipeline.document_intake import DocumentAnnotationExecution, prepare_document_text
 from pipeline.persona_registry import PersonaRegistry, load_persona_package
 from pipeline.system_metrics import SystemMetricsSnapshot
+from pipeline.task_profiles import TaskProfile, TaskProfiles
 
 
 class FakeConfig:
@@ -443,6 +444,27 @@ class AssistantApplicationTests(unittest.TestCase):
         chat = snapshot["routing"]["tasks"]["assistant_chat"]
         self.assertEqual("routable", chat["status"])
         self.assertEqual("unprobed", chat["candidates"][0]["provider_status"])
+
+    def test_runtime_diagnostics_route_preview_exposes_bounded_budgets_only(self):
+        class BudgetConfig(FakeConfig):
+            task_profiles = TaskProfiles({"assistant_chat": TaskProfile(
+                "assistant_chat",
+                provider="ollama",
+                model="qwen3:8b",
+                context_size=4096,
+                max_output_tokens=512,
+            )})
+
+        session = FakeSession(config=BudgetConfig())
+        snapshot = AssistantApplication(session).runtime_diagnostics()
+        candidate = snapshot["routing"]["tasks"]["assistant_chat"]["candidates"][0]
+
+        self.assertEqual(4096, candidate["context_size"])
+        self.assertEqual(512, candidate["max_output_tokens"])
+        self.assertEqual("qwen3:8b", candidate["model"])
+        self.assertNotIn("prompt", candidate)
+        self.assertNotIn("messages", candidate)
+        self.assertNotIn("provider_payload", candidate)
 
     def test_runtime_diagnostics_expose_only_bounded_completed_turn_route_trace(self):
         session = FakeSession()

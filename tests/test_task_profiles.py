@@ -175,6 +175,50 @@ class TaskProfileTests(unittest.TestCase):
         self.assertIsNone(result.execution.fallback_model)
         self.assertFalse(result.execution.fallback_used)
 
+    def test_document_annotation_primary_profile_mismatch_fails_before_provider_call(self):
+        profiles = TaskProfiles({
+            TASK_DOCUMENT_ANNOTATION: TaskProfile(
+                TASK_DOCUMENT_ANNOTATION, provider="another-provider", model="annotation-model",
+            ),
+        })
+        provider = FakeProvider()
+        session = AssistantSession(
+            config_with_profiles(profiles), "Persona", provider=provider,
+            memory_loader=lambda **_kwargs: [], policy="Policy",
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "route is unavailable"):
+            AssistantApplication(session).annotate_document(
+                prepare_document_text("No durable facts.", "notes.md", domain="personal"),
+            )
+        self.assertEqual([], provider.calls)
+
+    def test_document_annotation_fallback_profile_mismatch_fails_before_fallback_call(self):
+        profiles = TaskProfiles({
+            TASK_DOCUMENT_ANNOTATION: TaskProfile(
+                TASK_DOCUMENT_ANNOTATION,
+                provider="ollama",
+                model="primary-model",
+                fallback_task=TASK_DOCUMENT_ANNOTATION_FALLBACK,
+            ),
+            TASK_DOCUMENT_ANNOTATION_FALLBACK: TaskProfile(
+                TASK_DOCUMENT_ANNOTATION_FALLBACK,
+                provider="another-provider",
+                model="fallback-model",
+            ),
+        })
+        provider = FakeProvider()
+        session = AssistantSession(
+            config_with_profiles(profiles), "Persona", provider=provider,
+            memory_loader=lambda **_kwargs: [], policy="Policy",
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "route is unavailable"):
+            AssistantApplication(session).annotate_document(
+                prepare_document_text("No durable facts.", "notes.md", domain="personal"),
+            )
+        self.assertEqual([], provider.calls)
+
     def test_mismatched_profile_provider_fails_instead_of_routing_silently(self):
         profiles = TaskProfiles({
             TASK_ASSISTANT_CHAT: TaskProfile(TASK_ASSISTANT_CHAT, provider="another-provider"),

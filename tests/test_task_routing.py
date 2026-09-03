@@ -51,6 +51,22 @@ class TaskRoutingTests(unittest.TestCase):
         self.assertNotIn("messages", candidate)
         self.assertNotIn("prompt", candidate)
 
+    def test_public_route_budget_values_are_clamped_to_safe_bounds(self):
+        planner = self._planner(
+            {"assistant_chat": TaskProfile(
+                "assistant_chat", provider="ollama", model="qwen3:8b",
+                context_size=2_000_000, max_output_tokens=2_000_001,
+            )},
+            {"ollama": ProviderRouteStatus("ollama", "available")},
+        )
+
+        candidate = planner.plan(
+            "assistant_chat", default_model="default", default_provider_id="ollama",
+        ).public_dict()["candidates"][0]
+
+        self.assertEqual(1_000_000, candidate["context_size"])
+        self.assertEqual(1_000_000, candidate["max_output_tokens"])
+
     def test_uses_configured_fallback_when_primary_provider_is_unavailable(self):
         planner = self._planner(
             {
