@@ -209,6 +209,10 @@ class AssistantApplicationTests(unittest.TestCase):
         self.assertEqual(result["conversation"]["id"], "default")
         self.assertEqual(result["activity"], "reviewing_candidates")
         self.assertEqual(result["adventure_turn"], {"active": True, "staged_count": 2})
+        self.assertEqual(result["routing"], {
+            "configured_task_count": 1, "routable_task_count": 1,
+            "unavailable_task_count": 0, "storage": "session_ephemeral",
+        })
         self.assertEqual(result["candidate_inbox"]["ordinary_count"], 1)
         self.assertEqual(result["presentation"]["animation_slot"], "resident.murr.reviewing")
         self.assertEqual(result["system_metrics"]["cpu"]["logical_cores"], 4)
@@ -465,6 +469,36 @@ class AssistantApplicationTests(unittest.TestCase):
         self.assertNotIn("prompt", candidate)
         self.assertNotIn("messages", candidate)
         self.assertNotIn("provider_payload", candidate)
+
+    def test_resident_snapshot_exposes_only_aggregate_passive_route_readiness(self):
+        class OllamaNamedProvider:
+            name = "ollama"
+
+            def __init__(self):
+                self.probe_calls = 0
+
+            def probe_health(self):
+                self.probe_calls += 1
+                return {"models": [{"name": "one"}]}
+
+        class RoutedConfig(FakeConfig):
+            task_profiles = TaskProfiles({
+                "assistant_chat": TaskProfile("assistant_chat", provider="ollama", model="qwen3:8b"),
+                "vision": TaskProfile("vision", provider="ollama", model="vision:latest"),
+            })
+
+        session = FakeSession(config=RoutedConfig())
+        session.provider = OllamaNamedProvider()
+        result = AssistantApplication(session).resident_snapshot()
+
+        self.assertEqual(result["routing"], {
+            "configured_task_count": 2,
+            "routable_task_count": 1,
+            "unavailable_task_count": 1,
+            "storage": "session_ephemeral",
+        })
+        self.assertEqual(session.provider.probe_calls, 0)
+        self.assertNotIn("tasks", result["routing"])
 
     def test_runtime_diagnostics_expose_only_bounded_completed_turn_route_trace(self):
         session = FakeSession()

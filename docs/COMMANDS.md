@@ -354,6 +354,16 @@ Run one explicit, non-generating availability check for the already configured p
     routing probe
 
 This calls only the provider's supported model-list health method and retains a bounded session-local status, timestamp, optional model count, and bounded error message. It never generates text, changes the selected model, reads or writes memory, or exposes a model-list payload. Run `routing status` afterward to see the updated route availability.
+
+Run the checked-in provider-free route portability contract:
+
+    python starfur.py routing-eval
+    python starfur.py routing-eval --record-ledger data/experiment_ledger.jsonl --run-id routing-baseline-001
+
+This evaluates declarative profiles and fixture provider-status records only. It
+never constructs, probes, or calls a provider; accesses no conversation,
+adventure, memory, or runtime data. It writes an aggregate-only experiment
+ledger record only when `--record-ledger` is supplied explicitly.
 ## Assistant Proposal Provenance
 
 Automatic assistant-memory proposals are derived from user observations only.
@@ -976,7 +986,7 @@ Lists timestamped backups, asks for a backup selection, and requires typing `Sta
 
 The local API exposes the bounded, read-only diagnostics snapshot at `GET /v1/starfur/diagnostics` (with the same bearer token as the other endpoints). It reports provider configuration and whether health was probed, active/startup model, capability manifest fingerprint and IDs, fallback state, lifecycle readiness, and the latest recorded turn timings plus its bounded task-route trace. Its `routing` section is a passive preview of whether configured task profiles would be routable through the current provider status; it does not switch, probe, or call a provider. Normal diagnostics never call Ollama or read/write memory stores. To explicitly run one non-generating provider availability probe, use `GET /v1/starfur/diagnostics?probe=provider`; it reports only health status, timestamp, model count when available, and a bounded error message.
 
-`GET /v1/starfur/persona-runtime` returns the active conversation's bounded persona-runtime snapshot for future dashboard, TUI, and apartment presentation. It includes public identity/trait/state metadata and local record counts only. It does not call a model, seed a persona state, reveal prompts or raw evidence, modify memory stores, or edit configuration. `GET /v1/starfur/resident-snapshot` additionally includes the last completed turn's bounded task-route summary in its adventure-turn read model; it is informational and cannot drive provider selection or state mutation.
+`GET /v1/starfur/persona-runtime` returns the active conversation's bounded persona-runtime snapshot for future dashboard, TUI, and apartment presentation. It includes public identity/trait/state metadata and local record counts only. It does not call a model, seed a persona state, reveal prompts or raw evidence, modify memory stores, or edit configuration. `GET /v1/starfur/resident-snapshot` additionally includes the last completed turn's bounded task-route summary in its adventure-turn read model and aggregate configured/routable/unavailable route counts; both are informational and cannot drive provider selection or state mutation.
 ## Capability-aware assistant explanations
 
 StarFur Core owns a structured capability manifest rather than placing feature knowledge in persona files. During ordinary conversation no capability block is added. Explicit questions such as `What can you do?` receive the current public capability manifest; narrowly named features such as memory proposals or model switching receive only matching capability entries. Persona controls presentation, while Core remains authoritative for what is currently supported. This does not expose private databases, hidden reasoning, or unregistered future features.

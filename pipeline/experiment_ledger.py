@@ -31,6 +31,7 @@ _METRIC_FIELDS = {
     "annotation_fallback_attempt_count", "annotation_fallback_used_count",
     "annotation_quality_recall", "annotation_quality_precision",
     "annotation_false_positive_count", "annotation_missed_target_count",
+    "routing_pass_rate",
 }
 
 
@@ -130,6 +131,8 @@ def _sanitize_case_result(value: Mapping[str, Any]) -> dict[str, Any]:
         return _sanitize_document_annotation_case_result(value)
     if {"kind", "expected_target_count", "matched_target_count", "candidate_count", "false_positive_count", "missed_target_count", "pass"}.issubset(value):
         return _sanitize_document_annotation_quality_case_result(value)
+    if {"kind", "expected_status", "actual_status", "expected_selected_task_id", "actual_selected_task_id", "expected_selected_provider", "actual_selected_provider", "expected_fallback_used", "actual_fallback_used", "pass"}.issubset(value):
+        return _sanitize_task_routing_case_result(value)
     raise ValueError("case result schema is unsupported")
 
 
@@ -224,6 +227,37 @@ def _sanitize_document_annotation_quality_case_result(value: Mapping[str, Any]) 
     return {"name": name, "kind": "document_annotation_quality", **counts, "pass": value["pass"]}
 
 
+def _sanitize_task_routing_case_result(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Keep only route outcome labels; never retain profile/provider payloads."""
+    name = _bounded_text(value.get("name"), "case name", required=True)
+    if value.get("kind") != "task_routing":
+        raise ValueError("task-routing case kind is unsupported")
+    statuses = {"routable", "unavailable"}
+    expected_status = value.get("expected_status")
+    actual_status = value.get("actual_status")
+    if expected_status not in statuses or actual_status not in statuses:
+        raise ValueError("task-routing status is invalid")
+    result = {
+        "name": name,
+        "kind": "task_routing",
+        "expected_status": expected_status,
+        "actual_status": actual_status,
+    }
+    for field in (
+        "expected_selected_task_id", "actual_selected_task_id",
+        "expected_selected_provider", "actual_selected_provider",
+    ):
+        value_item = value.get(field)
+        if value_item is not None and (not isinstance(value_item, str) or not value_item.strip() or len(value_item) > 64):
+            raise ValueError("task-routing identifier is invalid")
+        result[field] = value_item
+    for field in ("expected_fallback_used", "actual_fallback_used", "pass"):
+        if not isinstance(value.get(field), bool):
+            raise ValueError("task-routing boolean is invalid")
+        result[field] = value[field]
+    return result
+
+
 def build_benchmark_result_record(
     manifest: BenchmarkRunManifest,
     result: Mapping[str, Any],
@@ -257,6 +291,7 @@ def build_benchmark_result_record(
         "annotation_fallback_attempt_count", "annotation_fallback_used_count",
         "annotation_quality_recall", "annotation_quality_precision",
         "annotation_false_positive_count", "annotation_missed_target_count",
+        "routing_pass_rate",
     ):
         if field in result and result[field] is not None:
             metrics[field] = _number(result[field], field)

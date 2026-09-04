@@ -353,6 +353,24 @@ class AssistantApplication:
                 return len(candidates) if isinstance(candidates, tuple) else 0
 
             manifest = self.capability_manifest
+            route_preview = self._route_diagnostics_for_session(
+                session,
+                provider_name=getattr(session, "_provider_name", None) or getattr(provider, "name", None),
+                provider_health=health,
+            )
+            route_tasks = route_preview.get("tasks", {})
+            task_decisions = tuple(route_tasks.values()) if isinstance(route_tasks, dict) else ()
+            routing = {
+                "configured_task_count": len(task_decisions),
+                "routable_task_count": sum(
+                    1 for decision in task_decisions
+                    if isinstance(decision, dict) and decision.get("status") == "routable"
+                ),
+                "unavailable_task_count": sum(
+                    1 for decision in task_decisions
+                    if isinstance(decision, dict) and decision.get("status") == "unavailable"
+                ),
+            }
             try:
                 metrics = self.system_metrics_provider.snapshot()
                 metrics_public = metrics.public_dict()
@@ -386,6 +404,7 @@ class AssistantApplication:
                     "mutation_count": candidate_count(mutation_inbox),
                     "storage": "session_ephemeral",
                 },
+                routing=routing,
             ).public_dict()
             # A plan contains generic stable asset slots only.  It is derived
             # from the same bounded public snapshot rather than from prompt

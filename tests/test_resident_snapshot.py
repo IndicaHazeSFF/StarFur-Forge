@@ -47,6 +47,11 @@ class ResidentSnapshotTests(unittest.TestCase):
                 "raw_provider_output": "private",
             }, {"requested_task_id": "assistant_chat", "selected_task_id": "assistant_chat", "provider": "ollama", "model": "x" * 257, "fallback_used": False, "outcome": "submitted"}]},
             candidates={"ordinary_count": 1, "mutation_count": 0, "body": "private"},
+            routing={
+                "configured_task_count": 4, "routable_task_count": 3,
+                "unavailable_task_count": 1, "tasks": {"private": "no"},
+                "raw_provider_payload": "private",
+            },
         )
 
         payload = snapshot.public_dict()
@@ -63,6 +68,10 @@ class ResidentSnapshotTests(unittest.TestCase):
         self.assertEqual(1, len(payload["adventure_turn"]["last_task_routes"]))
         self.assertNotIn("raw_provider_output", payload["adventure_turn"]["last_task_routes"][0])
         self.assertNotIn("body", payload["candidate_inbox"])
+        self.assertEqual(payload["routing"], {
+            "configured_task_count": 4, "routable_task_count": 3,
+            "unavailable_task_count": 1, "storage": "session_ephemeral",
+        })
 
     def test_explicit_resident_action_keeps_zero_provider_presentation_available(self):
         snapshot = ResidentSnapshot(
@@ -70,6 +79,7 @@ class ResidentSnapshotTests(unittest.TestCase):
             provider={"configured": False}, lifecycle=None, system_metrics={}, capability_ids=(),
             adventure={"mounted": False}, roleplay={"active": False}, turn={"active": False},
             candidates={"ordinary_count": 0, "mutation_count": 0},
+            routing={},
         )
 
         self.assertEqual(snapshot.activity, "idle")

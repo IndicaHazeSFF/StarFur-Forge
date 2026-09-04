@@ -204,6 +204,15 @@ responses, prompts, messages, and payloads remain outside the record. Public
 route previews additionally expose clamped context/output budgets without
 probing or executing a provider.
 
+**COMPLETED INITIAL E1 PORTABILITY-EVALUATION SLICE:** A checked-in,
+provider-free routing fixture now verifies primary selection, finite configured
+fallback, unavailable-provider rejection, and capability mismatch rejection.
+It consumes only declarative profiles and bounded status records, reports no
+prompt/provider payload/configuration data, and is a regression contract—not
+a claim that alternative live providers are ready.
+Its aggregate pass/fail route outcomes may enter the experiment ledger only by
+explicit CLI opt-in; profile/provider configuration remains out of that record.
+
 **COMPLETED INITIAL ANNOTATION RELIABILITY SLICE:** The separate document
 annotation path now permits one explicit bounded content-validation failover:
 two primary attempts followed by one `document_annotation_fallback` attempt.
@@ -307,7 +316,7 @@ truth, adventure history, and unrestricted assistant memory.
 
 Compose a versioned presentation-neutral `ResidentSnapshot` under the application/session lock. It should include active persona public state, provider/model lifecycle, capability availability, selected conversation/storage class, loaded adventure summary, authoritative/context counts, roleplay and staging state, candidate-inbox status, and explicit current activity. It must not include prompts, raw evidence, hidden resources, private memory content, relationship subjects, or provider payloads.
 
-**COMPLETED INITIAL SLICE:** `AssistantApplication` exposes the snapshot through authenticated `GET /v1/starfur/resident-snapshot`; the dependency-free local `/starfur/apartment` shell polls it only after the local user supplies a token in browser memory. A pure mapper supplies generic stable visual/animation slots from the public activity, without asset loading or state authority. CLI, OpenWebUI, TUI, dashboard, and future Steam clients consume this read model rather than parsing chat prose. Polling is sufficient for the first shell; event streaming can follow.
+**COMPLETED INITIAL SLICE:** `AssistantApplication` exposes the snapshot through authenticated `GET /v1/starfur/resident-snapshot`; the dependency-free local `/starfur/apartment` shell polls it only after the local user supplies a token in browser memory. A pure mapper supplies generic stable visual/animation slots from the public activity, without asset loading or state authority. The snapshot also exposes only aggregate passive route readiness (configured/routable/unavailable task counts), while detailed route selection remains diagnostics-only. CLI, OpenWebUI, TUI, dashboard, and future Steam clients consume this read model rather than parsing chat prose. Polling is sufficient for the first shell; event streaming can follow.
 
 ### H1. Read-only apartment
 

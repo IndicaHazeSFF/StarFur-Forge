@@ -1,0 +1,59 @@
+{
+  "benchmark_version": "task-routing-portability-v1",
+  "cases": [
+    {
+      "name": "primary_available",
+      "task_id": "assistant_chat",
+      "default_model": "default-model",
+      "default_provider_id": "ollama",
+      "profiles": {
+        "assistant_chat": {"provider": "ollama", "model": "chat-model", "max_output_tokens": 256}
+      },
+      "providers": {
+        "ollama": {"status": "available", "capabilities": ["chat"]}
+      },
+      "expected": {"status": "routable", "selected_task_id": "assistant_chat", "selected_provider": "ollama", "fallback_used": false}
+    },
+    {
+      "name": "configured_fallback_provider",
+      "task_id": "document_annotation",
+      "default_model": "default-model",
+      "default_provider_id": "ollama",
+      "profiles": {
+        "document_annotation": {"provider": "ollama", "fallback_task": "assistant_chat"},
+        "assistant_chat": {"provider": "backup", "model": "backup-model"}
+      },
+      "providers": {
+        "ollama": {"status": "unavailable", "capabilities": ["chat"]},
+        "backup": {"status": "available", "capabilities": ["chat"]}
+      },
+      "expected": {"status": "routable", "selected_task_id": "assistant_chat", "selected_provider": "backup", "fallback_used": true}
+    },
+    {
+      "name": "capability_mismatch_rejected",
+      "task_id": "vision",
+      "default_model": "default-model",
+      "default_provider_id": "ollama",
+      "profiles": {
+        "vision": {"provider": "ollama", "model": "vision-model"}
+      },
+      "providers": {
+        "ollama": {"status": "available", "capabilities": ["chat"]}
+      },
+      "expected": {"status": "unavailable", "selected_task_id": null, "selected_provider": null, "fallback_used": false}
+    },
+    {
+      "name": "unavailable_without_fallback",
+      "task_id": "assistant_chat",
+      "default_model": "default-model",
+      "default_provider_id": "ollama",
+      "profiles": {
+        "assistant_chat": {"provider": "ollama", "model": "chat-model"}
+      },
+      "providers": {
+        "ollama": {"status": "unavailable", "capabilities": ["chat"]}
+      },
+      "expected": {"status": "unavailable", "selected_task_id": null, "selected_provider": null, "fallback_used": false}
+    }
+  ]
+}

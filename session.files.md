@@ -31,6 +31,7 @@ pending the next copy/commit confirmation.
 - `pipeline/document_annotation_eval.py`
 - `pipeline/document_annotation_quality_eval.py`
 - `pipeline/document_annotation_quality_runner.py`
+- `pipeline/task_routing_eval.py`
 
 ## tests
 
@@ -58,6 +59,8 @@ pending the next copy/commit confirmation.
 - `tests/test_document_annotation_quality_runner.py`
 - `tests/fixtures/document_annotation_quality_cases.json`
 - `tests/fixtures/document_annotation_quality_note.md`
+- `tests/test_task_routing_eval.py`
+- `tests/fixtures/task_routing_cases.json`
 
 ## presentation
 

@@ -79,6 +79,23 @@ def sample_annotation_quality_result():
     }
 
 
+def sample_task_routing_result():
+    return {
+        "benchmark_version": "task-routing-portability-v1", "repeatability": True,
+        "routing_pass_rate": 1.0,
+        "results": [{
+            "name": "primary_available", "kind": "task_routing",
+            "expected_status": "routable", "actual_status": "routable",
+            "expected_selected_task_id": "assistant_chat",
+            "actual_selected_task_id": "assistant_chat",
+            "expected_selected_provider": "ollama",
+            "actual_selected_provider": "ollama",
+            "expected_fallback_used": False, "actual_fallback_used": False,
+            "pass": True,
+        }],
+    }
+
+
 class ExperimentLedgerTests(unittest.TestCase):
     def test_record_is_append_only_and_omits_query_content(self):
         record = build_benchmark_result_record(sample_manifest(), sample_result(), run_id="smoke-1")
@@ -162,6 +179,15 @@ class ExperimentLedgerTests(unittest.TestCase):
         self.assertEqual(1, case["false_positive_count"])
         self.assertEqual(0.75, record["metrics"]["annotation_quality_precision"])
         self.assertNotIn("details", case)
+
+    def test_task_routing_results_record_outcomes_without_route_configuration(self):
+        record = build_benchmark_result_record(sample_manifest(), sample_task_routing_result())
+        case = record["cases"][0]
+        self.assertEqual("task_routing", case["kind"])
+        self.assertEqual("routable", case["actual_status"])
+        self.assertEqual(1.0, record["metrics"]["routing_pass_rate"])
+        self.assertNotIn("profiles", case)
+        self.assertNotIn("providers", case)
 
 
 if __name__ == "__main__":

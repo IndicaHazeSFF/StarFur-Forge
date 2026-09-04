@@ -9,7 +9,7 @@ display.  It is not a command, configuration, or mutation surface.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 
@@ -57,6 +57,24 @@ def _resident_turn_public(value: object) -> dict[str, object]:
     if routes:
         turn["last_task_routes"] = routes
     return turn
+
+
+def _resident_routing_public(value: object) -> dict[str, object]:
+    """Render aggregate route readiness without exposing route configuration."""
+    if not isinstance(value, Mapping):
+        return {"configured_task_count": 0, "routable_task_count": 0,
+                "unavailable_task_count": 0, "storage": "session_ephemeral"}
+
+    def count(name: str) -> int:
+        candidate = value.get(name)
+        return candidate if isinstance(candidate, int) and not isinstance(candidate, bool) and 0 <= candidate <= 64 else 0
+
+    return {
+        "configured_task_count": count("configured_task_count"),
+        "routable_task_count": count("routable_task_count"),
+        "unavailable_task_count": count("unavailable_task_count"),
+        "storage": "session_ephemeral",
+    }
 
 
 def derive_resident_activity(
@@ -114,6 +132,7 @@ class ResidentSnapshot:
     roleplay: Mapping[str, object]
     turn: Mapping[str, object]
     candidates: Mapping[str, object]
+    routing: Mapping[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not isinstance(self.conversation_id, str) or not self.conversation_id:
@@ -181,6 +200,7 @@ class ResidentSnapshot:
             "candidate_inbox": _bounded_mapping(self.candidates, allowed=frozenset({
                 "ordinary_count", "mutation_count", "storage",
             })),
+            "routing": _resident_routing_public(self.routing),
         }
 
 
