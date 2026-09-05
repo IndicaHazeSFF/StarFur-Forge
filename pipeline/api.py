@@ -18,7 +18,7 @@ from urllib.parse import parse_qs, urlsplit
 from pipeline.assistant import GenerationInterrupted
 from pipeline.adventure_import import AdventureImportError, AdventureImportLog
 from pipeline.adventure_registry import AdventureNotFoundError, AdventureRegistry
-from pipeline.application import AssistantApplication, create_assistant_application
+from pipeline.application import AssistantApplication, ConversationNotFoundError, create_assistant_application
 from pipeline.document_review import (
     DEFAULT_REVIEW_TTL_SECONDS,
     DocumentReviewError,
@@ -509,6 +509,25 @@ class StarFurAPI:
         lowered = user_text.casefold()
         return lowered == "adventure" or lowered.startswith("adventure ")
 
+    @staticmethod
+    def _is_core_control_command(user_text):
+        """Recognize Core control namespaces before stale UI extensions run.
+
+        OpenWebUI may resend its last document-review or document-context
+        extension after a user has changed the visible message.  The extension
+        is never an authority to replace a Core control.  This deliberately
+        reserves documented command namespaces rather than attempting to parse
+        arbitrary natural language at the API boundary.
+        """
+        lowered = user_text.casefold()
+        if lowered in {"context stats", "approve all", "list personas", "list models"}:
+            return True
+        return lowered.startswith((
+            "adventure", "persona", "resident", "routing", "route ", "model ",
+            "roleplay", "remember:", "remember this:", "forget:", "forget this:",
+            "memory ", "proposal ",
+        ))
+
     def complete(self, payload, *, stream_writer=None, conversation_id=None):
         if not isinstance(payload, dict):
             raise ValueError("Request body must be a JSON object.")
@@ -526,18 +545,18 @@ class StarFurAPI:
             raise ValueError(f"Unknown StarFur model: {requested_model}")
         resolved_conversation = _conversation_id_from_request(payload, conversation_id)
         # A UI can retain a stale document-review/context extension after the
-        # user changes their actual message. The reserved Core namespace must
-        # still receive that message without review lookup, document retrieval,
-        # or a controlled document action taking precedence.
-        reserved_adventure_command = self._is_reserved_adventure_command(user_text)
+        # user changes their actual message. Core controls must still receive
+        # that message without review lookup, document retrieval, or a
+        # controlled document action taking precedence.
+        reserved_core_command = self._is_core_control_command(user_text)
         review_command = payload.get("starfur_document_review")
-        if review_command is not None and not reserved_adventure_command:
+        if review_command is not None and not reserved_core_command:
             content = self.document_review_command(review_command)
             active = self.application.active_model_for(resolved_conversation)
             return {"content": content, "model": active}
         document_context = (
             None
-            if reserved_adventure_command
+            if reserved_core_command
             else self._chat_document_context(payload, user_text, resolved_conversation)
         )
         content = self.application.respond(
@@ -705,6 +724,8 @@ class _Handler(BaseHTTPRequestHandler):
                 self._send_json(200, self.api.application.persona_runtime_snapshot(
                     conversation_id=self.headers.get(CONVERSATION_HEADER),
                 ))
+            except ConversationNotFoundError as error:
+                self._send_json(404, {"error": {"message": str(error), "type": "conversation_not_found"}})
             except ValueError as error:
                 self._send_json(400, {"error": {"message": str(error), "type": "invalid_request_error"}})
         elif parsed.path == RESIDENT_SNAPSHOT_PATH:
@@ -714,6 +735,8 @@ class _Handler(BaseHTTPRequestHandler):
                 self._send_json(200, self.api.application.resident_snapshot(
                     conversation_id=self.headers.get(CONVERSATION_HEADER),
                 ))
+            except ConversationNotFoundError as error:
+                self._send_json(404, {"error": {"message": str(error), "type": "conversation_not_found"}})
             except ValueError as error:
                 self._send_json(400, {"error": {"message": str(error), "type": "invalid_request_error"}})
         elif parsed.path == DOCUMENT_REVIEWS_PATH:

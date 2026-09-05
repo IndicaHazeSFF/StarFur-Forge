@@ -98,6 +98,26 @@ class AdventureEventLogTests(unittest.TestCase):
                 )
             self.assertEqual(1, len(log.events()))
 
+    def test_expected_event_count_rejects_stale_new_batch_but_not_completed_retry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            _, _, log = self._log(directory)
+            staged = (AdventureEventDraft("discovery", "The crew finds a brass compass."),)
+            log.append("choice", "The crew takes another route.")
+
+            with self.assertRaisesRegex(AdventureEventLogError, "changed since turn staging"):
+                log.append_many(staged, request_id="turn-stale-1234", expected_event_count=0)
+
+            committed = log.append_many(
+                staged, request_id="turn-retry-1234", expected_event_count=1,
+            )
+            self.assertEqual(
+                committed,
+                log.append_many(
+                    staged, request_id="turn-retry-1234", expected_event_count=1,
+                ),
+            )
+            self.assertEqual(2, len(log.events()))
+
     def test_workspace_write_guard_blocks_an_independent_log_handle(self):
         with tempfile.TemporaryDirectory() as directory:
             registry, record, first = self._log(directory)

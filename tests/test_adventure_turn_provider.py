@@ -82,8 +82,14 @@ class AdventureTurnProviderTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(AdventureTurnProviderError, "strict JSON"):
             adapter.propose(self._request())
+        # A valid empty envelope is a provider-declared "no durable event",
+        # not a malformed response.  It must remain distinct from an invalid
+        # candidate shape so callers can report the outcome safely.
+        self.assertEqual((), validate_adventure_turn_provider_result({
+            "schema_version": 1, "candidates": [],
+        }).candidates)
         with self.assertRaisesRegex(AdventureTurnProviderError, "invalid candidate envelope"):
-            validate_adventure_turn_provider_result({"schema_version": 1, "candidates": []})
+            validate_adventure_turn_provider_result({"schema_version": 1, "candidates": [{}]})
 
     def test_adapter_rejects_fenced_json_before_schema_validation(self):
         content = "```json\n{\"schema_version\":1,\"candidates\":[{\"event_type\":\"discovery\",\"summary\":\"The hatch opens.\",\"confidence\":0.8}]}\n```"

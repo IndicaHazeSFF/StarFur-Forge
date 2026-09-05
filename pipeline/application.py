@@ -60,6 +60,10 @@ class _SessionSlot:
     active_requests: int = 0
 
 
+class ConversationNotFoundError(LookupError):
+    """Raised when a read-only request names no live ephemeral conversation."""
+
+
 def normalize_conversation_id(value) -> str:
     """Validate an opaque, local conversation key without treating it as auth.
 
@@ -202,7 +206,14 @@ class AssistantApplication:
         state to SQLite or Chroma when evicted.
         """
         with self._registry_lock:
-            return self._session_slot_for(conversation_id).session
+            key = normalize_conversation_id(conversation_id)
+            slot = self._session_slot_for(key)
+            # A caller using this compatibility accessor has not acquired a
+            # request pin.  Never evict the newly returned session while
+            # making room; if every older session is busy, temporarily retain
+            # the bounded overflow until a request releases its pin.
+            self._evict_sessions_if_needed(exclude_keys={key})
+            return slot.session
 
     def _session_slot_for(self, conversation_id=None):
         """Look up/create a slot while ``_registry_lock`` is held."""
@@ -219,17 +230,26 @@ class AssistantApplication:
         self._initialize_provider_health(session)
         self._attach_capability_manifest(session)
         self._attach_retriever(session)
-        self._sessions[key] = _SessionSlot(session, threading.RLock())
-        self._evict_sessions_if_needed()
-        return self._sessions[key]
+        # Do not evict here.  A newly created slot is not yet request-pinned,
+        # so eviction at this point can select and remove the very slot this
+        # method is about to return when older conversations are busy.
+        slot = _SessionSlot(session, threading.RLock())
+        self._sessions[key] = slot
+        return slot
 
-    def _evict_sessions_if_needed(self):
+    def _evict_sessions_if_needed(self, *, exclude_keys=frozenset()):
         """Keep only the configured number of non-default in-memory sessions."""
+        if not isinstance(exclude_keys, (set, frozenset)):
+            raise TypeError("excluded session keys must be a set")
         while len(self._sessions) - 1 > self._max_conversations:
             evictable_key = next(
                 (
                     key for key, slot in self._sessions.items()
-                    if key != DEFAULT_CONVERSATION_ID and slot.active_requests == 0
+                    if (
+                        key != DEFAULT_CONVERSATION_ID
+                        and key not in exclude_keys
+                        and slot.active_requests == 0
+                    )
                 ),
                 None,
             )
@@ -245,6 +265,24 @@ class AssistantApplication:
         """Borrow one session and serialize only that conversation's request."""
         with self._registry_lock:
             slot = self._session_slot_for(conversation_id)
+            slot.active_requests += 1
+        try:
+            with slot.lock:
+                yield slot.session
+        finally:
+            with self._registry_lock:
+                slot.active_requests -= 1
+                self._evict_sessions_if_needed()
+
+    @contextmanager
+    def _locked_existing_session_for(self, conversation_id=None) -> Iterator[AssistantSession]:
+        """Borrow an existing session without allowing a read to seed one."""
+        with self._registry_lock:
+            key = normalize_conversation_id(conversation_id)
+            slot = self._sessions.get(key)
+            if slot is None:
+                raise ConversationNotFoundError("Conversation session was not found.")
+            self._sessions.move_to_end(key)
             slot.active_requests += 1
         try:
             with slot.lock:
@@ -309,7 +347,7 @@ class AssistantApplication:
 
     def persona_runtime_snapshot(self, *, conversation_id=None):
         """Return one bounded persona-runtime view without creating or mutating state."""
-        with self._locked_session_for(conversation_id) as session:
+        with self._locked_existing_session_for(conversation_id) as session:
             runtime = getattr(session, "persona_runtime_state", None)
             public_dict = getattr(runtime, "public_dict", None)
             if not callable(public_dict):
@@ -332,7 +370,7 @@ class AssistantApplication:
         seeds runtime state nor reads canonical memory, provider payloads,
         prompt text, candidate content, or hidden adventure resource values.
         """
-        with self._locked_session_for(conversation_id) as session:
+        with self._locked_existing_session_for(conversation_id) as session:
             runtime = getattr(session, "persona_runtime_state", None)
             runtime_public = getattr(runtime, "public_dict", None)
             lifecycle = getattr(session, "provider_lifecycle", None)
@@ -489,13 +527,10 @@ class AssistantApplication:
         if provider is None:
             raise RuntimeError("Document annotation provider is unavailable.")
         provider_name = getattr(session, "_provider_name", None) or getattr(provider, "name", None) or "unknown"
-        lifecycle = getattr(session, "provider_lifecycle", None)
-        lifecycle_snapshot = lifecycle.snapshot() if callable(getattr(lifecycle, "snapshot", None)) else None
         provider_status = provider_route_status_from_runtime(
             provider_name,
             configured=True,
             health_status=self._provider_health_for_session(session).get("status"),
-            lifecycle_state=getattr(lifecycle_snapshot, "state", None),
         )
         profiles = getattr(session.config, "task_profiles", TaskProfiles())
         decision = TaskRoutePlanner(
@@ -604,13 +639,10 @@ class AssistantApplication:
     def _route_diagnostics_for_session(self, session, *, provider_name, provider_health):
         """Build a passive route preview without probing or calling a provider."""
         provider = getattr(session, "provider", None)
-        lifecycle = getattr(session, "provider_lifecycle", None)
-        snapshot = lifecycle.snapshot() if callable(getattr(lifecycle, "snapshot", None)) else None
         status = provider_route_status_from_runtime(
             provider_name or "unknown",
             configured=provider is not None,
             health_status=provider_health.get("status"),
-            lifecycle_state=getattr(snapshot, "state", None),
         )
         profiles = getattr(session.config, "task_profiles", TaskProfiles())
         planner = TaskRoutePlanner(profiles, ProviderRouteRegistry({status.provider_id: status}))
@@ -699,6 +731,7 @@ def create_assistant_application(
 
 __all__ = [
     "AssistantApplication",
+    "ConversationNotFoundError",
     "DEFAULT_CONVERSATION_ID",
     "DEFAULT_MAX_CONVERSATIONS",
     "create_assistant_application",

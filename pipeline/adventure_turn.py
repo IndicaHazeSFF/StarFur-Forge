@@ -22,6 +22,7 @@ MAX_STAGED_ADVENTURE_EVENTS = 16
 @dataclass(frozen=True)
 class AdventureTurnTransaction:
     record: AdventureRecord | None = None
+    origin_event_count: int | None = None
     drafts: tuple[AdventureEventDraft, ...] = ()
     mutations: tuple[AdventureMutation, ...] = ()
     mutation_draft_indices: tuple[int, ...] = ()
@@ -31,6 +32,12 @@ class AdventureTurnTransaction:
     def __post_init__(self) -> None:
         if self.record is not None and not isinstance(self.record, AdventureRecord):
             raise TypeError("staged adventure record must be an AdventureRecord or None")
+        if self.origin_event_count is not None and (
+            isinstance(self.origin_event_count, bool)
+            or not isinstance(self.origin_event_count, int)
+            or self.origin_event_count < 0
+        ):
+            raise ValueError("staged adventure origin event count is invalid")
         if not isinstance(self.drafts, tuple) or not all(isinstance(draft, AdventureEventDraft) for draft in self.drafts):
             raise TypeError("staged adventure drafts must be AdventureEventDrafts")
         if not isinstance(self.mutations, tuple) or not all(isinstance(mutation, AdventureMutation) for mutation in self.mutations):
@@ -67,7 +74,10 @@ class AdventureTurnTransaction:
             raise ValueError("staged candidate draft indices are invalid")
         if len(set(candidate_identities)) != len(candidate_identities) or any(index < 0 or index >= len(self.drafts) for index in candidate_indices):
             raise ValueError("staged candidate draft identifier is invalid")
-        if self.record is None and (self.drafts or self.mutations or self.mutation_draft_indices or self.candidate_draft_ids):
+        if self.record is None and (
+            self.origin_event_count is not None or self.drafts or self.mutations
+            or self.mutation_draft_indices or self.candidate_draft_ids
+        ):
             raise ValueError("an inactive adventure turn cannot contain staged changes")
         if self.record is None and self.request_id is not None:
             raise ValueError("an inactive adventure turn cannot contain a request identifier")
@@ -88,10 +98,12 @@ class AdventureTurnTransaction:
     def active(self) -> bool:
         return self.record is not None
 
-    def begin(self, record: AdventureRecord) -> "AdventureTurnTransaction":
+    def begin(self, record: AdventureRecord, *, event_count: int = 0) -> "AdventureTurnTransaction":
         if self.active:
             raise ValueError("an adventure turn is already active")
-        return type(self)(record=record, request_id=f"turn-{uuid4().hex}")
+        return type(self)(
+            record=record, origin_event_count=event_count, request_id=f"turn-{uuid4().hex}",
+        )
 
     def stage(self, draft: AdventureEventDraft) -> "AdventureTurnTransaction":
         if not self.active:
@@ -100,6 +112,7 @@ class AdventureTurnTransaction:
             raise TypeError("staged value must be an AdventureEventDraft")
         return type(self)(
             record=self.record,
+            origin_event_count=self.origin_event_count,
             drafts=(*self.drafts, draft),
             mutations=self.mutations,
             mutation_draft_indices=self.mutation_draft_indices,
@@ -125,6 +138,7 @@ class AdventureTurnTransaction:
             return self
         return type(self)(
             record=self.record,
+            origin_event_count=self.origin_event_count,
             drafts=(*self.drafts, replace(candidate.draft, generation_provenance=selection.provenance)),
             mutations=self.mutations,
             mutation_draft_indices=self.mutation_draft_indices,
@@ -169,6 +183,7 @@ class AdventureTurnTransaction:
             raise ValueError("staged mutation kind is unsupported")
         return type(self)(
             record=self.record,
+            origin_event_count=self.origin_event_count,
             drafts=(*self.drafts, draft),
             mutations=(*self.mutations, mutation),
             mutation_draft_indices=(*self.mutation_draft_indices, len(self.drafts)),
@@ -217,6 +232,7 @@ class AdventureTurnTransaction:
             )
             return type(self)(
                 record=self.record,
+                origin_event_count=self.origin_event_count,
                 drafts=(*self.drafts, draft),
                 mutations=self.mutations,
                 mutation_draft_indices=self.mutation_draft_indices,
@@ -231,6 +247,7 @@ class AdventureTurnTransaction:
         drafts = (*staged.drafts[:-1], replace(staged.drafts[-1], generation_provenance=selection.provenance))
         return type(self)(
             record=staged.record,
+            origin_event_count=staged.origin_event_count,
             drafts=drafts,
             mutations=staged.mutations,
             mutation_draft_indices=staged.mutation_draft_indices,
@@ -276,6 +293,7 @@ class AdventureTurnTransaction:
             retained_indices.append(mutation_index - 1 if mutation_index > index else mutation_index)
         return type(self)(
             record=self.record,
+            origin_event_count=self.origin_event_count,
             drafts=retained_drafts,
             mutations=tuple(retained_mutations),
             mutation_draft_indices=tuple(retained_indices),

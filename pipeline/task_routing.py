@@ -67,8 +67,10 @@ def provider_route_status_from_runtime(
     """Translate bounded runtime observation into descriptive route state.
 
     This helper does not probe a provider, alter lifecycle, or claim health
-    from configuration alone. A lifecycle error wins only when there is no
-    explicit successful health result.
+    from configuration alone. A lifecycle result describes the last request,
+    not future eligibility: Core may retry a configured adapter unless an
+    explicit health probe has reported it unavailable. An unsupported optional
+    probe likewise leaves the adapter provisionally routable.
     """
     if not isinstance(configured, bool):
         raise TaskRoutePlanningError("provider configured state is invalid")
@@ -77,11 +79,9 @@ def provider_route_status_from_runtime(
     elif health_status == "healthy":
         status = "available"
     elif health_status == "unsupported":
-        status = "unsupported"
+        status = "unprobed"
     elif health_status == "unavailable":
         status = "unavailable"
-    elif lifecycle_state == "error":
-        status = "failed"
     else:
         status = "unprobed"
     return ProviderRouteStatus(str(provider_id), status, capabilities)

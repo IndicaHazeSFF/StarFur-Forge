@@ -429,6 +429,7 @@ Prepare or inspect isolated CYOA workspace metadata with exact Core commands:
     adventure create <title>
     adventure inspect <title>
     adventure load <title>
+    adventure refresh
     adventure resume <title>
     adventure begin <title>
     adventure restart fresh <new title>
@@ -504,6 +505,10 @@ current conversation, clears its recent chat context, and reads at most eight
 validated authoritative event summaries when its event log already exists. The
 selection preserves the opening event plus high-value continuity facts and
 recent state in chronological order; it is not necessarily the last eight.
+`adventure refresh` explicitly rebuilds the mounted workspace from its current
+authoritative log after another session has changed it. It clears recent chat
+context and is unavailable while a staged turn exists, so it cannot silently
+discard uncommitted drafts.
 `adventure restart fresh <new title>` creates and mounts a fully isolated new
 workspace. It preserves the previously loaded adventure unchanged and carries no
 events, state, checkpoints, recent conversation, or roleplay session into the new one.

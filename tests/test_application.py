@@ -8,7 +8,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.modules.setdefault("ollama", types.ModuleType("ollama"))
 
-from pipeline.application import AssistantApplication, create_assistant_application
+from pipeline.application import AssistantApplication, ConversationNotFoundError, create_assistant_application
 from pipeline.document_intake import DocumentAnnotationExecution, prepare_document_text
 from pipeline.persona_registry import PersonaRegistry, load_persona_package
 from pipeline.system_metrics import SystemMetricsSnapshot
@@ -163,6 +163,21 @@ class AssistantApplicationTests(unittest.TestCase):
             "object": "starfur.persona_runtime", "available": False, "persona": None,
         })
 
+    def test_read_only_snapshots_do_not_create_an_unknown_conversation(self):
+        sessions = []
+
+        def factory():
+            session = FakeSession()
+            sessions.append(session)
+            return session
+
+        app = AssistantApplication(FakeSession(), session_factory=factory)
+        with self.assertRaises(ConversationNotFoundError):
+            app.persona_runtime_snapshot(conversation_id="missing-snapshot")
+        with self.assertRaises(ConversationNotFoundError):
+            app.resident_snapshot(conversation_id="missing-snapshot")
+        self.assertEqual(sessions, [])
+
     def test_resident_snapshot_is_read_only_and_summary_only(self):
         class Runtime:
             def public_dict(self):
@@ -292,6 +307,47 @@ class AssistantApplicationTests(unittest.TestCase):
             second.join(2)
         self.assertFalse(first.is_alive())
         self.assertFalse(second.is_alive())
+
+    def test_new_busy_conversation_is_pinned_before_lru_eviction(self):
+        """A capacity overflow must not evict the just-created live session."""
+        starts = [threading.Event(), threading.Event()]
+        releases = [threading.Event(), threading.Event()]
+        created = []
+        failures = []
+
+        def make_session():
+            session = BlockingSession(starts[len(created)], releases[len(created)])
+            created.append(session)
+            return session
+
+        app = AssistantApplication(
+            FakeSession(), session_factory=make_session, max_conversations=1,
+        )
+
+        def respond(text, conversation_id):
+            try:
+                app.respond(text, conversation_id=conversation_id)
+            except Exception as error:  # Thread failures must be asserted below.
+                failures.append(error)
+
+        first = threading.Thread(target=respond, args=("first", "chat-a"))
+        second = threading.Thread(target=respond, args=("second", "chat-b"))
+        first.start()
+        self.assertTrue(starts[0].wait(0.5))
+        second.start()
+        try:
+            self.assertTrue(starts[1].wait(0.5))
+        finally:
+            for release in releases:
+                release.set()
+            first.join(2)
+            second.join(2)
+
+        self.assertFalse(first.is_alive())
+        self.assertFalse(second.is_alive())
+        self.assertEqual([], failures)
+        self.assertEqual([("first", False)], created[0].calls)
+        self.assertEqual([("second", False)], created[1].calls)
 
     def test_same_conversation_remains_serialized_while_response_is_active(self):
         started = [threading.Event(), threading.Event()]

@@ -8,7 +8,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from pipeline.adventure_events import AdventureEvent
-from pipeline.adventure_initiative import AdventureInitiativeError, AdventureParticipant
+from pipeline.adventure_initiative import AdventureInitiativeError, AdventureParticipant, AdventureParticipantMemoryPolicy
 from pipeline.adventure_knowledge import AdventureKnowledgeFact
 from pipeline.adventure_participant import AdventureParticipantView
 from pipeline.adventure_registry import AdventureRegistry
@@ -71,6 +71,57 @@ class AdventureParticipantViewTests(unittest.TestCase):
             AdventureParticipantView.from_session(AdventureSessionState.unmounted(), participant)
         with self.assertRaisesRegex(AdventureInitiativeError, "does not match"):
             AdventureParticipantView.from_session(AdventureSessionState(record=record), participant)
+
+    def test_view_filters_private_event_summaries_before_bounding_and_redacts_numeric_meter(self):
+        record = self._record()
+        participant = AdventureParticipant(
+            "vespera", "Vespera", "npc", f"adventure:{record.adventure_id}:participant:vespera",
+            AdventureParticipantMemoryPolicy(max_context_facts=1),
+        )
+        rook_knowledge = AdventureEvent(
+            1, "AE-000001", "character_knowledge", "Rook believes the captain is a traitor.", None,
+            "2026-08-27T00:00:00+00:00", knowledge_subject="Rook", knowledge_status="believes",
+            knowledge_fact="the captain is a traitor",
+        )
+        numeric_relationship = AdventureEvent(
+            2, "AE-000002", "relationship_change", "Vespera trust is 49 out of 100.", None,
+            "2026-08-27T00:00:00+00:00", relationship_subject="Vespera", relationship_dimension="trust",
+            relationship_value="49/100",
+        )
+        discovery = AdventureEvent(
+            3, "AE-000003", "discovery", "The crew finds a brass key.", None,
+            "2026-08-27T00:00:00+00:00",
+        )
+        relationship = AdventureRelationshipFact("Vespera", "trust", "49/100", "AE-000002")
+        session = AdventureSessionState(
+            record=record, event_count=3, context_events=(rook_knowledge, numeric_relationship, discovery),
+            relationship_facts=(relationship,), context_relationship_facts=(relationship,),
+        )
+
+        view = AdventureParticipantView.from_session(session, participant)
+        rendered = view.render()
+
+        # Typed perspective events never enter the generic event summary
+        # channel. The private Rook event is excluded before the one-event
+        # participant budget is applied; the shared discovery fills it. The
+        # subject-owned relationship remains visible as a qualitative
+        # projection, never as a raw numeric meter.
+        self.assertEqual(("The crew finds a brass key.",), view.events)
+        self.assertNotIn("Rook", rendered)
+        self.assertNotIn("49", rendered)
+        self.assertIn("qualitative internal state", rendered)
+
+    def test_view_honors_memory_policy_when_salient_events_are_disabled(self):
+        record = self._record()
+        participant = AdventureParticipant(
+            "vespera", "Vespera", "npc", f"adventure:{record.adventure_id}:participant:vespera",
+            AdventureParticipantMemoryPolicy(retain_salient_events=False),
+        )
+        event = AdventureEvent(1, "AE-000001", "discovery", "The crew finds a brass key.", None, "2026-08-27T00:00:00+00:00")
+        view = AdventureParticipantView.from_session(
+            AdventureSessionState(record=record, event_count=1, context_events=(event,)), participant,
+        )
+        self.assertEqual((), view.events)
 
 
 if __name__ == "__main__":

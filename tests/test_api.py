@@ -205,6 +205,16 @@ class APITests(unittest.TestCase):
         status, _ = self.request("GET", RESIDENT_SNAPSHOT_PATH, auth=False)
         self.assertEqual(status, 401)
 
+    def test_read_only_snapshot_rejects_an_unknown_conversation_without_creating_it(self):
+        status, raw = self.request(
+            "GET", RESIDENT_SNAPSHOT_PATH,
+            extra_headers={CONVERSATION_HEADER: "missing-snapshot"},
+        )
+        payload = json.loads(raw)
+        self.assertEqual(status, 404)
+        self.assertEqual(payload["error"]["type"], "conversation_not_found")
+        self.assertEqual(len(self.sessions), 1)
+
     def test_apartment_shell_is_public_but_contains_no_runtime_or_token(self):
         status, raw = self.request("GET", APARTMENT_DASHBOARD_PATH, auth=False)
         page = raw.decode("utf-8")
@@ -807,6 +817,16 @@ class AdventureAPITests(unittest.TestCase):
         self.assertIn("Created adventure workspace: Document-Safe Lantern", content)
         self.assertEqual([], self.provider_calls)
         self.assertEqual([], self.session.messages)
+
+    def test_stale_document_extensions_do_not_override_non_adventure_core_controls(self):
+        extensions = {
+            "starfur_document_context": {"review_id": "DR-" + "f" * 32, "limit": 1},
+            "starfur_document_review": {"action": "list"},
+        }
+        self.assertIn("Active persona:", self.chat("persona current", **extensions))
+        self.assertIn("No turn diagnostics", self.chat("context stats", **extensions))
+        self.assertIn("proposal", self.chat("proposal list", **extensions).casefold())
+        self.assertEqual([], self.provider_calls)
 
 
 if __name__ == "__main__":

@@ -147,6 +147,18 @@ class ExperimentLedgerTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 append_benchmark_result(Path(directory) / "ledger.jsonl", record)
 
+    def test_append_reconstructs_cases_and_rejects_nested_manifest_content(self):
+        record = build_benchmark_result_record(sample_manifest(), sample_result())
+        record["cases"][0]["provider_response"] = "private model output"
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ledger.jsonl"
+            append_benchmark_result(path, record)
+            saved = load_benchmark_results(path)[0]
+            self.assertNotIn("provider_response", saved["cases"][0])
+            record["manifest"]["raw_prompt"] = "private prompt"
+            with self.assertRaisesRegex(ValueError, "manifest"):
+                append_benchmark_result(path, record)
+
     def test_adventure_turn_results_separate_core_outcomes_without_turn_text(self):
         record = build_benchmark_result_record(sample_manifest(), sample_adventure_turn_result())
         case = record["cases"][0]

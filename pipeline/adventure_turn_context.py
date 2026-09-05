@@ -35,6 +35,32 @@ def _safe_relationship_value(value: str) -> str:
     return "qualitative internal state" if _NUMERIC_RELATIONSHIP_VALUE.search(value) else value
 
 
+def _event_context_entry(event: object) -> "AdventureTurnContextEntry | None":
+    """Project typed events without leaking hidden resource or meter prose.
+
+    Replay summaries are suitable for ordinary story continuity, but a typed
+    relationship/resource event has a safer authoritative projection below.
+    The provider must not receive a numeric meter or a potentially hidden
+    resource value just because either appeared in an event summary.
+    """
+    event_type = getattr(event, "event_type", None)
+    if event_type == "resource_change":
+        return None
+    if event_type == "relationship_change":
+        subject = getattr(event, "relationship_subject", None)
+        dimension = getattr(event, "relationship_dimension", None)
+        value = getattr(event, "relationship_value", None)
+        if all(isinstance(item, str) and item for item in (subject, dimension, value)):
+            return AdventureTurnContextEntry(
+                "relationship", f"{subject} / {dimension}", _bounded(_safe_relationship_value(value), 160),
+            )
+        return None
+    summary = getattr(event, "summary", None)
+    if not isinstance(event_type, str) or not isinstance(summary, str):
+        return None
+    return AdventureTurnContextEntry("event", event_type, _bounded(summary, 500))
+
+
 @dataclass(frozen=True)
 class AdventureTurnContextEntry:
     """One already-sanitized, typed line suitable for a provider projection."""
@@ -78,7 +104,9 @@ class AdventureTurnContextView:
 
         entries: list[AdventureTurnContextEntry] = []
         for event in session.context_events[:MAX_TURN_CONTEXT_EVENTS]:
-            entries.append(AdventureTurnContextEntry("event", event.event_type, _bounded(event.summary, 500)))
+            entry = _event_context_entry(event)
+            if entry is not None:
+                entries.append(entry)
         for fact in session.context_state_facts[:MAX_TURN_CONTEXT_STATE_FACTS]:
             entries.append(AdventureTurnContextEntry("state", fact.key, _bounded(fact.value, 500)))
         for fact in session.context_relationship_facts[:MAX_TURN_CONTEXT_RELATIONSHIPS]:

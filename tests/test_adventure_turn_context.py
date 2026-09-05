@@ -66,6 +66,30 @@ class AdventureTurnContextViewTests(unittest.TestCase):
         with self.assertRaisesRegex(TypeError, "context view"):
             AdventureTurnGenerationRequest.from_context_view(object(), user_text="Turn")
 
+    def test_typed_relationship_and_resource_events_do_not_leak_raw_summary_values(self):
+        record = self._record()
+        relationship_event = AdventureEvent(
+            1, "AE-000001", "relationship_change", "Vespera trust is 49 out of 100.", None,
+            "2026-08-26T00:00:00+00:00", relationship_subject="Vespera", relationship_dimension="trust",
+            relationship_value="49/100",
+        )
+        resource_event = AdventureEvent(
+            2, "AE-000002", "resource_change", "The captain token is placed in the hidden slot.", None,
+            "2026-08-26T00:00:00+00:00", resource_id="primary_slot", resource_operation="set",
+            resource_value="captain token",
+        )
+        relationship = AdventureRelationshipFact("Vespera", "trust", "49/100", "AE-000001")
+        view = AdventureTurnContextView.from_session(AdventureSessionState(
+            record=record, event_count=2, context_events=(relationship_event, resource_event),
+            relationship_facts=(relationship,), context_relationship_facts=(relationship,),
+        ))
+        rendered = view.render()
+
+        self.assertIn("Vespera / trust: qualitative internal state", rendered)
+        self.assertNotIn("49", rendered)
+        self.assertNotIn("captain token", rendered)
+        self.assertNotIn("primary_slot", rendered)
+
 
 if __name__ == "__main__":
     unittest.main()

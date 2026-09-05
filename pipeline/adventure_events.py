@@ -507,7 +507,7 @@ class AdventureEventLog:
         relationship_subject: object = None, relationship_dimension: object = None, relationship_value: object = None,
         knowledge_subject: object = None, knowledge_status: object = None, knowledge_fact: object = None,
         resource_id: object = None, resource_operation: object = None, resource_value: object = None,
-        request_id: object = None,
+        request_id: object = None, expected_event_count: object = None,
     ) -> AdventureEvent:
         """Append one Core-authored event through the same atomic batch path."""
         draft = AdventureEventDraft(
@@ -518,7 +518,9 @@ class AdventureEventLog:
             knowledge_subject=knowledge_subject, knowledge_status=knowledge_status, knowledge_fact=knowledge_fact,
             resource_id=resource_id, resource_operation=resource_operation, resource_value=resource_value,
         )
-        return self.append_many((draft,), request_id=request_id)[0]
+        return self.append_many(
+            (draft,), request_id=request_id, expected_event_count=expected_event_count,
+        )[0]
 
     def append_correction(
         self, target_event_id: object, summary: object, mutation: AdventureMutation,
@@ -685,7 +687,9 @@ class AdventureEventLog:
             self._reconcile_manifest_with_events(prefix)
         return tuple(prefix)
 
-    def append_many(self, drafts: object, *, request_id: object = None) -> list[AdventureEvent]:
+    def append_many(
+        self, drafts: object, *, request_id: object = None, expected_event_count: object = None,
+    ) -> list[AdventureEvent]:
         """Atomically append a bounded already-validated batch of drafts."""
         if not isinstance(drafts, (list, tuple)) or not drafts:
             raise AdventureEventLogError("event batch must contain at least one draft")
@@ -694,6 +698,12 @@ class AdventureEventLog:
         normalized_request_id = (
             None if request_id is None else normalize_event_request_id(request_id)
         )
+        if expected_event_count is not None and (
+            isinstance(expected_event_count, bool)
+            or not isinstance(expected_event_count, int)
+            or expected_event_count < 0
+        ):
+            raise AdventureEventLogError("expected adventure event count is invalid")
         with self._write_guard():
             self._recover_pending_log()
             existing = self.events()
@@ -703,6 +713,8 @@ class AdventureEventLog:
                 if not self._request_matches_drafts(prior, drafts):
                     raise AdventureEventLogError("event request identifier was already used for different events")
                 return prior
+            if expected_event_count is not None and len(existing) != expected_event_count:
+                raise AdventureEventLogError("adventure event log changed since turn staging")
             self._validate_resource_events((*existing, *drafts))
             recorded_at = self._now().astimezone(UTC).isoformat()
             events = [

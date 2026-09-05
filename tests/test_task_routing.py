@@ -129,9 +129,15 @@ class TaskRoutingTests(unittest.TestCase):
             ).status,
         )
         self.assertEqual(
-            "failed",
+            "unprobed",
             provider_route_status_from_runtime(
                 "ollama", configured=True, health_status="not_probed", lifecycle_state="error",
+            ).status,
+        )
+        self.assertEqual(
+            "unprobed",
+            provider_route_status_from_runtime(
+                "ollama", configured=True, health_status="unsupported",
             ).status,
         )
 

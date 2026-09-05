@@ -75,7 +75,8 @@
     (() => {
       const byId = (id) => document.getElementById(id);
       const endpoint = byId('endpoint'); const token = byId('token'); const conversation = byId('conversation'); const status = byId('status');
-      const resident = byId('resident'); const residentArt = byId('resident-art'); const activity = byId('activity'); let timer = null;
+      const resident = byId('resident'); const residentArt = byId('resident-art'); const activity = byId('activity');
+      let timer = null; let pollSequence = 0; let activePoll = null;
       endpoint.value = `${window.location.origin}/v1/starfur/resident-snapshot`;
       const value = (element, text) => { element.textContent = text || '—'; };
       const bytes = (amount) => typeof amount === 'number' ? `${(amount / 1073741824).toFixed(1)} GiB` : 'unavailable';
@@ -113,13 +114,24 @@
       };
       const poll = async () => {
         if (!token.value.trim()) return;
+        const sequence = ++pollSequence;
+        if (activePoll) activePoll.abort();
+        const controller = new AbortController();
+        activePoll = controller;
         try {
           const headers = { Authorization: `Bearer ${token.value.trim()}` };
           if (conversation.value.trim()) headers['X-StarFur-Conversation'] = conversation.value.trim();
-          const response = await fetch(endpoint.value, { headers });
+          const response = await fetch(endpoint.value, { headers, signal: controller.signal });
           if (!response.ok) throw new Error(`API returned ${response.status}`);
-          render(await response.json()); status.textContent = 'Connected. Read-only snapshot refreshed.';
-        } catch (error) { status.textContent = `Not connected: ${error.message}`; }
+          const data = await response.json();
+          if (sequence !== pollSequence) return;
+          render(data); status.textContent = 'Connected. Read-only snapshot refreshed.';
+        } catch (error) {
+          if (error.name === 'AbortError' || sequence !== pollSequence) return;
+          status.textContent = `Not connected: ${error.message}`;
+        } finally {
+          if (sequence === pollSequence && activePoll === controller) activePoll = null;
+        }
       };
       const schedule = () => { clearInterval(timer); timer = byId('refresh').checked ? setInterval(poll, 2000) : null; };
       byId('connect').addEventListener('click', () => { poll(); schedule(); });

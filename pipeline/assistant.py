@@ -613,8 +613,8 @@ class AssistantSession:
 
         This preserves the current single-provider behavior while making route
         selection explicit. Provider health is read only when an application
-        attached its bounded snapshot; a previous lifecycle error does not
-        suppress an explicit future retry.
+        attached its bounded snapshot; last-request lifecycle state remains
+        diagnostic and does not suppress an explicit future retry.
         """
         health = getattr(self, "provider_health_snapshot", {})
         status = provider_route_status_from_runtime(
@@ -653,12 +653,10 @@ class AssistantSession:
     def routing_status(self):
         """Render configured task routes without probing or calling a provider."""
         health = getattr(self, "provider_health_snapshot", {})
-        lifecycle = self.provider_lifecycle.snapshot()
         status = provider_route_status_from_runtime(
             self._provider_name or "unknown",
             configured=self.provider is not None,
             health_status=health.get("status", "not_probed"),
-            lifecycle_state=lifecycle.state,
         )
         profiles = getattr(self.config, "task_profiles", TaskProfiles())
         planner = TaskRoutePlanner(profiles, ProviderRouteRegistry({status.provider_id: status}))
@@ -1507,6 +1505,34 @@ class AssistantSession:
             f"Adventure workspace loaded: {record.title}. Recent conversation context was cleared. "
             f"{event_note} No roleplay mode was started."
         )
+
+    def adventure_refresh(self):
+        """Reload the mounted workspace's authoritative projections explicitly.
+
+        This is deliberately unavailable while a turn is staged: silently
+        discarding a user's uncommitted drafts in order to refresh a stale view
+        would turn an integrity safeguard into data loss.
+        """
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded."
+        if self.adventure_turn.active:
+            return (
+                "Adventure refresh is unavailable while turn staging is active. "
+                "Inspect, commit, or abort the staged turn first."
+            )
+        record = self.adventure_session.record
+        try:
+            events = AdventureEventLog(self.adventure_registry, record).events()
+            resource_catalog = self.adventure_registry.resource_catalog(record)
+        except (AdventureEventLogError, AdventureRegistryError) as error:
+            return f"Adventure event log error: {error}"
+        self._set_adventure_session(
+            self.adventure_session.mount(record, events, resource_catalog=resource_catalog)
+        )
+        event_note = "No authoritative events are recorded yet."
+        if events:
+            event_note = f"Loaded {len(events)} authoritative event(s) as bounded replay context."
+        return f"Adventure workspace refreshed: {record.title}. Recent conversation context was cleared. {event_note}"
 
     def adventure_unload(self):
         if not self.adventure_session.active:
@@ -2655,7 +2681,10 @@ class AssistantSession:
         if not self.adventure_session.active:
             return "Adventure workspace: none loaded. Load an adventure before beginning a staged turn."
         try:
-            self.adventure_turn = self.adventure_turn.begin(self.adventure_session.record)
+            self.adventure_turn = self.adventure_turn.begin(
+                self.adventure_session.record,
+                event_count=self.adventure_session.event_count,
+            )
         except ValueError as error:
             return f"Adventure turn was not started: {error}"
         return f"Adventure turn staging started for {self.adventure_session.record.title}."
@@ -3012,7 +3041,11 @@ class AssistantSession:
             return "Adventure turn staging was discarded because its workspace is no longer loaded."
         try:
             log = AdventureEventLog(self.adventure_registry, self.adventure_session.record)
-            events = log.append_many(self.adventure_turn.drafts, request_id=self.adventure_turn.request_id)
+            events = log.append_many(
+                self.adventure_turn.drafts,
+                request_id=self.adventure_turn.request_id,
+                expected_event_count=self.adventure_turn.origin_event_count,
+            )
             all_events = log.events()
         except AdventureEventLogError as error:
             return f"Adventure turn was not committed: {error}"
@@ -3093,6 +3126,8 @@ class AssistantSession:
             return self.adventure_inspect(text.strip()[len("adventure inspect"):])
         if lowered == "adventure load" or lowered.startswith("adventure load "):
             return self.adventure_load(text.strip()[len("adventure load"):])
+        if lowered == "adventure refresh":
+            return self.adventure_refresh()
         if lowered == "adventure resume" or lowered.startswith("adventure resume "):
             return self.adventure_resume(text.strip()[len("adventure resume"):])
         if lowered == "adventure begin" or lowered.startswith("adventure begin "):

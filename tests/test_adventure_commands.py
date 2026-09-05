@@ -79,6 +79,23 @@ class AdventureCommandTests(unittest.TestCase):
             self.assertIn("was not created", session.respond("adventure create quiet ember"))
             self.assertEqual([], calls)
 
+    def test_refresh_rebuilds_the_mounted_view_without_discarding_a_staged_turn(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            first = self._session(directory, calls)
+            second = self._session(directory, calls)
+            first.respond("adventure create Quiet Ember")
+            first.respond("adventure load Quiet Ember")
+            second.respond("adventure load Quiet Ember")
+            self.assertIn("Recorded adventure event AE-000001", second.respond("adventure record discovery: external"))
+            self.assertIn("Adventure workspace refreshed: Quiet Ember", first.respond("adventure refresh"))
+            self.assertIn("AE-000001", first.respond("adventure events"))
+            self.assertIn("Adventure turn staging started", first.respond("adventure turn begin"))
+            self.assertIn("Staged adventure event", first.respond("adventure turn stage discovery: pending"))
+            self.assertIn("unavailable while turn staging is active", first.respond("adventure refresh"))
+            self.assertIn("1. [discovery] pending", first.respond("adventure turn inspect"))
+            self.assertEqual([], calls)
+
     def test_malformed_adventure_namespace_never_reaches_model_or_writes(self):
         with tempfile.TemporaryDirectory() as directory:
             calls = []
@@ -590,6 +607,39 @@ class AdventureCommandTests(unittest.TestCase):
                 session.present_adventure_turn_candidates(result)
             self.assertFalse(session.adventure_turn_candidate_inbox.active)
             self.assertEqual([], calls)
+
+    def test_staged_turn_commit_rejects_an_external_workspace_write(self):
+        with tempfile.TemporaryDirectory() as directory:
+            first_calls = []
+            second_calls = []
+            first = self._session(directory, first_calls)
+            second = self._session(directory, second_calls)
+            first.respond("adventure create Quiet Ember")
+            first.respond("adventure load Quiet Ember")
+            second.respond("adventure load Quiet Ember")
+
+            self.assertIn("staging started", first.respond("adventure turn begin"))
+            self.assertIn(
+                "Staged adventure event", first.respond(
+                    "adventure turn stage discovery: A brass key is found.",
+                ),
+            )
+            self.assertIn(
+                "Recorded adventure event", second.respond(
+                    "adventure record discovery: A different clue is found.",
+                ),
+            )
+
+            self.assertIn(
+                "changed since turn staging", first.respond("adventure turn commit"),
+            )
+            events = AdventureEventLog(
+                first.adventure_registry, first.adventure_session.record,
+            ).events()
+            self.assertEqual(["A different clue is found."], [event.summary for event in events])
+            self.assertTrue(first.adventure_turn.active)
+            self.assertEqual([], first_calls)
+            self.assertEqual([], second_calls)
 
     def test_exact_candidate_commands_review_and_stage_only_one_selected_candidate(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -14,6 +14,10 @@ pending the next copy/commit confirmation.
 - `pipeline/command_help.py`
 - `pipeline/persona_asset_resolver.py`
 - `pipeline/adventure_turn_policy.py`
+- `pipeline/adventure_turn.py`
+- `pipeline/adventure_events.py`
+- `pipeline/adventure_participant.py`
+- `pipeline/adventure_turn_context.py`
 - `pipeline/adventure_turn_provider.py`
 - `pipeline/experiment_ledger.py`
 - `pipeline/adventure_turn_candidates.py`
@@ -43,6 +47,11 @@ pending the next copy/commit confirmation.
 - `tests/test_persona_selection.py`
 - `tests/test_persona_asset_resolver.py`
 - `tests/test_adventure_turn_candidates.py`
+- `tests/test_adventure_turn.py`
+- `tests/test_adventure_events.py`
+- `tests/test_adventure_commands.py`
+- `tests/test_adventure_participant.py`
+- `tests/test_adventure_turn_context.py`
 - `tests/test_adventure_turn_provider.py`
 - `tests/test_experiment_ledger.py`
 - `tests/test_application.py`

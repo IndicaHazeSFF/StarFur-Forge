@@ -33,6 +33,63 @@ _METRIC_FIELDS = {
     "annotation_false_positive_count", "annotation_missed_target_count",
     "routing_pass_rate",
 }
+_MANIFEST_FIELDS = {
+    "schema_version", "benchmark_id", "workload", "model_profile",
+    "architecture_fingerprint", "seed", "hardware", "git_commit", "run_id", "started_at",
+}
+_MODEL_PROFILE_FIELDS = {"provider", "model", "quantization", "context_size"}
+
+
+def _sanitize_manifest(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Copy one bounded reproducibility manifest without arbitrary metadata."""
+    if not isinstance(value, Mapping) or set(value) - _MANIFEST_FIELDS:
+        raise ValueError("ledger manifest must use the bounded manifest schema")
+    required = {"schema_version", "benchmark_id", "workload", "model_profile", "architecture_fingerprint", "seed", "hardware", "git_commit", "run_id", "started_at"}
+    if not required.issubset(value):
+        raise ValueError("ledger manifest is incomplete")
+    profile = value["model_profile"]
+    if not isinstance(profile, Mapping) or set(profile) - _MODEL_PROFILE_FIELDS:
+        raise ValueError("ledger model profile must use the bounded schema")
+    if not _MODEL_PROFILE_FIELDS.issubset(profile):
+        raise ValueError("ledger model profile is incomplete")
+    context_size = profile["context_size"]
+    if context_size is not None and (isinstance(context_size, bool) or not isinstance(context_size, int) or context_size <= 0):
+        raise ValueError("ledger model context size is invalid")
+    quantization = profile["quantization"]
+    if quantization is not None:
+        quantization = _bounded_text(quantization, "model profile quantization")
+    hardware = value["hardware"]
+    if not isinstance(hardware, Mapping) or len(hardware) > 32:
+        raise ValueError("ledger hardware metadata is invalid")
+    sanitized_hardware = {}
+    for key, item in hardware.items():
+        key = _bounded_text(key, "hardware field", required=True)
+        if isinstance(item, str):
+            sanitized_hardware[key] = _bounded_text(item, f"hardware {key}", required=True)
+        elif item is None or isinstance(item, bool) or isinstance(item, (int, float)):
+            sanitized_hardware[key] = item
+        else:
+            raise ValueError("ledger hardware values must be scalar")
+    seed = value["seed"]
+    if seed is not None and (isinstance(seed, bool) or not isinstance(seed, int)):
+        raise ValueError("ledger manifest seed is invalid")
+    return {
+        "schema_version": _bounded_text(value["schema_version"], "manifest schema version", required=True),
+        "benchmark_id": _bounded_text(value["benchmark_id"], "manifest benchmark id", required=True),
+        "workload": _bounded_text(value["workload"], "manifest workload", required=True),
+        "model_profile": {
+            "provider": _bounded_text(profile["provider"], "model profile provider", required=True),
+            "model": _bounded_text(profile["model"], "model profile model", required=True),
+            "quantization": quantization,
+            "context_size": context_size,
+        },
+        "architecture_fingerprint": _bounded_text(value["architecture_fingerprint"], "manifest architecture fingerprint", required=True),
+        "seed": seed,
+        "hardware": sanitized_hardware,
+        "git_commit": None if value["git_commit"] is None else _bounded_text(value["git_commit"], "manifest git commit"),
+        "run_id": None if value["run_id"] is None else _bounded_text(value["run_id"], "manifest run id"),
+        "started_at": _bounded_text(value["started_at"], "manifest started_at", required=True),
+    }
 
 
 def _utc_now() -> str:
@@ -338,15 +395,36 @@ def append_benchmark_result(path: str | Path, record: Mapping[str, Any]) -> dict
         raise ValueError("ledger outcome must use the bounded outcome schema")
     if not isinstance(record["cases"], list):
         raise ValueError("ledger cases must be a list")
-    for case in record["cases"]:
-        _sanitize_case_result(case)
+    metrics = {field: _number(value, field) for field, value in record["metrics"].items() if field != "repeatability"}
+    if "repeatability" in record["metrics"]:
+        if not isinstance(record["metrics"]["repeatability"], bool):
+            raise ValueError("ledger repeatability must be boolean")
+        metrics["repeatability"] = record["metrics"]["repeatability"]
+    outcome = record["outcome"]
+    if outcome.get("status") not in {"passed", "failed"}:
+        raise ValueError("ledger outcome status is invalid")
+    category = outcome.get("failure_category")
+    if category is not None:
+        category = _bounded_text(category, "ledger failure category")
+    sanitized = {
+        "schema_version": EXPERIMENT_LEDGER_SCHEMA_VERSION,
+        "record_id": _bounded_text(record["record_id"], "ledger record id", required=True),
+        "recorded_at": _bounded_text(record["recorded_at"], "ledger recorded_at", required=True),
+        "run_id": _bounded_text(record["run_id"], "ledger run id", required=True),
+        "benchmark_version": _bounded_text(record["benchmark_version"], "ledger benchmark version", required=True),
+        "manifest": _sanitize_manifest(record["manifest"]),
+        "outcome": {"status": outcome["status"], "failure_category": category},
+        "metrics": metrics,
+        "cases": [_sanitize_case_result(case) for case in record["cases"]],
+        "raw_content_included": False,
+    }
     target.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.dumps(dict(record), sort_keys=True, separators=(",", ":")) + "\n"
+    payload = json.dumps(sanitized, sort_keys=True, separators=(",", ":")) + "\n"
     with target.open("a", encoding="utf-8", newline="\n") as handle:
         handle.write(payload)
         handle.flush()
         os.fsync(handle.fileno())
-    return dict(record)
+    return sanitized
 
 
 def load_benchmark_results(path: str | Path) -> list[dict[str, Any]]:

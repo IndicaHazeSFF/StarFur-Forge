@@ -9,6 +9,7 @@ assistant memory, real-world persona state, hidden resources, or full history.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 
 from pipeline.adventure_initiative import AdventureInitiativeError, AdventureParticipant
 from pipeline.adventure_knowledge import AdventureKnowledgeFact
@@ -22,11 +23,41 @@ MAX_PARTICIPANT_RELATIONSHIPS = 16
 MAX_PARTICIPANT_RESOURCES = 16
 MAX_PARTICIPANT_VIEW_CHARACTERS = 12_000
 
+# Ordinary replay facts are not automatically public to every governed
+# participant.  Until an event schema gains explicit audience declarations,
+# retain only event kinds that establish shared world continuity.  Perspective
+# facts use their typed projections below, where subject ownership is known.
+_SHARED_PARTICIPANT_EVENT_TYPES = frozenset({
+    "premise", "choice", "discovery", "location_change", "state_change", "unresolved_hook",
+})
+_NUMERIC_RELATIONSHIP_VALUE = re.compile(r"\d")
+
 
 def _participant_subject_matches(participant: AdventureParticipant, subject: str) -> bool:
     """Use only exact normalized participant identity/display-name matches."""
+    if not isinstance(subject, str):
+        return False
     normalized = " ".join(subject.split()).casefold()
     return normalized in {participant.participant_id, participant.display_name.casefold()}
+
+
+def _participant_event_is_visible(participant: AdventureParticipant, event: object) -> bool:
+    """Conservatively admit only shared continuity events to a participant view.
+
+    Relationship and character-knowledge events are represented by typed
+    projections after an exact subject check.  Their narrative summaries must
+    not bypass that perspective boundary merely because they appeared in the
+    global replay spine.
+    """
+    event_type = getattr(event, "event_type", None)
+    if event_type in _SHARED_PARTICIPANT_EVENT_TYPES:
+        return True
+    return False
+
+
+def _safe_relationship_value(value: str) -> str:
+    """Keep internal numeric meters out of a future participant prompt."""
+    return "qualitative internal state" if _NUMERIC_RELATIONSHIP_VALUE.search(value) else value
 
 
 @dataclass(frozen=True)
@@ -77,9 +108,11 @@ class AdventureParticipantView:
             raise AdventureInitiativeError("participant view requires a mounted adventure")
         if not isinstance(participant, AdventureParticipant):
             raise TypeError("participant view requires an AdventureParticipant")
-        events = tuple(event.summary for event in session.context_events[:min(
-            MAX_PARTICIPANT_EVENTS, participant.memory_policy.max_context_facts,
-        )])
+        event_limit = min(MAX_PARTICIPANT_EVENTS, participant.memory_policy.max_context_facts)
+        events = () if not participant.memory_policy.retain_salient_events else tuple(
+            event.summary for event in session.context_events
+            if _participant_event_is_visible(participant, event)
+        )[:event_limit]
         relationships = tuple(
             fact for fact in session.context_relationship_facts
             if _participant_subject_matches(participant, fact.subject)
@@ -107,7 +140,10 @@ class AdventureParticipantView:
         if self.events:
             lines.extend(f"- [event] {event}" for event in self.events)
         if self.relationships:
-            lines.extend(f"- [relationship] {fact.dimension}: {fact.value}" for fact in self.relationships)
+            lines.extend(
+                f"- [relationship] {fact.dimension}: {_safe_relationship_value(fact.value)}"
+                for fact in self.relationships
+            )
         if self.knowledge:
             lines.extend(f"- [knowledge] {fact.status}: {fact.fact}" for fact in self.knowledge)
         if self.public_resources:
