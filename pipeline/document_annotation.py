@@ -18,7 +18,7 @@ from pipeline.document_intake import (
     DocumentAnnotationExecution,
     IntakeChunk,
 )
-from pipeline.providers import ChatProvider
+from pipeline.providers import ChatProvider, ChatProviderResponseError, normalize_chat_completion
 
 
 DOCUMENT_ANNOTATION_MAX_OUTPUT_TOKENS = 1024
@@ -63,17 +63,12 @@ def build_document_annotation_messages(chunk: IntakeChunk, *, retry_attempt: int
 
 
 def _response_content(response: Any) -> str:
-    """Read content from mapping or typed provider responses without logging it."""
-    if isinstance(response, Mapping):
-        message = response.get("message")
-        if isinstance(message, Mapping):
-            content = message.get("content", "")
-        else:
-            content = response.get("content", "")
-    else:
-        message = getattr(response, "message", None)
-        content = getattr(message, "content", "")
-    return content if isinstance(content, str) else ""
+    """Read one provider-neutral text result without logging raw output."""
+    try:
+        return normalize_chat_completion(response).content
+    except ChatProviderResponseError:
+        # Preserve the existing annotation error category for missing text.
+        return ""
 
 def _parse_json_content(content: str) -> Any:
     """Parse raw or Markdown-fenced JSON without weakening schema checks."""

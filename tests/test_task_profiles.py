@@ -3,6 +3,7 @@ import sys
 import tempfile
 import types
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -12,6 +13,7 @@ from pipeline.application import AssistantApplication
 from pipeline.adventure_registry import AdventureRegistry
 from pipeline.assistant import AssistantConfig, AssistantSession, load_config
 from pipeline.document_intake import prepare_document_text
+from pipeline.provider_registry import ChatProviderRegistration, ChatProviderRegistry
 from pipeline.task_profiles import (
     TASK_ADVENTURE_TURN_GENERATION, TASK_ADVENTURE_TURN_MUTATION_GENERATION, TASK_ASSISTANT_CHAT, TASK_DOCUMENT_ANNOTATION, TASK_DOCUMENT_ANNOTATION_FALLBACK, TaskProfile, TaskProfiles,
     load_task_profiles,
@@ -35,6 +37,17 @@ class FakeProvider:
     def probe_health(self):
         self.probe_calls += 1
         return self.list_models()
+
+
+class CompletionOnlyProvider:
+    """Specialist test double intentionally lacking discovery/probe methods."""
+
+    def __init__(self):
+        self.calls = []
+
+    def complete(self, messages, *, model=None, options=None, stream=False):
+        self.calls.append({"model": model, "options": dict(options or {}), "stream": stream})
+        return {"message": {"content": "specialist answer"}}
 
 
 def config_with_profiles(profiles):
@@ -73,6 +86,27 @@ class TaskProfileTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Unknown task profile generation option"):
             load_task_profiles({"assistant_chat": {"generation_options": {"num_predict": 42}}})
 
+    def test_provider_mode_is_validated_and_disabled_mode_never_routes_generation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "assistant.json"
+            path.write_text(json.dumps({"provider_mode": "invalid"}), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "provider_mode"):
+                load_config(path)
+
+        session = AssistantSession(
+            replace(config_with_profiles(TaskProfiles()), provider_mode="disabled"), "Persona",
+            memory_loader=lambda **_kwargs: [], policy="Policy",
+        )
+        self.assertIn("provider disabled (unavailable)", session.command("routing status"))
+        with self.assertRaisesRegex(RuntimeError, "no configured provider route"):
+            session._provider_complete(({"role": "user", "content": "hello"},))
+
+        with self.assertRaisesRegex(ValueError, "provider_mode 'disabled'"):
+            AssistantSession(
+                replace(config_with_profiles(TaskProfiles()), provider_mode="disabled"), "Persona",
+                provider=FakeProvider(), memory_loader=lambda **_kwargs: [], policy="Policy",
+            )
+
     def test_chat_profile_options_apply_but_active_model_remains_authoritative(self):
         profiles = TaskProfiles({
             TASK_ASSISTANT_CHAT: TaskProfile(
@@ -93,8 +127,42 @@ class TaskProfileTests(unittest.TestCase):
             "provider": "ollama",
             "model": "chat-model",
             "fallback_used": False,
-            "outcome": "submitted",
+            "outcome": "completed",
         }], session.last_turn_diagnostics["task_routes"])
+
+    def test_exact_task_profile_can_select_an_injected_specialist_provider(self):
+        profiles = TaskProfiles({
+            TASK_ASSISTANT_CHAT: TaskProfile(TASK_ASSISTANT_CHAT, provider="specialist", model="small-model"),
+        })
+        primary = FakeProvider()
+        specialist = CompletionOnlyProvider()
+        registry = ChatProviderRegistry({
+            "ollama": ChatProviderRegistration("ollama", primary),
+            "specialist": ChatProviderRegistration("specialist", specialist),
+        })
+        session = AssistantSession(
+            config_with_profiles(profiles), "Persona", provider=primary, provider_registry=registry,
+            memory_loader=lambda **_kwargs: [], policy="Policy",
+        )
+
+        self.assertEqual("specialist answer", session.respond("hello"))
+        self.assertEqual([], primary.calls)
+        self.assertEqual("small-model", specialist.calls[0]["model"])
+        self.assertEqual("specialist", session.last_turn_diagnostics["task_routes"][0]["provider"])
+        self.assertEqual("specialist", session.provider_lifecycle.public_dict()["provider"])
+        self.assertIn("assistant_chat: specialist / small-model [unprobed]", session.command("routing status"))
+        self.assertEqual(0, primary.probe_calls)
+
+    def test_injected_provider_registry_must_include_the_active_provider(self):
+        provider = FakeProvider()
+        registry = ChatProviderRegistry({
+            "specialist": ChatProviderRegistration("specialist", FakeProvider()),
+        })
+        with self.assertRaisesRegex(ValueError, "active provider"):
+            AssistantSession(
+                config_with_profiles(TaskProfiles()), "Persona", provider=provider, provider_registry=registry,
+                memory_loader=lambda **_kwargs: [], policy="Policy",
+            )
 
     def test_document_annotation_uses_its_profile_without_touching_chat(self):
         profiles = TaskProfiles({

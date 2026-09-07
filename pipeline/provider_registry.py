@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Mapping
 
-from pipeline.providers import ChatProvider
+from pipeline.providers import ChatCompletionProvider
 from pipeline.task_routing import normalize_provider_id
 
 
@@ -20,7 +20,7 @@ class ChatProviderRegistration:
     """One stable Core-owned ID paired with an injected chat adapter."""
 
     provider_id: str
-    provider: ChatProvider
+    provider: ChatCompletionProvider
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "provider_id", normalize_provider_id(self.provider_id))
@@ -50,9 +50,13 @@ class ChatProviderRegistry:
             normalized[provider_id] = registration
         object.__setattr__(self, "registrations", normalized)
 
-    def get(self, provider_id: object) -> ChatProvider | None:
+    def get(self, provider_id: object) -> ChatCompletionProvider | None:
         registration = self.registrations.get(normalize_provider_id(provider_id))
         return None if registration is None else registration.provider
+
+    def provider_ids(self) -> tuple[str, ...]:
+        """Return stable registered IDs without exposing adapter internals."""
+        return tuple(sorted(self.registrations))
 
     def ids(self) -> tuple[str, ...]:
         return tuple(sorted(self.registrations))

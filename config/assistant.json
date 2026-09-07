@@ -28,6 +28,7 @@
     }
   ],
   "active_persona_id": "murr",
+  "provider_mode": "ollama",
   "domain": "personal",
   "max_session_messages": 20,
   "max_memories": 5,

@@ -48,7 +48,7 @@ The next product loop is not a router or an apartment animation system. It is a 
 | Core/application | canonical memory/adventure state, projections, permissions, command precedence, route policy, package validation, read models | persona prose or provider-specific authority |
 | Persona package/runtime | identity, bounded traits, declared interests, presentation defaults, asset references | Core memory truth, permissions, credentials, executable behavior |
 | Adventure workspace | isolated event history, scenario catalog, state/relationship/knowledge/resource projections, replay | shared personal memory or real-world relationships |
-| Provider adapter | protocol translation and bounded health/model metadata | commands, state writes, memory approval, permissions, hidden routing |
+| Provider adapter | completion protocol translation; optional bounded health/model metadata | commands, state writes, memory approval, permissions, hidden routing |
 | Router | resolve/execute an eligible provider for a typed task and return bounded outcome | staging, committing, retrieval policy, persona selection, UI state |
 | Presentation client | input, rendering, accessibility, confirmation surfaces | database mutation or canonical reconstruction |
 | Workshop installer | quarantine, manifest validation, compatibility, safe extraction | trusting paths/scripts or granting permissions |
@@ -203,6 +203,27 @@ turn traces and runtime diagnostics reuse the same bounded shape; provider
 responses, prompts, messages, and payloads remain outside the record. Public
 route previews additionally expose clamped context/output budgets without
 probing or executing a provider.
+
+**COMPLETED E1 PROVIDER-NEUTRAL TEXT-CONTRACT SLICE:** Complete responses and
+streamed text fragments now cross into Core through one typed, text-only
+normalization seam. Normal chat, proposal extraction, document annotation, and
+adventure-turn extraction no longer parse a particular adapter payload shape.
+The seam deliberately excludes raw payloads, tool data, transport metadata,
+provider construction, cancellation, and retry/fallback authority.
+
+**COMPLETED E1 COMPLETION-ONLY SPECIALIST SLICE:** The provider registry and
+task-specific adventure adapters now require only the narrow text-completion
+protocol. The active resident adapter remains responsible for optional model
+listing and health probing; a routed specialist need not imitate capabilities
+it does not have. Provider-free tests prove a completion-only specialist can
+be registered, selected, and executed without any probe or discovery call.
+
+**COMPLETED E1 STREAM-OUTCOME SLICE:** The bounded route trace now changes
+from submitted to completed only after a non-stream response or a streamed
+iteration finishes. A stream failure or interruption records a closed failure
+or cancellation category; partial generated text never enters conversation
+history, proposals, or canonical state. This is telemetry only and does not
+add a retry or fallback path.
 
 **COMPLETED INITIAL E1 PORTABILITY-EVALUATION SLICE:** A checked-in,
 provider-free routing fixture now verifies primary selection, finite configured

@@ -21,6 +21,11 @@ class FakeChatProvider:
         return {"models": []}
 
 
+class CompletionOnlyProvider:
+    def complete(self, messages, *, model=None, options=None, stream=False):
+        return {"message": {"content": "unused"}}
+
+
 class ProviderRegistryTests(unittest.TestCase):
     def test_registry_uses_stable_ids_without_constructing_or_calling_provider(self):
         provider = FakeChatProvider()
@@ -40,6 +45,13 @@ class ProviderRegistryTests(unittest.TestCase):
             ChatProviderRegistry({
                 "one": ChatProviderRegistration("two", provider),
             })
+
+    def test_registry_accepts_completion_only_specialist_without_health_or_model_listing(self):
+        provider = CompletionOnlyProvider()
+        registry = ChatProviderRegistry({
+            "specialist": ChatProviderRegistration("specialist", provider),
+        })
+        self.assertIs(provider, registry.get("specialist"))
 
 
 if __name__ == "__main__":

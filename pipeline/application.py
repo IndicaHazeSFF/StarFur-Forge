@@ -36,7 +36,8 @@ from pipeline.persona_asset_resolver import InstalledPersonaAssetPackage, Person
 from pipeline.persona_assets import BUILTIN_MURR_ASSET_MANIFEST
 from pipeline.persona_registry import PersonaRegistry, load_persona_package
 from pipeline.persona_runtime import PersonaRuntimeRegistry
-from pipeline.providers import provider_health_snapshot
+from pipeline.provider_registry import ChatProviderRegistry
+from pipeline.providers import ChatProvider, provider_health_snapshot, provider_is_configured
 from pipeline.resident_presentation import ResidentPresentationPlan
 from pipeline.resident_snapshot import ResidentSnapshot
 from pipeline.system_metrics import LocalSystemMetricsProvider, NullSystemMetricsProvider, SystemMetricsProvider, SystemMetricsSnapshot
@@ -47,7 +48,8 @@ DEFAULT_MAX_CONVERSATIONS = 16
 _CONVERSATION_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}\Z")
 _ROUTE_TRACE_ID_RE = re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")
 _ROUTE_TRACE_OUTCOMES = frozenset({
-    "submitted", "route_unavailable", "provider_adapter_unavailable", "provider_request_failed",
+    "submitted", "completed", "route_unavailable", "provider_adapter_unavailable",
+    "provider_request_failed", "provider_stream_failed", "provider_stream_cancelled",
 })
 
 
@@ -421,7 +423,7 @@ class AssistantApplication:
                 persona=runtime_public() if callable(runtime_public) else None,
                 provider={
                     "name": getattr(session, "_provider_name", None) or getattr(provider, "name", None) or "unknown",
-                    "configured": provider is not None,
+                    "configured": provider_is_configured(provider),
                     "health": health["status"],
                     "model": self._active_model_for_session(session),
                 },
@@ -524,7 +526,7 @@ class AssistantApplication:
         bounded fallback adapter remains below this boundary.
         """
         provider = getattr(session, "provider", None)
-        if provider is None:
+        if not provider_is_configured(provider):
             raise RuntimeError("Document annotation provider is unavailable.")
         provider_name = getattr(session, "_provider_name", None) or getattr(provider, "name", None) or "unknown"
         provider_status = provider_route_status_from_runtime(
@@ -607,10 +609,10 @@ class AssistantApplication:
                 provider_health=provider_health,
             )
             return {
-                "status": "ready" if provider is not None else "provider_unavailable",
+                "status": "ready" if provider_is_configured(provider) else "provider_unavailable",
                 "provider": {
                     "name": provider_name or "unknown",
-                    "configured": provider is not None,
+                    "configured": provider_is_configured(provider),
                     "health": provider_health["status"],
                     "probe_performed": provider_health["probe_performed"],
                     "checked_at": provider_health["checked_at"],
@@ -641,7 +643,7 @@ class AssistantApplication:
         provider = getattr(session, "provider", None)
         status = provider_route_status_from_runtime(
             provider_name or "unknown",
-            configured=provider is not None,
+            configured=provider_is_configured(provider),
             health_status=provider_health.get("status"),
         )
         profiles = getattr(session.config, "task_profiles", TaskProfiles())
@@ -671,6 +673,8 @@ def create_assistant_application(
     max_conversations: int = DEFAULT_MAX_CONVERSATIONS,
     retriever: MemoryRetriever | None = None,
     system_metrics_provider: SystemMetricsProvider | None = None,
+    provider: ChatProvider | None = None,
+    provider_registry: ChatProviderRegistry | None = None,
 ):
     """Create the standard Assistant Mode application for any presentation client."""
     config = load_config(config_path) if config_path else load_config()
@@ -697,6 +701,8 @@ def create_assistant_application(
         for package in persona_registry.packages()
         if package.asset_manifest is not None or package.persona_id == "murr"
     )
+    if provider_registry is not None and provider is None:
+        raise ValueError("provider_registry requires an explicit active provider")
     def make_session():
         kwargs = dict(
             policy=load_policy(config.policy_path),
@@ -706,6 +712,10 @@ def create_assistant_application(
             debug_level=debug_level,
             retriever=shared_retriever,
         )
+        if provider is not None:
+            kwargs["provider"] = provider
+        if provider_registry is not None:
+            kwargs["provider_registry"] = provider_registry
         if getattr(config, "persona_registry", None) is not None:
             kwargs["persona_registry"] = persona_registry
             kwargs["persona_runtime_registry"] = persona_runtime_registry

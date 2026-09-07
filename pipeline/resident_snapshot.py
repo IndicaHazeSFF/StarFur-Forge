@@ -21,7 +21,8 @@ _ACTIVITIES = frozenset({
 })
 _PROVIDER_BUSY_STATES = frozenset({"connecting", "loading", "generating", "streaming", "cooling", "unloading"})
 _ROUTE_TRACE_OUTCOMES = frozenset({
-    "submitted", "route_unavailable", "provider_adapter_unavailable", "provider_request_failed",
+    "submitted", "completed", "route_unavailable", "provider_adapter_unavailable",
+    "provider_request_failed", "provider_stream_failed", "provider_stream_cancelled",
 })
 
 

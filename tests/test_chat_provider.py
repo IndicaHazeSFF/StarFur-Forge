@@ -7,7 +7,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.modules.setdefault("ollama", types.ModuleType("ollama"))
 
 from pipeline.assistant import AssistantConfig, AssistantSession
-from pipeline.providers import CallableChatProvider, OllamaChatProvider
+from pipeline.providers import (
+    CallableChatProvider, ChatProviderResponseError, OllamaChatProvider,
+    normalize_chat_completion, normalize_chat_stream_chunk,
+)
 
 
 class FakeOllama:
@@ -84,6 +87,89 @@ class ChatProviderTests(unittest.TestCase):
                 self.config(), "Persona", chat=lambda **kwargs: None, provider=FakeProvider(),
                 memory_loader=lambda **kwargs: [], policy="Policy",
             )
+
+    def test_provider_neutral_completion_contract_accepts_mapping_and_typed_shapes(self):
+        self.assertEqual("mapping", normalize_chat_completion({"message": {"content": "mapping"}}).content)
+
+        class Message:
+            content = "typed"
+
+        class Response:
+            message = Message()
+
+        self.assertEqual("typed", normalize_chat_completion(Response()).content)
+        self.assertEqual("part", normalize_chat_stream_chunk({"content": "part"}).content)
+        with self.assertRaisesRegex(ChatProviderResponseError, "no text"):
+            normalize_chat_completion({"message": {}})
+        with self.assertRaisesRegex(ChatProviderResponseError, "no text"):
+            normalize_chat_stream_chunk(object())
+
+    def test_session_consumes_a_typed_completion_without_provider_shape_assumptions(self):
+        class Message:
+            content = "typed answer"
+
+        class Response:
+            message = Message()
+
+        class TypedProvider(FakeProvider):
+            def complete(self, messages, *, model=None, options=None, stream=False):
+                self.calls.append({"messages": messages, "model": model, "options": options, "stream": stream})
+                return Response()
+
+        session = AssistantSession(
+            self.config(), "Persona", provider=TypedProvider(),
+            memory_loader=lambda **_kwargs: [], policy="Policy",
+        )
+        self.assertEqual("typed answer", session.respond("hello"))
+
+    def test_session_streams_typed_fragments_and_ignores_metadata_only_chunks(self):
+        class Message:
+            def __init__(self, content):
+                self.content = content
+
+        class Chunk:
+            def __init__(self, content):
+                self.message = Message(content)
+
+        class MetadataOnlyChunk:
+            pass
+
+        class StreamProvider(FakeProvider):
+            def complete(self, messages, *, model=None, options=None, stream=False):
+                self.calls.append({"messages": messages, "model": model, "options": options, "stream": stream})
+                return iter((Chunk("typed "), MetadataOnlyChunk(), Chunk("stream")))
+
+        rendered = []
+        session = AssistantSession(
+            self.config(), "Persona", provider=StreamProvider(), stream=True,
+            stream_writer=rendered.append, memory_loader=lambda **_kwargs: [], policy="Policy",
+        )
+        self.assertEqual("typed stream", session.respond("hello"))
+        self.assertEqual(["typed ", "stream"], rendered)
+        self.assertEqual("completed", session.last_turn_diagnostics["task_routes"][0]["outcome"])
+
+    def test_stream_failure_is_diagnostic_only_and_never_persists_partial_chat(self):
+        class FailingStreamProvider(FakeProvider):
+            def complete(self, messages, *, model=None, options=None, stream=False):
+                self.calls.append({"messages": messages, "model": model, "options": options, "stream": stream})
+
+                def chunks():
+                    yield {"message": {"content": "partial"}}
+                    raise RuntimeError("stream disconnected")
+
+                return chunks()
+
+        rendered = []
+        session = AssistantSession(
+            self.config(), "Persona", provider=FailingStreamProvider(), stream=True,
+            stream_writer=rendered.append, memory_loader=lambda **_kwargs: [], policy="Policy",
+        )
+        with self.assertRaisesRegex(RuntimeError, "stream disconnected"):
+            session.respond("hello")
+        self.assertEqual(["partial"], rendered)
+        self.assertEqual([], session.messages)
+        self.assertEqual("provider_stream_failed", session.last_turn_diagnostics["task_routes"][0]["outcome"])
+        self.assertEqual("failed", session.last_turn_diagnostics["turn_status"])
 
 
 if __name__ == "__main__":

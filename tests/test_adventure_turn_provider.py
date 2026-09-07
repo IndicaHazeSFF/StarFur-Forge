@@ -48,6 +48,14 @@ class _TypedResponse:
         self.message = _TypedMessage(content)
 
 
+class _CompletionOnlyProvider:
+    def __init__(self, response):
+        self.response = response
+
+    def complete(self, messages, *, model=None, options=None, stream=False):
+        return self.response
+
+
 class AdventureTurnProviderTests(unittest.TestCase):
     def _request(self):
         directory = tempfile.TemporaryDirectory()
@@ -75,6 +83,12 @@ class AdventureTurnProviderTests(unittest.TestCase):
         self.assertEqual({"temperature": 0}, options)
         self.assertFalse(stream)
         self.assertEqual("system", messages[0]["role"])
+
+    def test_chat_adapter_accepts_a_completion_only_specialist(self):
+        adapter = ChatAdventureTurnCandidateProvider(_CompletionOnlyProvider(
+            {"message": {"content": '{"schema_version":1,"candidates":[]}'}}
+        ))
+        self.assertEqual({"schema_version": 1, "candidates": []}, adapter.propose(self._request()))
 
     def test_invalid_response_or_envelope_fails_without_candidate_result(self):
         adapter = ChatAdventureTurnCandidateProvider(
@@ -135,6 +149,17 @@ class AdventureTurnProviderTests(unittest.TestCase):
                 "schema_version": 1,
                 "candidates": [{"event_type": "discovery", "summary": "A key.", "confidence": 0.8}],
             })
+
+    def test_typed_mutation_adapter_accepts_a_completion_only_specialist(self):
+        adapter = ChatAdventureTurnMutationCandidateProvider(_CompletionOnlyProvider(
+            {"message": {"content": (
+                '{"schema_version":1,"candidates":[{"mutation":{"kind":"state_set",'
+                '"key":"current_location","value":"engine room"},"confidence":0.8}]}'
+            )}}
+        ))
+        decoded = adapter.propose(self._mutation_request())
+        batch = validate_adventure_turn_mutation_provider_result(decoded)
+        self.assertEqual("TM-001", batch.candidates[0].candidate_id)
 
     def test_typed_mutation_adapter_preserves_empty_and_invalid_envelope_failure_categories(self):
         empty = ChatAdventureTurnMutationCandidateProvider(

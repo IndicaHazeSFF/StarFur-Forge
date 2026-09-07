@@ -89,7 +89,11 @@ from pipeline.document_review import DEFAULT_REVIEW_TTL_SECONDS
 
 from pipeline.capabilities import CapabilityManifest
 from pipeline.command_help import detect_command_help
-from pipeline.providers import CallableChatProvider, ChatProvider, OllamaChatProvider, provider_health_snapshot
+from pipeline.providers import (
+    CallableChatProvider, ChatProvider, ChatCompletion, ChatProviderResponseError,
+    DisabledChatProvider, OllamaChatProvider, normalize_chat_completion,
+    normalize_chat_stream_chunk, provider_health_snapshot, provider_is_configured,
+)
 from pipeline.provider_registry import ChatProviderRegistration, ChatProviderRegistry
 from pipeline.provider_state import ProviderLifecycle
 from pipeline.retrieval import DeterministicMemoryRetriever, MemoryLoaderRetriever, MemoryRetriever
@@ -102,6 +106,7 @@ from pipeline.task_profiles import (
 from pipeline.task_routing import (
     ProviderRouteRegistry,
     TaskRoutePlanner,
+    normalize_provider_id,
     provider_route_status_from_runtime,
 )
 
@@ -125,6 +130,7 @@ class AssistantConfig:
     active_persona_id: str | None = None
     adventure_root: Path = PROJECT_ROOT / "adventures"
     document_review_ttl_seconds: int = DEFAULT_REVIEW_TTL_SECONDS
+    provider_mode: str = "ollama"
 
 
 def validate_ollama_options(value):
@@ -178,6 +184,9 @@ def load_config(path=DEFAULT_CONFIG_PATH):
     review_ttl_seconds = data.get("document_review_ttl_seconds", DEFAULT_REVIEW_TTL_SECONDS)
     if isinstance(review_ttl_seconds, bool) or not isinstance(review_ttl_seconds, int) or not 60 <= review_ttl_seconds <= 7 * 24 * 60 * 60:
         raise ValueError("document_review_ttl_seconds must be an integer from 60 through 604800.")
+    provider_mode = data.get("provider_mode", "ollama")
+    if provider_mode not in {"ollama", "disabled"}:
+        raise ValueError("provider_mode must be 'ollama' or 'disabled'.")
     return AssistantConfig(
         # A chat profile model is the declarative startup default. Later
         # ``model use`` selections remain per-session runtime state.
@@ -195,6 +204,7 @@ def load_config(path=DEFAULT_CONFIG_PATH):
         active_persona_id=active_persona_id,
         adventure_root=adventure_root,
         document_review_ttl_seconds=review_ttl_seconds,
+        provider_mode=provider_mode,
     )
 
 
@@ -240,11 +250,20 @@ class AssistantSession:
                  persona_runtime_registry: PersonaRuntimeRegistry | None = None,
                  adventure_registry: AdventureRegistry | None = None,
                  adventure_turn_coordinator: AdventureTurnCoordinator | None = None,
-                 adventure_turn_mutation_coordinator: AdventureTurnMutationCoordinator | None = None):
+                 adventure_turn_mutation_coordinator: AdventureTurnMutationCoordinator | None = None,
+                 provider_registry: ChatProviderRegistry | None = None):
         if config.max_session_messages <= 0:
             raise ValueError("max_session_messages must be positive")
         if provider is not None and chat is not None:
             raise ValueError("Provide either provider or legacy chat, not both.")
+        # ``disabled`` is an operational safety boundary, not merely the
+        # default-adapter choice below.  A caller must not accidentally revive
+        # generation by injecting a test/specialist adapter into a session
+        # whose configuration explicitly requested zero-provider operation.
+        if getattr(config, "provider_mode", "ollama") == "disabled" and (
+            provider is not None or chat is not None or provider_registry is not None
+        ):
+            raise ValueError("provider_mode 'disabled' does not accept injected providers or chat")
         self.config = config
         if persona_registry is not None and not isinstance(persona_registry, PersonaRegistry):
             raise TypeError("persona_registry must be a PersonaRegistry or None.")
@@ -274,11 +293,24 @@ class AssistantSession:
         self.provider = provider or (
             CallableChatProvider(chat, model_lister=model_lister)
             if chat is not None
+            else DisabledChatProvider()
+            if getattr(config, "provider_mode", "ollama") == "disabled"
             else OllamaChatProvider(ollama)
         )
         self.chat = self.provider.complete  # Compatibility for callers inspecting this attribute.
         self._provider_name = getattr(self.provider, "name", type(self.provider).__name__)
-        self.provider_lifecycle = ProviderLifecycle(self._provider_name, config.chat_model)
+        self._active_provider_id = normalize_provider_id(self._provider_name)
+        if provider_registry is not None:
+            if not isinstance(provider_registry, ChatProviderRegistry):
+                raise TypeError("provider_registry must be a ChatProviderRegistry or None")
+            if provider_registry.get(self._active_provider_id) is not self.provider:
+                raise ValueError("provider_registry must register the active provider under its provider identifier")
+            self.chat_provider_registry = provider_registry
+        else:
+            self.chat_provider_registry = ChatProviderRegistry({
+                self._active_provider_id: ChatProviderRegistration(self._active_provider_id, self.provider),
+            })
+        self.provider_lifecycle = ProviderLifecycle(self._active_provider_id, config.chat_model)
         # Configuration remains the startup default. Switching is deliberately
         # session-only so it cannot rewrite a user's configuration or data.
         self.active_model = config.chat_model
@@ -608,29 +640,31 @@ class AssistantSession:
             return "provider defaults"
         return ", ".join(f"{name}={options[name]}" for name in sorted(options))
 
-    def _routed_chat_executor(self):
-        """Build one request-local route executor around the active adapter only.
-
-        This preserves the current single-provider behavior while making route
-        selection explicit. Provider health is read only when an application
-        attached its bounded snapshot; last-request lifecycle state remains
-        diagnostic and does not suppress an explicit future retry.
-        """
+    def _provider_route_registry(self):
+        """Describe registered adapters without probing or calling them."""
         health = getattr(self, "provider_health_snapshot", {})
-        status = provider_route_status_from_runtime(
-            self._provider_name,
-            configured=self.provider is not None,
-            health_status=health.get("status", "not_probed"),
-        )
-        provider_id = status.provider_id
+        statuses = {}
+        for provider_id in self.chat_provider_registry.provider_ids():
+            statuses[provider_id] = provider_route_status_from_runtime(
+                provider_id,
+                configured=provider_is_configured(self.chat_provider_registry.get(provider_id)),
+                health_status=health.get("status", "not_probed") if provider_id == self._active_provider_id else "not_probed",
+            )
+        return ProviderRouteRegistry(statuses)
+
+    def _routed_chat_executor(self):
+        """Build one request-local executor around registered injected adapters.
+
+        The default registry contains only the active adapter, preserving the
+        existing single-provider behavior. Additional adapters are injected by
+        Core and selected only through an exact task profile route.
+        """
         return RoutedChatExecutor(
             TaskRoutePlanner(
                 getattr(self.config, "task_profiles", TaskProfiles()),
-                ProviderRouteRegistry({provider_id: status}),
+                self._provider_route_registry(),
             ),
-            ChatProviderRegistry({
-                provider_id: ChatProviderRegistration(provider_id, self.provider),
-            }),
+            self.chat_provider_registry,
         )
 
     def _task_route(self, task_id, *, model=None):
@@ -638,7 +672,7 @@ class AssistantSession:
         decision = executor.plan(
             task_id,
             default_model=model or self.active_model,
-            default_provider_id=self._provider_name,
+            default_provider_id=self._active_provider_id,
             base_options=self._ollama_options(),
         )
         if decision.selected is None:
@@ -652,22 +686,18 @@ class AssistantSession:
 
     def routing_status(self):
         """Render configured task routes without probing or calling a provider."""
-        health = getattr(self, "provider_health_snapshot", {})
-        status = provider_route_status_from_runtime(
-            self._provider_name or "unknown",
-            configured=self.provider is not None,
-            health_status=health.get("status", "not_probed"),
-        )
         profiles = getattr(self.config, "task_profiles", TaskProfiles())
-        planner = TaskRoutePlanner(profiles, ProviderRouteRegistry({status.provider_id: status}))
+        providers = self._provider_route_registry()
+        active_status = providers.get(self._active_provider_id)
+        planner = TaskRoutePlanner(profiles, providers)
         task_ids = tuple(sorted(profiles.profiles)) or (TASK_ASSISTANT_CHAT,)
-        lines = [f"Task routing status: provider {status.provider_id} ({status.status})"]
+        lines = [f"Task routing status: provider {self._active_provider_id} ({active_status.status})"]
         for task_id in task_ids:
             try:
                 decision = planner.plan(
                     task_id,
                     default_model=self.active_model,
-                    default_provider_id=status.provider_id,
+                    default_provider_id=self._active_provider_id,
                     base_options=self._ollama_options(),
                 )
             except Exception as error:
@@ -696,18 +726,18 @@ class AssistantSession:
         """Explicitly probe the active provider without generating text."""
         snapshot = provider_health_snapshot(self.provider)
         self.provider_health_snapshot = snapshot
-        provider_id = self._provider_name or "unknown"
+        provider_id = self._active_provider_id
         state = provider_route_status_from_runtime(
             provider_id,
-            configured=self.provider is not None,
+            configured=provider_is_configured(self.provider),
             health_status=snapshot["status"],
         ).status
         if state == "available":
             count = snapshot.get("model_count")
             suffix = "" if count is None else f" ({count} model(s) reported)"
-            return f"Task routing probe: provider {provider_id} is available{suffix}. No text was generated."
+            return f"Task routing probe: provider {self._provider_name} is available{suffix}. No text was generated."
         detail = snapshot.get("error") or "No additional detail is available."
-        return f"Task routing probe: provider {provider_id} is {state}. {detail} No text was generated."
+        return f"Task routing probe: provider {self._provider_name} is {state}. {detail} No text was generated."
 
     def _model_request_kwargs(self, messages, *, model=None, task_id=TASK_ASSISTANT_CHAT):
         profile = self._task_profile(task_id, model=model)
@@ -721,11 +751,14 @@ class AssistantSession:
         """Call the selected provider through the stable chat boundary."""
         executor, decision = self._task_route(task_id, model=model)
         selected = decision.selected
-        self.provider_lifecycle.begin_generation(stream=stream, model=selected.profile.model)
+        self.provider_lifecycle.begin_generation(
+            stream=stream, model=selected.profile.model, provider=selected.provider_id,
+        )
         try:
             execution = executor.execute_planned(decision, messages, stream=stream)
             self._current_task_routes.append(execution.public_dict())
             if not stream:
+                self._set_latest_task_route_outcome("completed")
                 self.provider_lifecycle.finish()
             return execution.response
         except RoutedTaskExecutionError as error:
@@ -742,38 +775,55 @@ class AssistantSession:
         except Exception as error:
             self.provider_lifecycle.fail(error)
             raise
+
+    def _set_latest_task_route_outcome(self, outcome, *, only_if_submitted=False):
+        """Update the current bounded route trace without retaining provider data."""
+        if not isinstance(outcome, str) or not outcome:
+            raise ValueError("task route outcome is invalid")
+        if not self._current_task_routes:
+            return
+        route = self._current_task_routes[-1]
+        if not isinstance(route, dict):
+            return
+        if only_if_submitted and route.get("outcome") != "submitted":
+            return
+        route["outcome"] = outcome
+
     def _chat_complete(self, messages, *, model=None, stream=None, task_id=TASK_ASSISTANT_CHAT):
         """Return complete content while optionally rendering streamed chunks."""
         use_stream = self.stream if stream is None else stream
         if not use_stream:
             response = self._provider_complete(messages, model=model, task_id=task_id)
             self.provider_lifecycle.finish()
-            return response.get("message", {}).get("content", "")
+            return normalize_chat_completion(response).content
         try:
             response = self._provider_complete(messages, model=model, stream=True, task_id=task_id)
-            if isinstance(response, dict):
+            if isinstance(response, (dict, ChatCompletion)) or not hasattr(response, "__iter__"):
                 self.provider_lifecycle.finish()
-                return response.get("message", {}).get("content", "")
+                return normalize_chat_completion(response).content
             parts = []
             for chunk in response:
-                if isinstance(chunk, dict):
-                    message = chunk.get("message", {}) or {}
-                    piece = message.get("content", "") if isinstance(message, dict) else getattr(message, "content", "")
-                else:
-                    message = getattr(chunk, "message", None)
-                    piece = getattr(message, "content", "") if message is not None else ""
+                try:
+                    piece = normalize_chat_stream_chunk(chunk).content
+                except ChatProviderResponseError:
+                    # Streaming backends can emit a final metadata-only chunk;
+                    # it is not text and must not become visible conversation.
+                    piece = ""
                 if piece:
                     if self._generation_started_at is not None and self._first_token_seconds is None:
                         self._first_token_seconds = time.perf_counter() - self._generation_started_at
                     parts.append(piece)
                     if self.stream_writer:
                         self.stream_writer(piece)
+            self._set_latest_task_route_outcome("completed", only_if_submitted=True)
             self.provider_lifecycle.finish()
             return "".join(parts)
         except KeyboardInterrupt as error:
+            self._set_latest_task_route_outcome("provider_stream_cancelled", only_if_submitted=True)
             self.provider_lifecycle.fail("Generation interrupted")
             raise GenerationInterrupted() from error
         except Exception as error:
+            self._set_latest_task_route_outcome("provider_stream_failed", only_if_submitted=True)
             self.provider_lifecycle.fail(error)
             raise
 
@@ -883,7 +933,7 @@ class AssistantSession:
         ]
         self.trace.record("proposal_request", model=self.active_model, messages=prompt, domain=self.config.domain, source="assistant_turn_proposal")
         response = self._provider_complete(prompt, task_id=TASK_ASSISTANT_PROPOSAL)
-        content = response.get("message", {}).get("content", "").strip()
+        content = normalize_chat_completion(response).content.strip()
         self.trace.record("proposal_response", status="received" if content else "empty", response=content)
         try:
             raw = json.loads(content)
@@ -900,7 +950,7 @@ class AssistantSession:
             ]
             self.trace.record("proposal_repair_request", attempt=1, messages=repair_prompt)
             repaired = self._provider_complete(repair_prompt, task_id=TASK_ASSISTANT_PROPOSAL)
-            repaired_content = repaired.get("message", {}).get("content", "").strip()
+            repaired_content = normalize_chat_completion(repaired).content.strip()
             self.trace.record("proposal_repair_response", status="received" if repaired_content else "empty", response=repaired_content)
             raw = json.loads(repaired_content)
             raw.pop("domain", None)
@@ -3514,6 +3564,19 @@ class AssistantSession:
                 response="",
                 latency_seconds=time.perf_counter() - self._generation_started_at,
                 proposal={"ran": False, "outcome": "interrupted"},
+            )
+            raise
+        except Exception:
+            # A provider can fail after yielding one or more stream fragments.
+            # The partial text never enters conversation history or proposals,
+            # but diagnostics retain the bounded failed route outcome.
+            self.last_memory_ids = previous_memory_ids
+            self._finish_turn_diagnostics(
+                completed=False,
+                response="",
+                latency_seconds=time.perf_counter() - self._generation_started_at,
+                proposal={"ran": False, "outcome": "skipped"},
+                status="failed",
             )
             raise
         latency_seconds = time.perf_counter() - self._generation_started_at

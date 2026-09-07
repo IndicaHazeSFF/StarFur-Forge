@@ -22,7 +22,7 @@ from pipeline.adventure_turn_mutation_candidates import (
     parse_untrusted_adventure_turn_mutation_candidates,
 )
 from pipeline.adventure_turn_mutation_generation import AdventureTurnMutationGenerationRequest
-from pipeline.providers import ChatProvider
+from pipeline.providers import ChatCompletionProvider, ChatProviderResponseError, normalize_chat_completion
 
 
 MAX_ADVENTURE_TURN_PROVIDER_RESPONSE_CHARACTERS = 16_000
@@ -133,11 +133,11 @@ class ChatAdventureTurnCandidateProvider:
     """Explicit adapter from the generic chat boundary to candidate proposals."""
 
     def __init__(
-        self, provider: ChatProvider, *, model: str | None = None,
+        self, provider: ChatCompletionProvider, *, model: str | None = None,
         options: Mapping[str, Any] | None = None,
     ) -> None:
-        if not isinstance(provider, ChatProvider):
-            raise TypeError("adventure-turn provider must satisfy ChatProvider")
+        if not isinstance(provider, ChatCompletionProvider):
+            raise TypeError("adventure-turn provider must provide text completion")
         if model is not None and (not isinstance(model, str) or not model.strip()):
             raise ValueError("adventure-turn model is invalid")
         if options is not None and not isinstance(options, Mapping):
@@ -168,11 +168,11 @@ class ChatAdventureTurnMutationCandidateProvider:
     """Explicit generic-chat adapter for the separate typed-mutation task."""
 
     def __init__(
-        self, provider: ChatProvider, *, model: str | None = None,
+        self, provider: ChatCompletionProvider, *, model: str | None = None,
         options: Mapping[str, Any] | None = None,
     ) -> None:
-        if not isinstance(provider, ChatProvider):
-            raise TypeError("adventure-turn mutation provider must satisfy ChatProvider")
+        if not isinstance(provider, ChatCompletionProvider):
+            raise TypeError("adventure-turn mutation provider must provide text completion")
         if model is not None and (not isinstance(model, str) or not model.strip()):
             raise ValueError("adventure-turn mutation model is invalid")
         if options is not None and not isinstance(options, Mapping):
@@ -201,13 +201,9 @@ class ChatAdventureTurnMutationCandidateProvider:
 
 
 def _response_content(response: object) -> str:
-    if isinstance(response, Mapping):
-        message = response.get("message")
-        content = message.get("content") if isinstance(message, Mapping) else response.get("content")
-    else:
-        message = getattr(response, "message", None)
-        content = getattr(message, "content", None)
-    if not isinstance(content, str):
+    try:
+        content = normalize_chat_completion(response).content
+    except ChatProviderResponseError as error:
         raise AdventureTurnProviderError("adventure-turn provider response has no text content", reason="response_missing_content")
     if not content.strip():
         raise AdventureTurnProviderError("adventure-turn provider response is empty", reason="response_empty")

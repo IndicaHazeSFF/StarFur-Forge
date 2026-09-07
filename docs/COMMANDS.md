@@ -343,6 +343,21 @@ automatically.
 
 `model list` calls Ollama's Python client API and marks the active model. `model use` verifies the exact installed model (tags such as `qwen3:8b` are supported) and changes only the current assistant session; it does not rewrite configuration, conversation history, proposals, SQLite, or Chroma. The selected model is used for subsequent chat and proposal-extraction calls. `context stats` continues to show the model used for its recorded turn.
 
+### Local API chat helper
+
+`scripts/sf_chat.sh` is an optional Bash convenience client for one local API
+turn. It accepts an opaque conversation ID followed by the message text:
+
+    bash scripts/sf_chat.sh adventure-a "adventure status"
+    bash scripts/sf_chat.sh adventure-a "What is currently happening?"
+
+Reusing an ID targets the same bounded API conversation; a different ID uses a
+separate session. The script requires `curl` and `jq`, reads
+`STARFUR_API_BASE` and `STARFUR_API_KEY` when set, and otherwise targets the
+standard local endpoint/token. It does not create a Core command, grant access
+to storage, or keep the server running; start `python starfur.py serve` in a
+separate terminal first.
+
 Inspect the configured task/profile route preview without calling or probing a provider:
 
     routing status
@@ -965,12 +980,12 @@ Interactive `assistant` responses stream incrementally in the terminal while the
 
 Assistant prompt construction is deterministic and read-only. The context layer combines the configured persona, its bounded presentation-only runtime state, and engine policy with already-retrieved active memories (including each selected memory's non-empty details), the bounded recent conversation window, and the current user message. It does not retrieve memories, write data, call a model, summarize history, or apply token budgeting. When a selected memory directly answers a question, engine policy requires the factual answer first; persona warmth may follow. `context stats` reports the same plan's bounded size/accounting metadata. It also reports measured phase timings (prompt build, retrieval, association, provider, proposal, and total turn) and an estimated completion-token count. Timing values are diagnostics only and are not used for routing or budgeting.
 
-Assistant chat now reaches Ollama through a narrow `ChatProvider` adapter. This does not change the installed-model commands or Ollama configuration; it establishes the provider boundary used by future LM Studio, hosted, and specialist-capability adapters. The assistant remains responsible for prompt/context assembly, streaming state, memory proposals, and diagnostics.
+Assistant chat now reaches Ollama through a narrow `ChatProvider` adapter. Routed specialists may instead implement only the smaller completion contract; model discovery and health probing remain optional provider-owned capabilities. Core normalizes complete responses and streamed text fragments through a provider-neutral text-only contract before chat, document annotation, or adventure extraction use them; raw provider payload shapes do not become application contracts. This does not change the installed-model commands or Ollama configuration; it establishes the provider boundary used by future LM Studio, hosted, and specialist-capability adapters. The assistant remains responsible for prompt/context assembly, streaming state, memory proposals, and diagnostics.
 
 
     context stats
 
-Interactive assistant command that displays the bounded diagnostics snapshot for the latest completed or interrupted conversational turn: model/provider, typed task-route summaries, persona/runtime-state/policy sizes, prompt and response character counts, estimated token counts, recent-context size, selected memory IDs with deterministic scores/reasons, per-persona shared-memory visibility decisions, latency, stream first-token timing, and proposal outcome. Route summaries show only task ID, selected provider/model, configured-fallback marker, and submitted/failure category; they never expose prompts, raw provider output, memory content, or provider payloads. The command is read-only: it does not invoke a model, query/write memory stores, or retain raw prompts/conversation text.
+Interactive assistant command that displays the bounded diagnostics snapshot for the latest completed or interrupted conversational turn: model/provider, typed task-route summaries, persona/runtime-state/policy sizes, prompt and response character counts, estimated token counts, recent-context size, selected memory IDs with deterministic scores/reasons, per-persona shared-memory visibility decisions, latency, stream first-token timing, and proposal outcome. Route summaries show only task ID, selected provider/model, configured-fallback marker, and a closed outcome such as submitted, completed, unavailable, failed, or stream-cancelled; they never expose prompts, raw provider output, memory content, or provider payloads. The command is read-only: it does not invoke a model, query/write memory stores, or retain raw prompts/conversation text.
 
 
 Hidden development reset (not shown in normal help):
@@ -1052,6 +1067,16 @@ Adventure-turn benchmark results use the same opt-in ledger and keep the pipelin
 `python starfur.py adventure-turn-eval` runs the deterministic C3 orchestration fixture suite in temporary adventure workspaces. It tests valid candidate review/stage/commit, explicit no-change output, invalid envelopes, and stale-origin rejection without invoking a model or touching an installed adventure. Add `--record-ledger <path>` to retain the bounded outcome record.
 
 ### Task/provider profiles
+
+Set the top-level `provider_mode` in `config/assistant.json` to `"ollama"`
+(the default) or `"disabled"`. Disabled mode starts the local resident,
+persona runtime, Core commands, and read-only dashboard without routing any
+generation or annotation work. It reports the provider as unavailable instead
+of silently selecting a fallback. It is intended for offline resident use and
+provider-free smoke tests; switch back to `"ollama"` to enable the configured
+local model again. This is fail-closed: a disabled session rejects injected
+chat adapters and provider registries instead of allowing dependency wiring to
+silently restore generation.
 
 `config/assistant.json` may declare validated `task_profiles` for workloads such as `assistant_chat`, `assistant_proposal`, `adventure_turn_generation`, `document_annotation`, `coding`, `vision`, and `image_generation`. A profile may declare a provider label, model, bounded generation settings, context size, output ceiling, and a fallback task name. Profiles do not construct or probe providers. Normal session chat, proposal extraction, and generated-adventure-turn calls now form a deterministic route from bounded provider status and submit it through one already-injected chat adapter. The route is chosen before the request; a provider failure never triggers an implicit second request or model fallback.
 

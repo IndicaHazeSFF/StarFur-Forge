@@ -24,6 +24,7 @@ pending the next copy/commit confirmation.
 - `pipeline/adventure_turn_orchestration_eval.py`
 - `pipeline/task_routing.py`
 - `pipeline/provider_registry.py`
+- `pipeline/provider_state.py`
 - `pipeline/task_execution.py`
 - `pipeline/adventure_turn_candidate_inbox.py`
 - `pipeline/document_annotation.py`
@@ -54,6 +55,7 @@ pending the next copy/commit confirmation.
 - `tests/test_adventure_turn_context.py`
 - `tests/test_adventure_turn_provider.py`
 - `tests/test_experiment_ledger.py`
+- `tests/test_chat_provider.py`
 - `tests/test_application.py`
 - `tests/test_adventure_turn_candidate_eval.py`
 - `tests/fixtures/adventure_turn_candidate_cases.json`
@@ -84,6 +86,10 @@ pending the next copy/commit confirmation.
 - `docs/COMMANDS.md`
 - `starfur.py`
 - `model-comparison.md`
+
+## scripts
+
+- `scripts/sf_chat.sh`
 
 ## configuration
 

@@ -7,11 +7,81 @@ tests and integrations.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Iterable, Mapping, Protocol, runtime_checkable
 
 
 ChatMessages = Iterable[Mapping[str, str]]
+
+
+class ChatProviderResponseError(ValueError):
+    """Raised when an adapter result has no usable text completion."""
+
+
+@dataclass(frozen=True)
+class ChatCompletion:
+    """Provider-neutral, text-only result handed to Core consumers.
+
+    This deliberately retains no provider payload, token accounting, tool-call
+    shape, or transport metadata.  Task-specific layers remain responsible for
+    their own size limits and structured-output validation.
+    """
+
+    content: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.content, str):
+            raise TypeError("chat completion content must be text")
+
+
+@dataclass(frozen=True)
+class ChatStreamChunk:
+    """One provider-neutral text fragment from an optional streamed result."""
+
+    content: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.content, str):
+            raise TypeError("chat stream chunk content must be text")
+
+
+def _raw_chat_content(value: object) -> str | None:
+    """Extract the one supported text field without preserving raw output."""
+    if isinstance(value, (ChatCompletion, ChatStreamChunk)):
+        return value.content
+    if isinstance(value, Mapping):
+        message = value.get("message")
+        content = message.get("content") if isinstance(message, Mapping) else value.get("content")
+    else:
+        message = getattr(value, "message", None)
+        content = getattr(message, "content", None) if message is not None else getattr(value, "content", None)
+    return content if isinstance(content, str) else None
+
+
+def normalize_chat_completion(value: object) -> ChatCompletion:
+    """Normalize one complete adapter result into the Core text contract."""
+    content = _raw_chat_content(value)
+    if content is None:
+        raise ChatProviderResponseError("chat provider response has no text content")
+    return ChatCompletion(content)
+
+
+def normalize_chat_stream_chunk(value: object) -> ChatStreamChunk:
+    """Normalize one optional streaming fragment into the Core text contract."""
+    content = _raw_chat_content(value)
+    if content is None:
+        raise ChatProviderResponseError("chat provider stream chunk has no text content")
+    return ChatStreamChunk(content)
+
+
+def provider_is_configured(provider: object) -> bool:
+    """Return whether Core may route work to an adapter.
+
+    A disabled adapter preserves the resident runtime without pretending that
+    an LLM is configured. Existing adapters remain configured by default.
+    """
+    return provider is not None and getattr(provider, "configured", True) is not False
 
 
 def provider_health_snapshot(provider: object) -> dict[str, object]:
@@ -50,10 +120,8 @@ def provider_health_snapshot(provider: object) -> dict[str, object]:
 
 
 @runtime_checkable
-class ChatProvider(Protocol):
-    """A local or remote text-generation provider."""
-
-    name: str
+class ChatCompletionProvider(Protocol):
+    """The minimum text-generation capability required for one routed task."""
 
     def complete(
         self,
@@ -64,6 +132,13 @@ class ChatProvider(Protocol):
         stream: bool = False,
     ) -> Any:
         """Return a provider response or a provider streaming iterator."""
+
+
+@runtime_checkable
+class ChatProvider(ChatCompletionProvider, Protocol):
+    """A chat adapter with optional model discovery and health probing."""
+
+    name: str
 
     def list_models(self) -> Any:
         """Return the provider's installed/available model response."""
@@ -96,6 +171,25 @@ class OllamaChatProvider:
         return self.list_models()
 
 
+class DisabledChatProvider:
+    """Explicit non-generating adapter for zero-provider resident mode."""
+
+    name = "disabled"
+    configured = False
+
+    def __init__(self, reason: str = "Chat generation is disabled by configuration.") -> None:
+        self._reason = str(reason)[:300]
+
+    def complete(self, messages, *, model=None, options=None, stream=False):
+        raise RuntimeError(self._reason)
+
+    def list_models(self):
+        raise RuntimeError(self._reason)
+
+    def probe_health(self):
+        raise RuntimeError(self._reason)
+
+
 class CallableChatProvider:
     """Compatibility adapter for the existing injected chat callable surface."""
 
@@ -123,3 +217,11 @@ class CallableChatProvider:
         if self._model_lister is None:
             raise NotImplementedError("Health probing is unavailable for this chat provider.")
         return self._model_lister()
+
+
+__all__ = [
+    "CallableChatProvider", "ChatCompletion", "ChatCompletionProvider", "ChatMessages", "ChatProvider",
+    "ChatProviderResponseError", "ChatStreamChunk", "DisabledChatProvider",
+    "OllamaChatProvider", "normalize_chat_completion", "normalize_chat_stream_chunk",
+    "provider_health_snapshot", "provider_is_configured",
+]

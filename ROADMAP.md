@@ -67,7 +67,7 @@ Presentation clients
 - **COMPLETED:** File-backed persona layer with neutral fallback and separate engine policy.
 - **COMPLETED:** Read-only ContextManager, bounded session context, streaming, clean interruption rollback, context statistics, phase timing diagnostics, and runtime model selection.
 - **COMPLETED:** Validated Ollama generation options, user-observation-only proposal provenance, and speculative-statement safeguards.
-- **COMPLETED:** Ollama `ChatProvider` boundary with legacy fake-client compatibility.
+- **COMPLETED:** Provider-neutral text-completion boundary, with Ollama discovery/probe support and legacy fake-client compatibility.
 - **COMPLETED:** Local OpenAI-compatible API and functional OpenWebUI integration.
 - **COMPLETED:** Confirmation-gated factory reset/restore with backup safeguards and lore/assistant separation.
 
@@ -380,6 +380,21 @@ unavailable provider fails before receiving a request; a request failure never
 silently retries or switches providers. This preserves the present one-adapter
 runtime and leaves document annotation on its separately bounded current path
 until annotation-specific routing and benchmarks are ready.
+
+**COMPLETED PROVIDER-NEUTRAL TEXT-CONTRACT SLICE:** Core now normalizes a
+complete chat response or streamed text fragment through one text-only contract
+before normal chat, proposal extraction, document annotation, or adventure-turn
+extraction consumes it. Current Ollama-shaped mappings and typed test-adapter
+responses remain compatible, while raw provider payloads, transport metadata,
+and tool data remain outside Core. This is a compatibility seam, not a claim
+that alternative provider construction, cancellation, or fallback execution is
+implemented.
+
+**COMPLETED STREAM-OUTCOME TELEMETRY SLICE:** A bounded route trace now records
+completion only after a response or stream finishes, and records closed stream
+failure/cancellation categories when iteration breaks. Partial stream text
+never becomes chat history, proposals, or canonical state. This adds no retry,
+fallback, or provider authority.
 7. **Add vision, image, and speech adapters:** one-shot vision first; then image generation, STT, TTS, voice-activity detection, transcript confidence, and interruption/barge-in behavior behind the same provider/permission boundaries.
 8. **Harden resident continuity before polish/release:** durable persona-local continuity, zero-provider resident behavior, deterministic `ResidentAction` presentation, restart/recovery, package validation, and Workshop/Steam release engineering.
 
@@ -497,8 +512,12 @@ unrestricted assistant memory.
 ## Capability provider interfaces
 
 ```python
-class ChatProvider(Protocol):
+class ChatCompletionProvider(Protocol):
     def complete(self, messages, *, model=None, options=None, stream=False): ...
+
+class ChatProvider(ChatCompletionProvider, Protocol):
+    def list_models(self): ...
+    def probe_health(self): ...
 
 class VisionProvider(Protocol):
     def inspect(self, image, *, prompt=None, model=None, options=None): ...

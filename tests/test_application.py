@@ -11,6 +11,7 @@ sys.modules.setdefault("ollama", types.ModuleType("ollama"))
 from pipeline.application import AssistantApplication, ConversationNotFoundError, create_assistant_application
 from pipeline.document_intake import DocumentAnnotationExecution, prepare_document_text
 from pipeline.persona_registry import PersonaRegistry, load_persona_package
+from pipeline.provider_registry import ChatProviderRegistration, ChatProviderRegistry
 from pipeline.system_metrics import SystemMetricsSnapshot
 from pipeline.task_profiles import TaskProfile, TaskProfiles
 
@@ -589,6 +590,18 @@ class AssistantApplicationTests(unittest.TestCase):
         snapshot = AssistantApplication(session).runtime_diagnostics()
 
         self.assertEqual(1, len(snapshot["latest_turn"]["task_routes"]))
+
+    def test_runtime_diagnostics_preserve_closed_completed_route_outcome(self):
+        session = FakeSession()
+        session.last_turn_diagnostics = {
+            "task_routes": [{
+                "requested_task_id": "assistant_chat", "selected_task_id": "assistant_chat",
+                "provider": "ollama", "model": "qwen3:8b", "fallback_used": False,
+                "outcome": "completed",
+            }],
+        }
+        snapshot = AssistantApplication(session).runtime_diagnostics()
+        self.assertEqual("completed", snapshot["latest_turn"]["task_routes"][0]["outcome"])
         self.assertNotIn("raw_provider_output", snapshot["latest_turn"]["task_routes"][0])
 
     def test_explicit_provider_probe_records_only_bounded_health_metadata(self):
@@ -657,6 +670,38 @@ class AssistantApplicationTests(unittest.TestCase):
         self.assertTrue(captured["kwargs"]["stream"])
         self.assertEqual(captured["kwargs"]["debug_level"], "verbose")
         self.assertIsNotNone(captured["kwargs"]["proposal_creator"])
+
+    def test_factory_passes_opt_in_registered_provider_adapters_without_changing_default_setup(self):
+        config = FakeConfig()
+        primary = type("PrimaryProvider", (), {
+            "name": "primary",
+            "complete": lambda self, *args, **kwargs: {"message": {"content": "ok"}},
+            "list_models": lambda self: {"models": []},
+            "probe_health": lambda self: {"models": []},
+        })()
+        registry = ChatProviderRegistry({
+            "primary": ChatProviderRegistration("primary", primary),
+        })
+        captured = {}
+
+        def session_factory(*args, **kwargs):
+            captured["kwargs"] = kwargs
+            return FakeSession(*args, **kwargs)
+
+        with patch("pipeline.application.load_config", return_value=config), patch(
+            "pipeline.application.load_persona", return_value="persona"
+        ), patch("pipeline.application.load_policy", return_value="policy"):
+            create_assistant_application(
+                "custom.json", session_factory=session_factory,
+                provider=primary, provider_registry=registry,
+            )
+
+        self.assertIs(primary, captured["kwargs"]["provider"])
+        self.assertIs(registry, captured["kwargs"]["provider_registry"])
+
+    def test_factory_rejects_a_provider_registry_without_a_selected_active_provider(self):
+        with self.assertRaisesRegex(ValueError, "explicit active provider"):
+            create_assistant_application(provider_registry=ChatProviderRegistry())
 
     def test_standard_factory_resolves_only_the_declared_builtin_murr_idle_slot(self):
         app = create_assistant_application(session_factory=FakeSession)

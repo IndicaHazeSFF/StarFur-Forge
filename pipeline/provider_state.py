@@ -38,8 +38,10 @@ class ProviderLifecycle:
             if target != self._state and target not in self._allowed[self._state]: raise ValueError(f"Invalid provider lifecycle transition: {self._state.value} -> {target.value}")
             self._previous=self._state if target != self._state else self._previous; self._state=target; self._error=str(error)[:300] if error else None; self._count+=1
             return self.snapshot()
-    def begin_generation(self, *, stream: bool, model: str | None=None):
+    def begin_generation(self, *, stream: bool, model: str | None=None, provider: str | None=None):
         with self._lock:
+            if provider:
+                self._provider=str(provider)
             if model: self._model=str(model)
             if self._state in {ProviderLifecycleState.DISCONNECTED,ProviderLifecycleState.ERROR}:
                 self.transition(ProviderLifecycleState.CONNECTING); self.transition(ProviderLifecycleState.READY)
