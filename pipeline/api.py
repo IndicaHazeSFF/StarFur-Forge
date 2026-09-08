@@ -522,6 +522,8 @@ class StarFurAPI:
         lowered = user_text.casefold()
         if lowered in {"context stats", "approve all", "list personas", "list models"}:
             return True
+        if lowered == "tool" or lowered.startswith("tool "):
+            return True
         return lowered.startswith((
             "adventure", "persona", "resident", "routing", "route ", "model ",
             "roleplay", "remember:", "remember this:", "forget:", "forget this:",

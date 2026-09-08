@@ -277,6 +277,68 @@ The router chooses and executes a task. It does not become a second application 
 
 Typed tool registry, explicit scopes, read-only versus mutating tools, confirmation/revocation, bounded audit events, and a genuinely isolated sandbox backend. No provider or Workshop package receives ambient filesystem, network, process, or account authority.
 
+**COMPLETED INITIAL F1 DESCRIPTION SLICE:** Core now has a provider-free immutable tool-description registry. A descriptor declares only a stable ID, read-only or mutating access mode, permission scope, and confirmation requirement; it cannot execute, inspect permissions, grant authority, or be supplied by a model/package. Every mutating descriptor fails closed unless it declares confirmation. Permission grants, revocation, audit events, and executors remain separate gates.
+
+**COMPLETED INITIAL F1 EVALUATION SLICE:** A separate pure permission evaluator now accepts only exact caller-supplied scope grants and one explicit per-request confirmation value. It has no wildcard/inherited scope behavior, storage, command surface, provider input, or executor. A grant for one scope cannot authorize a neighbor; a mutating descriptor remains denied without both an exact mutating grant and confirmation.
+
+The first declared tool is `sandbox.run`, a confirmation-required description
+for bounded learning exercises. This is metadata only: the default sandbox
+backend remains denied and no registry entry grants execution authority.
+
+**COMPLETED INERT F1 CONTRACT SLICE:** Core now binds that descriptor to a
+versioned, provider-free `sandbox.run` proposal/result contract with finite
+inline exercise-data, JSON size/depth, output, artifact-reference, registry,
+and version limits. Exact schemas reject unknown and authority-bearing fields,
+duplicate keys, non-finite values, and malformed or unsupported envelopes;
+nested validated arguments are immutable. This is application validation, not
+authentication, authorization, confirmation, provenance, invocation issuance,
+OS isolation, or execution. Grants, approval control, commands, broker state,
+materialization, audit persistence, providers, learning, and executors remain
+deferred to their separately gated slices.
+
+**COMPLETED SESSION AUTHORITY SLICE:** Core now has provider-free, bounded,
+restart-ephemeral invocation, grant, and approval primitives. One invocation
+binds an exact validated proposal digest and resource set to a trusted internal
+principal, server-created session instance, persona/adventure context labels,
+tool version, policy revision, and expiry. Exact grants are finite-use and
+revocable; confirmation is a separate single-use controller record bound to the
+grant's current revocation generation. Neither conversation/persona labels nor
+model-supplied booleans provide identity or authority. Persistent and standing
+grants remain unavailable.
+
+**COMPLETED DISABLED BROKER SLICE:** A bounded provider-free broker now enforces
+conflicting request-ID rejection, identical-request idempotency, stale-context
+denial, separate authorization/queue/execution phases, pre-effect cancellation,
+terminal replay safety, strict result validation, and privacy-bounded in-memory
+audit events. Its Core default executor is unavailable and cannot call the
+existing sandbox service; public broker/audit records exclude arguments, file
+content, output text, provider payloads, and exception details. Application,
+CLI/API, durable journal, materialization, provider proposal, and real isolation
+integration remain separately gated. S4a is the first manual smoke-test gate.
+
+**COMPLETED TRUSTED LOCAL CONTROL SLICE (PENDING WSL SMOKE):** One broker is
+owned by each bounded ephemeral application session and is bound to an
+unpredictable server-created session instance. The local interactive Assistant
+CLI may submit and preview one inert `sandbox.run` proposal, then explicitly
+grant, approve, deny/revoke, cancel, list, or inspect it. These controls never
+materialize files or dispatch an executor. Shared chat, OpenWebUI, and API
+requests reserve but deterministically reject the `tool` namespace before
+document context or provider generation; no bearer token or conversation key
+acts as approval authority and no HTTP approval endpoint exists. Context
+changes and session eviction fail closed. Platform path hardening, durable run
+journaling, OS isolation, and real execution remain later gates.
+
+**COMPLETED S5 MATERIALIZATION/RESULT HARDENING (PENDING WINDOWS/WSL SMOKE):**
+The pre-execution sandbox now checks UTF-8 byte limits and portable path forms,
+rejecting traversal/noncanonical paths, Windows-reserved names, alternate
+streams, and unsafe separators before any copy-in. An unavailable backend or
+one that cannot affirm the requested policy is denied before temporary
+materialization; temporary cleanup remains scoped to the disposable workspace;
+and bounded reports omit raw backend exception text. This remains application
+validation and copy-in, not OS isolation or execution. Native Windows/WSL
+filesystem smoke evidence is required before durable run recovery or a native
+isolation backend.
+
 ## Stage G — Perception and media (LATER)
 
 Permissioned one-shot screen/window/image/PDF inspection, TTS/STT, image generation, notifications, and presence signals through the provider registry. Media is bounded and provenance-bearing; generated images are noncanonical. Voice uses explicit push-to-talk/always-listen settings, confidence, cancellation, and interruption policy. Continuous surveillance is never the default.

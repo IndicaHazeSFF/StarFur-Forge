@@ -11,7 +11,9 @@ from __future__ import annotations
 from collections import OrderedDict
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
+import hashlib
 import re
+import secrets
 import threading
 from time import perf_counter
 from typing import Callable, Iterator
@@ -32,6 +34,10 @@ from pipeline.task_routing import (
     TaskRoutePlanner,
     provider_route_status_from_runtime,
 )
+from pipeline.tool_approval import ToolApprovalController
+from pipeline.tool_broker import ToolBroker, ToolBrokerError, ToolDispatchContext
+from pipeline.tool_contracts import build_core_tool_contract_registry, decode_tool_proposal_json
+from pipeline.tool_grants import SessionToolGrantController, ToolInvocationIssuer
 from pipeline.persona_asset_resolver import InstalledPersonaAssetPackage, PersonaAssetResolver
 from pipeline.persona_assets import BUILTIN_MURR_ASSET_MANIFEST
 from pipeline.persona_registry import PersonaRegistry, load_persona_package
@@ -59,6 +65,8 @@ class _SessionSlot:
 
     session: AssistantSession
     lock: threading.RLock
+    session_instance_id: str
+    tool_broker: ToolBroker
     active_requests: int = 0
 
 
@@ -151,12 +159,27 @@ class AssistantApplication:
         self._proposal_creator = proposal_creator
         self._session_factory = session_factory
         self._max_conversations = max_conversations
+        self._tool_contracts = build_core_tool_contract_registry()
         self._sessions = OrderedDict([
-            (DEFAULT_CONVERSATION_ID, _SessionSlot(session, threading.RLock())),
+            (DEFAULT_CONVERSATION_ID, self._new_session_slot(session)),
         ])
         self._initialize_provider_health(session)
         self._attach_capability_manifest(session)
         self._attach_retriever(session)
+
+    def _new_session_slot(self, session: AssistantSession) -> _SessionSlot:
+        session_instance_id = f"session-{secrets.token_hex(16)}"
+        return _SessionSlot(
+            session,
+            threading.RLock(),
+            session_instance_id,
+            ToolBroker(
+                self._tool_contracts,
+                ToolInvocationIssuer(self._tool_contracts),
+                SessionToolGrantController(),
+                ToolApprovalController(),
+            ),
+        )
 
     def _attach_capability_manifest(self, session):
         setter = getattr(session, "set_capability_manifest", None)
@@ -235,7 +258,7 @@ class AssistantApplication:
         # Do not evict here.  A newly created slot is not yet request-pinned,
         # so eviction at this point can select and remove the very slot this
         # method is about to return when older conversations are busy.
-        slot = _SessionSlot(session, threading.RLock())
+        slot = self._new_session_slot(session)
         self._sessions[key] = slot
         return slot
 
@@ -271,6 +294,20 @@ class AssistantApplication:
         try:
             with slot.lock:
                 yield slot.session
+        finally:
+            with self._registry_lock:
+                slot.active_requests -= 1
+                self._evict_sessions_if_needed()
+
+    @contextmanager
+    def _locked_tool_slot_for(self, conversation_id=None) -> Iterator[_SessionSlot]:
+        """Borrow a complete slot for trusted local tool-control operations."""
+        with self._registry_lock:
+            slot = self._session_slot_for(conversation_id)
+            slot.active_requests += 1
+        try:
+            with slot.lock:
+                yield slot
         finally:
             with self._registry_lock:
                 slot.active_requests -= 1
@@ -322,6 +359,141 @@ class AssistantApplication:
             session.stream = old_stream
             session.stream_writer = old_writer
 
+    @staticmethod
+    def _is_tool_control_namespace(user_text: object) -> bool:
+        if not isinstance(user_text, str):
+            return False
+        lowered = user_text.strip().casefold()
+        return lowered == "tool" or lowered.startswith("tool ")
+
+    @staticmethod
+    def _tool_dispatch_context(slot: _SessionSlot) -> ToolDispatchContext:
+        session = slot.session
+        runtime = getattr(session, "persona_runtime_state", None)
+        persona_id = getattr(runtime, "persona_id", None) or "unselected"
+        adventure = getattr(session, "adventure_session", None)
+        record = getattr(adventure, "record", None)
+        adventure_id = getattr(record, "adventure_id", None)
+        policy = getattr(session, "policy", "")
+        policy_digest = hashlib.sha256(str(policy).encode("utf-8")).hexdigest()[:16]
+        return ToolDispatchContext(
+            principal_id="local.cli",
+            session_instance_id=slot.session_instance_id,
+            persona_id=persona_id,
+            adventure_id=adventure_id,
+            policy_revision=f"policy-{policy_digest}",
+        )
+
+    @staticmethod
+    def _format_tool_record(record) -> str:
+        return (
+            f"{record.invocation.invocation_id} {record.invocation.tool_id} v{record.invocation.tool_version} "
+            f"[{record.state}] {record.reason}"
+        )
+
+    def _local_tool_control(self, slot: _SessionSlot, user_text: str) -> str:
+        """Handle exact local-only inert controls before any model command path."""
+        command = user_text.strip()
+        lowered = command.casefold()
+        context = self._tool_dispatch_context(slot)
+        slot.tool_broker.invalidate_context(context)
+
+        if lowered in {"tool", "tool help"}:
+            return (
+                "Local tool controls (execution disabled):\n"
+                "tool propose sandbox.run <JSON arguments>\n"
+                "tool list\n"
+                "tool status <TI-id>\n"
+                "tool preview <TI-id>\n"
+                "tool grant <TI-id>\n"
+                "tool approve <TI-id>\n"
+                "tool deny <TI-id>\n"
+                "tool revoke <TI-id>\n"
+                "tool cancel <TI-id>"
+            )
+        if lowered in {"tool list", "tool status"}:
+            records = slot.tool_broker.records()
+            if not records:
+                return "No local tool requests are registered for this session."
+            lines = ["Local tool requests (execution disabled):"]
+            lines.extend(self._format_tool_record(item) for item in records[-20:])
+            return "\n".join(lines)
+
+        proposal_match = re.fullmatch(
+            r"tool\s+propose\s+sandbox\.run\s+(.+)", command, flags=re.IGNORECASE | re.DOTALL,
+        )
+        if proposal_match:
+            raw_arguments = proposal_match.group(1).strip()
+            envelope = (
+                '{"schema_version":1,"tool_id":"sandbox.run","tool_version":1,"arguments":'
+                + raw_arguments + "}"
+            )
+            try:
+                proposal = decode_tool_proposal_json(envelope)
+                request_id = f"TI-{secrets.token_hex(16)}"
+                record = slot.tool_broker.submit(
+                    proposal,
+                    request_id=request_id,
+                    trusted_principal_id=context.principal_id,
+                    session_instance_id=context.session_instance_id,
+                    persona_id=context.persona_id,
+                    adventure_id=context.adventure_id,
+                    policy_revision=context.policy_revision,
+                )
+            except (TypeError, ValueError) as error:
+                return f"Tool proposal was rejected safely: {error}"
+            return (
+                f"Registered inert tool proposal {record.invocation.invocation_id} for sandbox.run. "
+                "No files were created and no work was executed. Use tool preview, then tool grant and tool approve."
+            )
+
+        action_match = re.fullmatch(
+            r"tool\s+(status|preview|grant|approve|deny|revoke|cancel)\s+(TI-[A-Za-z0-9_-]{1,64})",
+            command,
+            flags=re.IGNORECASE,
+        )
+        if action_match:
+            action, request_id = action_match.group(1).casefold(), action_match.group(2)
+            record = slot.tool_broker.get(request_id)
+            if record is None:
+                return "Tool request was not found in this local session."
+            try:
+                if action == "status":
+                    return self._format_tool_record(record)
+                if action == "preview":
+                    arguments = record.proposal.arguments
+                    files = arguments["files"]
+                    file_bytes = sum(len(item["content"].encode("utf-8")) for item in files)
+                    lines = [
+                        f"Tool proposal preview: {request_id}",
+                        "Status: " + record.state,
+                        "Tool: sandbox.run v1",
+                        "Task kind: " + arguments["task_kind"],
+                        "Objective: " + arguments["objective"],
+                        f"Inline files: {len(files)} ({file_bytes} UTF-8 bytes)",
+                    ]
+                    lines.extend(f"- {item['path']}" for item in files)
+                    lines.append("Preview only; file contents were not materialized or executed.")
+                    return "\n".join(lines)
+                if action == "grant":
+                    record = slot.tool_broker.grant(request_id)
+                    return f"Granted one session-local use for {request_id}; explicit approval is still required."
+                if action == "approve":
+                    record = slot.tool_broker.approve(request_id)
+                    return f"Approved {request_id} once. Execution remains disabled."
+                if action in {"deny", "revoke"}:
+                    record = slot.tool_broker.deny(request_id)
+                    return f"Revoked and denied {request_id}; it cannot execute."
+                record = slot.tool_broker.cancel(request_id)
+                return f"Cancelled {request_id}; it cannot execute."
+            except (ToolBrokerError, TypeError, ValueError) as error:
+                return f"Tool control was rejected safely: {error}"
+
+        return (
+            "Unknown or malformed local tool command. Use tool help. "
+            "Tool commands never fall through to model generation."
+        )
+
     def respond(
         self,
         user_text: str,
@@ -329,10 +501,21 @@ class AssistantApplication:
         stream_writer: Callable[[str], None] | None = None,
         conversation_id=None,
         external_document_context=None,
+        trusted_local_control: bool = False,
     ):
         """Run one chat/command request through its bounded isolated session."""
-        with self._locked_session_for(conversation_id) as session:
+        if not isinstance(trusted_local_control, bool):
+            raise TypeError("trusted_local_control must be a boolean")
+        with self._locked_tool_slot_for(conversation_id) as slot:
+            session = slot.session
             with self._streaming(session, stream_writer):
+                if self._is_tool_control_namespace(user_text):
+                    if not trusted_local_control:
+                        return (
+                            "Tool controls are unavailable through shared chat/API requests. "
+                            "Use the trusted local Assistant CLI."
+                        )
+                    return self._local_tool_control(slot, user_text)
                 if external_document_context is None:
                     return session.respond(user_text)
                 return session.respond(user_text, external_document_context=external_document_context)

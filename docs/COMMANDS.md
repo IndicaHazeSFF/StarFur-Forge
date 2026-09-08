@@ -60,6 +60,41 @@ Aliases also work:
 
 ---
 
+## Local Inert Tool Review
+
+The interactive local Assistant CLI now exposes the first trusted control
+surface for the provider-free tool broker:
+
+    python starfur.py assistant
+
+Inside Assistant Mode:
+
+    tool help
+    tool list
+    tool propose sandbox.run {"task_kind":"python_tests","objective":"Run a harmless fixture.","files":[{"path":"main.py","content":"print('safe')"}]}
+    tool preview <TI-id>
+    tool grant <TI-id>
+    tool approve <TI-id>
+    tool status <TI-id>
+    tool deny <TI-id>
+    tool revoke <TI-id>
+    tool cancel <TI-id>
+
+This slice is deliberately inert. Validation, preview, a one-use
+session-ephemeral grant, and explicit approval do not create the supplied
+files or execute work. Tool requests disappear when their bounded application
+session is evicted or the process restarts. Changing the active persona,
+mounted adventure, or policy binding makes an outstanding request stale and
+denies it.
+
+The trust decision belongs to the local interactive CLI adapter, not to the
+text of a command. The shared chat/OpenWebUI/API path reserves the `tool`
+namespace but always rejects grant and approval controls; a conversation ID,
+bearer token, attached document, quoted instruction, or model response cannot
+become tool authority. There is no HTTP approval endpoint and no executor yet.
+
+---
+
 ## Assistant Persona Configuration
 
 The assistant persona is loaded from the path configured in `config/assistant.json`:

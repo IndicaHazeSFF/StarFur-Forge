@@ -3649,7 +3649,7 @@ def run_interactive(config_path=DEFAULT_CONFIG_PATH, input_fn=input, output_fn=p
         stream_writer=stream_writer,
     )
     session = application.session
-    output_fn("StarFur Assistant (model list/current/use, routing status/probe, persona list/current/use/inspect, roleplay begin/end/status, adventure list/create/inspect/load/resume/restart/status/events/checkpoints/corrections/correct/retract/state/relationships/knowledge/turn/pause/end/unload, remember/forget, memory list/search/inspect/scope, proposal list/inspect/approve/reject/approve all/scope, context stats; quit to exit)")
+    output_fn("StarFur Assistant (model list/current/use, routing status/probe, tool help/list/status/preview/propose/grant/approve/deny/revoke/cancel [local, execution disabled], persona list/current/use/inspect, roleplay begin/end/status, adventure list/create/inspect/load/resume/restart/status/events/checkpoints/corrections/correct/retract/state/relationships/knowledge/turn/pause/end/unload, remember/forget, memory list/search/inspect/scope, proposal list/inspect/approve/reject/approve all/scope, context stats; quit to exit)")
     while True:
         try:
             user_text = input_fn("You: ")
@@ -3661,7 +3661,7 @@ def run_interactive(config_path=DEFAULT_CONFIG_PATH, input_fn=input, output_fn=p
             return
         proposal_count_before = len(session.proposals)
         try:
-            answer = application.respond(user_text)
+            answer = application.respond(user_text, trusted_local_control=True)
         except GenerationInterrupted:
             if stream_started["value"]:
                 output_fn("")

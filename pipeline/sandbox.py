@@ -23,6 +23,9 @@ MAX_SANDBOX_FILES = 32
 MAX_SANDBOX_FILE_CHARACTERS = 64_000
 MAX_SANDBOX_TOTAL_CHARACTERS = 256_000
 MAX_SANDBOX_OUTPUT_CHARACTERS = 8_000
+MAX_SANDBOX_FILE_BYTES = 64_000
+MAX_SANDBOX_TOTAL_BYTES = 256_000
+MAX_SANDBOX_OUTPUT_BYTES = 8_000
 MAX_SANDBOX_TIMEOUT_SECONDS = 600.0
 SANDBOX_STATUSES = ("completed", "failed", "timed_out", "denied")
 _RUN_ID_RE = re.compile(r"^SB-[a-z0-9][a-z0-9_-]{0,63}$")
@@ -50,10 +53,17 @@ def _persona_id(value: str) -> str:
 def _relative_path(value: str) -> str:
     raw = _bounded_text("file path", value, limit=240)
     path = PurePosixPath(raw)
-    if path.is_absolute() or any(part in ("", ".", "..") for part in path.parts):
+    if path.is_absolute() or raw != path.as_posix() or any(part in ("", ".", "..") for part in path.parts):
         raise ValueError("file path must be a non-empty relative path without traversal.")
-    if "\\" in raw:
+    if "\\" in raw or ":" in raw or any(char in raw for char in '*?"<>|'):
         raise ValueError("file path must use POSIX separators.")
+    reserved = {"con", "prn", "aux", "nul"}
+    for part in path.parts:
+        stem = part.split(".", 1)[0].casefold()
+        if stem in reserved or (len(stem) == 4 and stem[:3] in {"com", "lpt"} and stem[3].isdigit()):
+            raise ValueError("file path uses a reserved Windows name.")
+        if part.endswith((".", " ")):
+            raise ValueError("file path has a Windows-unsafe trailing character.")
     return path.as_posix()
 
 
@@ -71,6 +81,8 @@ class SandboxFile:
             "content",
             _bounded_text("file content", self.content, limit=MAX_SANDBOX_FILE_CHARACTERS, allow_empty=True),
         )
+        if len(self.content.encode("utf-8")) > MAX_SANDBOX_FILE_BYTES:
+            raise ValueError(f"file content must be at most {MAX_SANDBOX_FILE_BYTES} UTF-8 bytes.")
 
 
 @dataclass(frozen=True)
@@ -199,6 +211,7 @@ class DisabledSandboxBackend:
     """Safe default: no process, network, or code execution occurs."""
 
     name = "disabled"
+    available = False
 
     def run(self, request: SandboxRequest, workspace: Path, policy: SandboxPolicy) -> SandboxBackendResult:
         return SandboxBackendResult(
@@ -221,12 +234,27 @@ class SandboxService:
             raise TypeError("policy must be a SandboxPolicy instance.")
         file_count = len(request.files)
         total_characters = sum(len(item.content) for item in request.files)
+        total_bytes = sum(len(item.content.encode("utf-8")) for item in request.files)
         if file_count > policy.max_files:
             raise ValueError("request exceeds the sandbox file limit.")
-        if total_characters > policy.max_total_characters:
+        if total_bytes > min(policy.max_total_characters, MAX_SANDBOX_TOTAL_BYTES):
             raise ValueError("request exceeds the sandbox input-size limit.")
 
         started = time.perf_counter()
+        backend_available = getattr(self.backend, "available", True)
+        supports_policy = getattr(self.backend, "supports_policy", None)
+        if not isinstance(backend_available, bool) or not backend_available:
+            result = SandboxBackendResult(
+                "denied",
+                detail="No isolated sandbox backend is configured; execution was not attempted.",
+            )
+            return self._report(request, result, started, file_count, total_characters, policy)
+        if callable(supports_policy) and not supports_policy(policy):
+            result = SandboxBackendResult(
+                "denied",
+                detail="The configured sandbox backend cannot enforce the requested policy.",
+            )
+            return self._report(request, result, started, file_count, total_characters, policy)
         if not policy.execution_allowed:
             result = SandboxBackendResult(
                 "denied",
@@ -245,7 +273,9 @@ class SandboxService:
                 if not isinstance(result, SandboxBackendResult):
                     raise TypeError("sandbox backend must return SandboxBackendResult.")
             except Exception as error:
-                result = SandboxBackendResult("failed", detail=f"Sandbox backend error: {type(error).__name__}: {error}")
+                # Exception text can contain paths, credentials, or provider
+                # output.  Keep only a bounded class label in the public report.
+                result = SandboxBackendResult("failed", detail=f"Sandbox backend error: {type(error).__name__}")
         return self._report(request, result, started, file_count, total_characters, policy)
 
     @staticmethod
@@ -258,7 +288,12 @@ class SandboxService:
         policy: SandboxPolicy,
     ) -> SandboxReport:
         def cap(value: str) -> str:
-            return value if len(value) <= policy.max_output_characters else value[:policy.max_output_characters] + "\n[output truncated]"
+            limit = min(policy.max_output_characters, MAX_SANDBOX_OUTPUT_BYTES)
+            if len(value.encode("utf-8")) <= limit:
+                return value
+            encoded = value.encode("utf-8")[:limit]
+            clipped = encoded.decode("utf-8", errors="ignore")
+            return clipped + "\n[output truncated]"
 
         return SandboxReport(
             run_id=request.run_id,
@@ -301,9 +336,12 @@ __all__ = [
     "DisabledSandboxBackend",
     "MAX_SANDBOX_FILES",
     "MAX_SANDBOX_FILE_CHARACTERS",
+    "MAX_SANDBOX_FILE_BYTES",
     "MAX_SANDBOX_OUTPUT_CHARACTERS",
+    "MAX_SANDBOX_OUTPUT_BYTES",
     "MAX_SANDBOX_TIMEOUT_SECONDS",
     "MAX_SANDBOX_TOTAL_CHARACTERS",
+    "MAX_SANDBOX_TOTAL_BYTES",
     "SANDBOX_STATUSES",
     "SandboxBackend",
     "SandboxBackendResult",

@@ -57,6 +57,28 @@ class SandboxTests(unittest.TestCase):
         self.assertFalse(backend.workspace.exists())
         self.assertNotIn(str(backend.workspace), format_sandbox_report(report))
 
+    def test_unavailable_backend_denies_before_materialization_even_when_requested(self):
+        class UnavailableBackend(RecordingBackend):
+            available = False
+
+            def run(self, request, workspace, policy):
+                raise AssertionError("unavailable backend must not receive a workspace")
+
+        report = SandboxService(UnavailableBackend()).run(
+            self._request(), policy=SandboxPolicy(execution_allowed=True),
+        )
+
+        self.assertEqual(report.status, "denied")
+        self.assertIn("No isolated sandbox backend", report.detail)
+
+    def test_utf8_bytes_and_windows_unsafe_paths_are_rejected(self):
+        with self.assertRaisesRegex(ValueError, "UTF-8 bytes"):
+            SandboxFile("emoji.txt", "🙂" * 20_000)
+        for path in ("CON.txt", "folder/NUL", "folder/name:stream", "folder/name. ", "folder//name"):
+            with self.subTest(path=path):
+                with self.assertRaises(ValueError):
+                    SandboxFile(path, "safe")
+
     def test_invalid_paths_policy_and_input_limits_are_rejected_before_execution(self):
         with self.assertRaisesRegex(ValueError, "traversal"):
             SandboxFile("../outside.txt", "bad")
@@ -74,13 +96,14 @@ class SandboxTests(unittest.TestCase):
         class BrokenBackend:
             name = "broken"
             def run(self, request, workspace, policy):
-                raise RuntimeError("backend unavailable")
+                raise RuntimeError("secret=must-not-leak")
 
         report = SandboxService(BrokenBackend()).run(
             self._request(), policy=SandboxPolicy(execution_allowed=True),
         )
         self.assertEqual(report.status, "failed")
         self.assertIn("RuntimeError", report.detail)
+        self.assertNotIn("secret=", report.detail)
 
         noisy = RecordingBackend(SandboxBackendResult("failed", stdout="x" * 200, stderr="y" * 200))
         bounded = SandboxService(noisy).run(

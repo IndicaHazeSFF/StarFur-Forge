@@ -141,6 +141,22 @@ def detect_command_help(query: str) -> CommandHelp | None:
             notes=("`routing status` is read-only. `routing probe` explicitly performs one non-generating provider availability check; neither command switches a provider.",),
         )
 
+    if _contains_any(value, (
+        "how do i use tools", "how can i use tools", "how do i inspect tools",
+        "how can i inspect tools", "tool controls", "tool help",
+    )):
+        return CommandHelp(
+            intent="local_tool_controls",
+            title="The inert tool broker can currently be inspected only in the trusted local Assistant CLI:",
+            commands=(
+                "tool help", "tool list", "tool status <TI-id>", "tool preview <TI-id>",
+                "tool propose sandbox.run <JSON arguments>", "tool grant <TI-id>",
+                "tool approve <TI-id>", "tool deny <TI-id>", "tool revoke <TI-id>",
+                "tool cancel <TI-id>",
+            ),
+            notes=("Execution remains disabled. Shared chat/OpenWebUI/API requests cannot grant or approve tools.",),
+        )
+
     if _contains_any(value, ("how do i inspect the persona", "how can i inspect the persona", "how do i inspect murr", "how can i inspect murr")):
         return CommandHelp(
             intent="persona_inspection",

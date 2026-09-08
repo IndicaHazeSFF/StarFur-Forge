@@ -37,6 +37,14 @@ pending the next copy/commit confirmation.
 - `pipeline/document_annotation_quality_eval.py`
 - `pipeline/document_annotation_quality_runner.py`
 - `pipeline/task_routing_eval.py`
+- `pipeline/tool_registry.py`
+- `pipeline/tool_permissions.py`
+- `pipeline/tool_contracts.py`
+- `pipeline/tool_grants.py`
+- `pipeline/tool_approval.py`
+- `pipeline/tool_audit.py`
+- `pipeline/tool_broker.py`
+- `pipeline/sandbox.py`
 
 ## tests
 
@@ -72,6 +80,14 @@ pending the next copy/commit confirmation.
 - `tests/fixtures/document_annotation_quality_note.md`
 - `tests/test_task_routing_eval.py`
 - `tests/fixtures/task_routing_cases.json`
+- `tests/test_tool_registry.py`
+- `tests/test_tool_permissions.py`
+- `tests/test_tool_contracts.py`
+- `tests/test_tool_grants.py`
+- `tests/test_tool_approval.py`
+- `tests/test_tool_audit.py`
+- `tests/test_tool_broker.py`
+- `tests/test_sandbox.py`
 
 ## presentation
 

@@ -1,4 +1,5 @@
 import sys
+import re
 import threading
 import types
 import unittest
@@ -102,6 +103,95 @@ class UnavailableProvider:
 
 
 class AssistantApplicationTests(unittest.TestCase):
+    def test_tool_namespace_is_reserved_and_shared_chat_cannot_control_it(self):
+        session = FakeSession()
+        app = AssistantApplication(session)
+
+        result = app.respond("tool approve TI-forged")
+
+        self.assertIn("unavailable through shared chat/API", result)
+        self.assertEqual([], session.calls)
+
+    def test_malformed_local_tool_command_never_reaches_model_generation(self):
+        session = FakeSession()
+        app = AssistantApplication(session)
+
+        result = app.respond("tool approve yes please", trusted_local_control=True)
+
+        self.assertIn("Unknown or malformed local tool command", result)
+        self.assertEqual([], session.calls)
+
+    def test_local_tool_authority_is_isolated_and_lost_with_session_eviction(self):
+        sessions = []
+
+        def factory():
+            created = FakeSession()
+            sessions.append(created)
+            return created
+
+        app = AssistantApplication(FakeSession(), session_factory=factory, max_conversations=1)
+        created = app.respond(
+            'tool propose sandbox.run {"task_kind":"python_tests","objective":"one",'
+            '"files":[{"path":"main.py","content":"pass"}]}',
+            conversation_id="tool-a", trusted_local_control=True,
+        )
+        request_id = re.search(r"TI-[A-Za-z0-9_-]+", created).group(0)
+
+        other = app.respond("tool list", conversation_id="tool-b", trusted_local_control=True)
+        recreated = app.respond(
+            f"tool status {request_id}", conversation_id="tool-a", trusted_local_control=True,
+        )
+
+        self.assertIn("No local tool requests", other)
+        self.assertIn("not found in this local session", recreated)
+        self.assertEqual(3, len(sessions))
+
+    def test_trusted_local_cli_can_preview_grant_and_approve_inert_request(self):
+        session = FakeSession()
+        app = AssistantApplication(session)
+        command = (
+            'tool propose sandbox.run {"task_kind":"python_tests",'
+            '"objective":"Run a harmless fixture.",'
+            '"files":[{"path":"main.py","content":"print(1)"}]}'
+        )
+
+        created = app.respond(command, trusted_local_control=True)
+        request_id = re.search(r"TI-[A-Za-z0-9_-]+", created).group(0)
+        preview = app.respond(f"tool preview {request_id}", trusted_local_control=True)
+        granted = app.respond(f"tool grant {request_id}", trusted_local_control=True)
+        approved = app.respond(f"tool approve {request_id}", trusted_local_control=True)
+        status = app.respond(f"tool status {request_id}", trusted_local_control=True)
+
+        self.assertIn("No files were created", created)
+        self.assertIn("main.py", preview)
+        self.assertNotIn("print(1)", preview)
+        self.assertIn("explicit approval is still required", granted)
+        self.assertIn("Execution remains disabled", approved)
+        self.assertIn("[approved]", status)
+        self.assertEqual([], session.calls)
+
+    def test_local_tool_request_becomes_stale_after_persona_context_changes(self):
+        class Runtime:
+            persona_id = "murr"
+
+        session = FakeSession()
+        session.persona_runtime_state = Runtime()
+        app = AssistantApplication(session)
+        created = app.respond(
+            'tool propose sandbox.run {"task_kind":"python_tests","objective":"Fixture.",'
+            '"files":[{"path":"main.py","content":"pass"}]}',
+            trusted_local_control=True,
+        )
+        request_id = re.search(r"TI-[A-Za-z0-9_-]+", created).group(0)
+        app.respond(f"tool grant {request_id}", trusted_local_control=True)
+        app.respond(f"tool approve {request_id}", trusted_local_control=True)
+        session.persona_runtime_state = type("Runtime", (), {"persona_id": "nova"})()
+
+        status = app.respond(f"tool status {request_id}", trusted_local_control=True)
+
+        self.assertIn("[denied] binding_stale", status)
+        self.assertEqual([], session.calls)
+
     def test_respond_delegates_and_preserves_normal_session_streaming(self):
         session = FakeSession()
         app = AssistantApplication(session)

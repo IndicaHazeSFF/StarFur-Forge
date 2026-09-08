@@ -39,6 +39,15 @@ class CommandHelpTests(unittest.TestCase):
         self.assertEqual(payload.intent, "routing_status")
         self.assertEqual(("routing status", "routing probe"), payload.commands)
 
+    def test_tool_help_describes_only_local_inert_controls(self):
+        payload = detect_command_help("How do I use tools?")
+        self.assertEqual(payload.intent, "local_tool_controls")
+        rendered = payload.render()
+        self.assertIn("tool propose sandbox.run <JSON arguments>", rendered)
+        self.assertIn("tool approve <TI-id>", rendered)
+        self.assertIn("Execution remains disabled", rendered)
+        self.assertIn("Shared chat/OpenWebUI/API requests cannot grant", rendered)
+
     def test_adventure_state_help_returns_exact_core_commands(self):
         payload = detect_command_help("How do I set story state?")
         self.assertEqual(payload.intent, "adventure_registry")
