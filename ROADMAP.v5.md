@@ -35,6 +35,21 @@ The full resident experience is a lightweight apartment/dashboard where a compan
 9. Instructions are advisory. Anything private, numeric, provenance-sensitive, or permission-sensitive is sanitized before a model sees it.
 10. Zero-provider operation is a release requirement for resident identity/state, not a promise of open-ended reasoning without a provider.
 
+### Truth-seeking and research escalation
+
+Core factual policy is persona-independent. When approved memory and supplied
+context do not support a direct real-world answer, StarFur must use an
+authorized bounded research tool or clearly state that it cannot verify the
+answer; plausible provider prose is never evidence. Explicit research requests
+and configured important, time-sensitive, or niche gaps may trigger a
+brokered public lookup, while low-stakes gaps should prefer transparent
+uncertainty. Research results remain untrusted, source/time-stamped evidence
+and never automatically become memory, persona learning, adventure state, or
+canon. Roleplay and adventure may invent within their declared fictional
+namespace, but fictional details must not be presented as real-world facts or
+cross into shared reality. Provider or tool unavailability must produce an
+inability-to-verify response rather than a guess.
+
 ## Current position
 
 The repository is in **Stage 5A / C3 foundation**. Implemented foundations include domain-separated assistant memory and retrieval, reviewed document intake, persona runtime and visibility policy, provider/application boundaries, adventure registries and append-only event logs, recovery/locking/idempotent writes, complete structured projections with bounded replay/context selectors, resources, relationships, character knowledge, checkpoints/branches, correction/retraction, mixed explicit turn staging, adventure import review/mapping, candidate inbox/review/staging primitives, benchmark manifests, retrieval evaluation, and a privacy-bounded experiment ledger.
@@ -338,6 +353,21 @@ and bounded reports omit raw backend exception text. This remains application
 validation and copy-in, not OS isolation or execution. Native Windows/WSL
 filesystem smoke evidence is required before durable run recovery or a native
 isolation backend.
+
+**COMPLETED S6/B4 DURABLE ADMISSION FOUNDATION (PENDING CROSS-PLATFORM
+MULTIPROCESS SMOKE):** A separate optional Core-owned tool-run journal writes
+bounded intent/outcome records under protected locks with pending-replacement
+recovery, strict JSON validation, and duplicate-outcome idempotency. One
+OS-held lifetime owner lease plus a Core-created owner epoch makes admission
+and reconciliation single-owner across processes. Each admitted ID is bound
+to one opaque invocation fingerprint and can never regain fresh authority;
+same-owner live intents remain live, while abandoned or expired intents can
+only become `outcome_unknown`. Replay-safe compaction remains unavailable, so
+capacity exhaustion fails closed without deleting admission evidence. The
+journal retains no proposal arguments, raw paths/resources, grants, approvals,
+output, artifacts, prompts, or provider data; recovery never restores authority
+or replays work. The default runtime still has no configured durable tool
+journal and no executor.
 
 ## Stage G — Perception and media (LATER)
 

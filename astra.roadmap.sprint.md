@@ -12,6 +12,22 @@ Protect host files, credentials, network destinations, canonical memory, adventu
 
 Assume Core, explicitly installed adapter code, the approval client, and the chosen isolation supervisor are trusted components. Arbitrary third-party Python imported into the Core process would bypass the broker; a Python protocol or registry does not isolate malicious code. Malicious local administrators and kernel/hypervisor compromise are outside the initial guarantee. A sandbox reduces exposure; it cannot guarantee that every exploit is contained.
 
+### Truth-seeking is a Core policy boundary
+
+Persona style never overrides factual grounding. If approved memory and supplied
+context are insufficient for a direct real-world answer, Core must route an
+authorized bounded research request or return a clear inability-to-verify
+answer; a plausible model completion is not evidence. Explicit research,
+important/time-sensitive questions, and niche factual gaps may qualify for a
+public lookup, while low-stakes gaps should not trigger network work merely to
+avoid saying “I don't know.” Research output is untrusted, source/time-stamped
+evidence and cannot automatically write memory, learning, adventure state, or
+canon. Fictional invention is allowed only inside declared roleplay/adventure
+context and must not be presented as real-world fact. Provider/tool outage must
+fail transparently rather than fall back to confident invention. This policy
+will require a later research/web tool, provenance contract, disclosure gate,
+and hallucination/refusal benchmark; it does not expand S1–S5 execution scope.
+
 Destroying a workspace cannot reverse an uploaded secret, a remote mutation, or an approved host-file overwrite. Apply controls at input, authorization, execution, output, and export. Read-only access also needs authorization: reading private content and sending it to a hosted model is a disclosure even if no local file changes.
 
 ### Existing commands and new tools
@@ -169,6 +185,10 @@ native Windows/WSL smoke evidence remains outstanding.
 - **Defer:** OS execution, exports, archives, network. Unsupported safe filesystem operations fail closed.
 
 ### S6 — Durable execution journal and recovery contract
+
+**Implementation status:** Provider-free journal foundation is implemented;
+disposable restart/recovery smoke evidence is still required. Production runtime
+storage and real execution remain disabled.
 
 - **Objective:** Persist bounded intent/outcome records with locking, validation, crash recovery, and bounded retention before enabling real effects. Keep security audit separate from the experiment ledger.
 - **Files/interfaces:** Extend `pipeline/tool_audit.py`; new `pipeline/tool_runs.py`; consult `pipeline/adventure_events.py` locking/recovery patterns without storing tool events in adventure logs; recovery tests with injected failures.

@@ -45,6 +45,8 @@ pending the next copy/commit confirmation.
 - `pipeline/tool_audit.py`
 - `pipeline/tool_broker.py`
 - `pipeline/sandbox.py`
+- `pipeline/tool_runs.py`
+- `pipeline/sandbox_backend.py`
 
 ## tests
 
@@ -88,6 +90,8 @@ pending the next copy/commit confirmation.
 - `tests/test_tool_audit.py`
 - `tests/test_tool_broker.py`
 - `tests/test_sandbox.py`
+- `tests/test_tool_runs.py`
+- `tests/test_sandbox_backend.py`
 
 ## presentation
 
@@ -99,6 +103,7 @@ pending the next copy/commit confirmation.
 - `AGENTS.md`
 - `ROADMAP.md`
 - `ROADMAP.v5.md`
+- `astra.roadmap.sprint.md`
 - `docs/COMMANDS.md`
 - `starfur.py`
 - `model-comparison.md`

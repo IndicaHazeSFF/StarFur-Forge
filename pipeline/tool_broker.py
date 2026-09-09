@@ -19,6 +19,7 @@ from .tool_grants import (
     SessionToolGrantController, ToolGrantError, ToolInvocation, ToolInvocationIssuer,
 )
 from .tool_permissions import evaluate_tool_permission
+from .tool_runs import ToolRunJournal, ToolRunJournalError, ToolRunOwnerLease
 
 
 MAX_TOOL_BROKER_REQUESTS = 128
@@ -119,6 +120,8 @@ class ToolBroker:
         self, contracts: ToolContractRegistry, issuer: ToolInvocationIssuer,
         grants: SessionToolGrantController, approvals: ToolApprovalController,
         *, executor: ToolExecutor | None = None, audit: ToolAuditLog | None = None,
+        run_journal: ToolRunJournal | None = None,
+        run_journal_owner: ToolRunOwnerLease | None = None,
         maximum_requests: int = MAX_TOOL_BROKER_REQUESTS,
     ) -> None:
         if not isinstance(contracts, ToolContractRegistry):
@@ -129,6 +132,12 @@ class ToolBroker:
             raise TypeError("tool broker grant controller is invalid")
         if not isinstance(approvals, ToolApprovalController):
             raise TypeError("tool broker approval controller is invalid")
+        if run_journal is not None and not isinstance(run_journal, ToolRunJournal):
+            raise TypeError("tool broker run journal is invalid")
+        if (run_journal is None) != (run_journal_owner is None):
+            raise TypeError("tool broker journal and owner lease must be supplied together")
+        if run_journal_owner is not None and not isinstance(run_journal_owner, ToolRunOwnerLease):
+            raise TypeError("tool broker run journal owner lease is invalid")
         if isinstance(maximum_requests, bool) or not isinstance(maximum_requests, int) or not 1 <= maximum_requests <= 1024:
             raise ValueError("tool broker request limit is invalid")
         selected_executor = executor or DisabledToolExecutor()
@@ -140,9 +149,15 @@ class ToolBroker:
         self._approvals = approvals
         self._executor = selected_executor
         self._audit = audit or ToolAuditLog()
+        self._run_journal = run_journal
+        self._run_journal_owner = run_journal_owner
         self._maximum_requests = maximum_requests
         self._records: dict[str, ToolBrokerRecord] = {}
         self._lock = RLock()
+        if self._run_journal is not None:
+            # The lifetime owner lease prevents another live process from being
+            # reconciled. Recovery never restores a request, grant, or approval.
+            self._run_journal.reconcile(owner=self._run_journal_owner)
 
     @property
     def audit(self) -> ToolAuditLog:
@@ -174,6 +189,13 @@ class ToolBroker:
                 return existing
             if len(self._records) >= self._maximum_requests:
                 raise ToolBrokerError("tool broker request limit exceeded")
+            if self._run_journal is not None:
+                try:
+                    self._run_journal.record_intent(
+                        invocation, owner=self._run_journal_owner,
+                    )
+                except ToolRunJournalError as error:
+                    raise ToolBrokerError("tool request intent cannot be journaled") from error
             record = ToolBrokerRecord(invocation, validated, "awaiting_approval", "approval_required")
             self._records[request_id] = record
             self._audit.append(request_id, invocation.tool_id, "proposed", "proposal_validated")
@@ -309,12 +331,11 @@ class ToolBroker:
             final_state = result.outcome
             if final_state not in TERMINAL_TOOL_STATES:
                 return self._replace_terminal(running, "failed", "result_invalid")
-            completed = replace(running, state=final_state, reason=(
-                "completed" if final_state == "completed" else "executor_failed"
-            ), result=result)
-            self._records[request_id] = completed
-            self._audit.append(request_id, queued.invocation.tool_id, completed.state, completed.reason)
-            return completed
+            return self._replace_terminal(
+                running, final_state,
+                "completed" if final_state == "completed" else "executor_failed",
+                result=result,
+            )
 
     def _require_record(self, request_id: object) -> ToolBrokerRecord:
         record = self._records.get(request_id) if isinstance(request_id, str) else None
@@ -328,11 +349,37 @@ class ToolBroker:
             raise ToolBrokerError("tool request is already terminal")
         return record
 
-    def _replace_terminal(self, record: ToolBrokerRecord, state: str, reason: str) -> ToolBrokerRecord:
-        updated = replace(record, state=state, reason=reason)
+    def _replace_terminal(
+        self, record: ToolBrokerRecord, state: str, reason: str, *, result: ToolResult | None = None,
+    ) -> ToolBrokerRecord:
+        if self._run_journal is not None:
+            try:
+                self._run_journal.record_outcome(
+                    record.invocation, owner=self._run_journal_owner,
+                    state=state, reason=self._journal_reason_for_state(state),
+                )
+            except ToolRunJournalError:
+                # If an effect may have completed but its durable outcome cannot
+                # be recorded, fail closed locally.  The existing durable intent
+                # will reconcile to unknown after restart; no retry is implied.
+                updated = replace(record, state="outcome_unknown", reason="journal_write_failed", result=result)
+                self._records[record.invocation.invocation_id] = updated
+                self._audit.append(
+                    record.invocation.invocation_id, record.invocation.tool_id,
+                    "outcome_unknown", "journal_write_failed",
+                )
+                return updated
+        updated = replace(record, state=state, reason=reason, result=result)
         self._records[record.invocation.invocation_id] = updated
         self._audit.append(record.invocation.invocation_id, record.invocation.tool_id, state, reason)
         return updated
+
+    @staticmethod
+    def _journal_reason_for_state(state: str) -> str:
+        return {
+            "completed": "completed", "failed": "failed", "denied": "denied",
+            "cancelled": "cancelled", "timed_out": "timed_out",
+        }.get(state, "restart_reconciliation")
 
     def _terminate(self, request_id: str, *, state: str, reason: str) -> ToolBrokerRecord:
         with self._lock:

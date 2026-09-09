@@ -42,6 +42,21 @@ The initial commercial target is a Steam application with:
 7. **Automatic mutation is observable.** Every automatic memory, learning, or adventure change has provenance, policy, validation, an outcome, and a correction/recovery path.
 8. **Evidence precedes claims.** Unit/integration tests prove mechanics; versioned behavioral benchmarks measure model-dependent reliability.
 
+### Truth-seeking and research escalation
+
+Core factual policy overrides persona style: if approved memory and supplied
+context do not support a direct real-world answer, StarFur must research through
+an authorized bounded tool or say that it cannot verify the answer. A model's
+plausible completion is never evidence by itself. Research output remains
+untrusted, source- and time-stamped, and separate from memory, persona learning,
+adventure state, and canon until an existing review/import policy accepts it.
+Explicit research requests and configured important, time-sensitive, or niche
+questions may trigger a brokered public lookup; low-stakes gaps should prefer a
+clear uncertainty response. Roleplay/adventure may generate fictional details
+inside their declared namespace, but those details must never be presented as
+real-world facts or cross into shared reality. If the provider or research tool
+is unavailable, respond with inability to verify rather than guessing.
+
 ## Ownership boundaries
 
 | Layer | Owns | Must not own |

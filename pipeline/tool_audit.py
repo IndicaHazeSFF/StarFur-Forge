@@ -17,6 +17,7 @@ TOOL_AUDIT_REASONS = frozenset({
     "dispatch_queued", "dispatch_started", "completed", "permission_denied",
     "authorization_missing", "binding_stale", "executor_unavailable", "executor_failed",
     "result_invalid", "cancelled", "denied_by_controller", "duplicate_request",
+    "journal_reconciled_unknown", "journal_write_failed",
 })
 MAX_TOOL_AUDIT_EVENTS = 256
 

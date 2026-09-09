@@ -1,4 +1,5 @@
 import threading
+import tempfile
 import unittest
 from pathlib import Path
 import sys
@@ -11,6 +12,7 @@ from pipeline.tool_audit import ToolAuditLog
 from pipeline.tool_broker import ToolBroker, ToolBrokerError, ToolDispatchContext
 from pipeline.tool_contracts import ToolProposal, ToolResult, build_core_tool_contract_registry
 from pipeline.tool_grants import SessionToolGrantController, ToolInvocationIssuer
+from pipeline.tool_runs import ToolRunJournal
 
 
 class FakeExecutor:
@@ -55,7 +57,7 @@ def proposal(objective="Run safe tests."):
 
 
 class ToolBrokerTests(unittest.TestCase):
-    def make_broker(self, executor=None):
+    def make_broker(self, executor=None, run_journal=None, run_journal_owner=None):
         contracts = build_core_tool_contract_registry()
         ids = iter((f"TG-grant_{index}" for index in range(20)))
         approvals = iter((f"TA-approval_{index}" for index in range(20)))
@@ -66,6 +68,8 @@ class ToolBrokerTests(unittest.TestCase):
             ToolApprovalController(clock=lambda: 1000.0, id_factory=lambda: next(approvals)),
             executor=executor,
             audit=ToolAuditLog(clock=lambda: 1000.0),
+            run_journal=run_journal,
+            run_journal_owner=run_journal_owner,
         )
         return broker
 
@@ -205,6 +209,69 @@ class ToolBrokerTests(unittest.TestCase):
             thread.join()
         self.assertEqual(1, executor.calls)
         self.assertEqual(["completed"] * 5, sorted(states))
+
+    def test_optional_durable_journal_records_outcome_and_never_restores_authority(self):
+        with tempfile.TemporaryDirectory() as root:
+            journal = ToolRunJournal(
+                root, clock=lambda: 1000.0,
+                owner_epoch_factory=lambda: "TO-broker-owner",
+            )
+            owner = journal.acquire_owner("core.broker-test")
+            try:
+                executor = FakeExecutor()
+                broker = self.make_broker(
+                    executor, run_journal=journal, run_journal_owner=owner,
+                )
+                self.submit(broker)
+                self.authorize(broker)
+                self.assertEqual("completed", broker.dispatch(
+                    "TI-request_1", context=self.context(),
+                ).state)
+                self.assertEqual(("intent", "outcome"), tuple(item.kind for item in journal.records()))
+
+                # A new broker only reconciles durable records; it does not recreate
+                # a dispatchable request, grant, or approval.
+                restarted = self.make_broker(
+                    FakeExecutor(), run_journal=journal, run_journal_owner=owner,
+                )
+                self.assertEqual((), restarted.records())
+            finally:
+                if owner.active:
+                    journal.release_owner(owner)
+
+    def test_live_shared_owner_is_not_reconciled_and_historical_submit_is_fenced(self):
+        with tempfile.TemporaryDirectory() as root:
+            journal = ToolRunJournal(
+                root, clock=lambda: 1000.0,
+                owner_epoch_factory=lambda: "TO-shared-owner",
+            )
+            owner = journal.acquire_owner("core.broker-test")
+            try:
+                first = self.make_broker(
+                    FakeExecutor(), run_journal=journal, run_journal_owner=owner,
+                )
+                self.submit(first)
+
+                second = self.make_broker(
+                    FakeExecutor(), run_journal=journal, run_journal_owner=owner,
+                )
+                self.assertEqual(("intent",), tuple(item.kind for item in journal.records()))
+                with self.assertRaisesRegex(ToolBrokerError, "cannot be journaled"):
+                    self.submit(second)
+
+                self.authorize(first)
+                self.assertEqual("completed", first.dispatch(
+                    "TI-request_1", context=self.context(),
+                ).state)
+            finally:
+                if owner.active:
+                    journal.release_owner(owner)
+
+    def test_journal_requires_an_explicit_owner_lease(self):
+        with tempfile.TemporaryDirectory() as root:
+            journal = ToolRunJournal(root)
+            with self.assertRaisesRegex(TypeError, "supplied together"):
+                self.make_broker(run_journal=journal)
 
 
 if __name__ == "__main__":
