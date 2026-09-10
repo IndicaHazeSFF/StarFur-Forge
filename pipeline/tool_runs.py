@@ -16,7 +16,6 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass
-import hashlib
 import json
 import math
 import os
@@ -29,7 +28,9 @@ import time
 from typing import Callable, Iterator, Mapping
 
 from .tool_audit import TOOL_LIFECYCLE_STATES
-from .tool_grants import IDENTITY_RE, INVOCATION_ID_RE, ToolInvocation
+from .tool_grants import (
+    IDENTITY_RE, INVOCATION_ID_RE, ToolInvocation, tool_invocation_fingerprint,
+)
 from .tool_registry import MAX_TOOL_ID_CHARACTERS, TOOL_ID_RE
 
 try:  # POSIX production, including WSL.
@@ -54,6 +55,7 @@ TERMINAL_RUN_STATES = frozenset({
 RUN_REASONS = frozenset({
     "submitted", "completed", "failed", "denied", "cancelled", "timed_out",
     "owner_session_expired", "restart_reconciliation",
+    "supervisor_outcome_unknown",
 })
 RUN_STATE_REASONS = {
     "awaiting_approval": frozenset({"submitted"}),
@@ -62,7 +64,9 @@ RUN_STATE_REASONS = {
     "denied": frozenset({"denied"}),
     "cancelled": frozenset({"cancelled"}),
     "timed_out": frozenset({"timed_out"}),
-    "outcome_unknown": frozenset({"owner_session_expired", "restart_reconciliation"}),
+    "outcome_unknown": frozenset({
+        "owner_session_expired", "restart_reconciliation", "supervisor_outcome_unknown",
+    }),
 }
 OWNER_EPOCH_RE = re.compile(r"^TO-[A-Za-z0-9_-]{1,64}$")
 BINDING_FINGERPRINT_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -106,16 +110,6 @@ class ToolRunOwnerLease:
     @property
     def active(self) -> bool:
         return not self._released and self._process_id == os.getpid()
-
-
-def _invocation_fingerprint(invocation: ToolInvocation) -> str:
-    """Bind durable admission to exact authority context without storing payloads."""
-    encoded = json.dumps(
-        invocation.binding_tuple(),
-        ensure_ascii=False,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
 
 
 def _valid_timestamp(value: object, label: str) -> float:
@@ -352,7 +346,7 @@ class ToolRunJournal:
     ) -> ToolRunRecord:
         if not isinstance(invocation, ToolInvocation):
             raise TypeError("tool run invocation is invalid")
-        fingerprint = _invocation_fingerprint(invocation)
+        fingerprint = tool_invocation_fingerprint(invocation)
         with self._thread_lock:
             self._require_owner(owner)
             with self._locked():
@@ -381,7 +375,7 @@ class ToolRunJournal:
             raise TypeError("tool run invocation is invalid")
         if state not in TERMINAL_RUN_STATES or reason not in RUN_STATE_REASONS.get(state, ()):
             raise ToolRunJournalError("tool run outcome is invalid")
-        fingerprint = _invocation_fingerprint(invocation)
+        fingerprint = tool_invocation_fingerprint(invocation)
         with self._thread_lock:
             self._require_owner(owner)
             with self._locked():

@@ -367,7 +367,33 @@ capacity exhaustion fails closed without deleting admission evidence. The
 journal retains no proposal arguments, raw paths/resources, grants, approvals,
 output, artifacts, prompts, or provider data; recovery never restores authority
 or replays work. The default runtime still has no configured durable tool
-journal and no executor.
+journal or available execution supervisor.
+
+**COMPLETED B5 SUPERVISOR-LIFECYCLE FOUNDATION (WINDOWS/WSL TESTED):** Strict
+immutable contracts now represent one exact launch, bounded
+status, cancellation acknowledgement, and verified completion under a
+Core-created worker generation. Queueing consumes session authority while
+retaining its deadline and revocation generation; the broker rechecks both
+immediately before launch and does not hold its lifecycle lock during a
+supervisor call. Cancellation can therefore reach a fake running worker.
+Definite completion, failure, timeout, or cancellation requires matching
+invocation/tool/version/policy/generation data and verified stop; malformed
+results, post-launch exceptions, unknown cancellation, or unverified stop stay
+`outcome_unknown` and cannot trigger replay. The default supervisor is still
+unavailable. No real process, VM, backend selection, materialization, provider
+call, or OS-isolation claim is part of this slice.
+
+**COMPLETED B6 PORTABLE COPY-IN/OUTPUT CONTRACT SLICE (PENDING WSL SMOKE):**
+Inert tool proposals and temporary sandbox materialization now share one pure
+portable file-tree validator. It rejects case/Unicode aliases, file/directory
+prefix collisions, traversal, alternate streams, reserved Windows names, and
+other noncanonical paths before any copy-in. Backends must explicitly affirm
+availability and policy support first; materialization and cleanup faults yield
+bounded failures. A UTF-8 byte-bounded output collector includes its truncation
+marker within the ceiling, and tool result envelopes independently reject
+invalid or oversized multibyte output. The broker remains disconnected from
+the sandbox service; no process, VM, host export, guest mount, provider call,
+or executable backend was added.
 
 ## Stage G — Perception and media (LATER)
 

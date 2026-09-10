@@ -1,12 +1,15 @@
 import sys
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from pipeline.sandbox import (
     SandboxBackendResult,
     SandboxFile,
+    SandboxOutputCollector,
     SandboxPolicy,
     SandboxRequest,
     SandboxService,
@@ -16,6 +19,7 @@ from pipeline.sandbox import (
 
 class RecordingBackend:
     name = "recording"
+    available = True
 
     def __init__(self, result=None):
         self.result = result or SandboxBackendResult("completed", stdout="tests passed", exit_code=0)
@@ -23,11 +27,14 @@ class RecordingBackend:
         self.files = None
         self.policy = None
 
-    def run(self, request, workspace, policy):
+    def run(self, request, workspace, policy, *, stdout, stderr):
         self.workspace = workspace
         self.files = {path.relative_to(workspace).as_posix(): path.read_text(encoding="utf-8") for path in workspace.rglob("*") if path.is_file()}
         self.policy = policy
         return self.result
+
+    def supports_policy(self, policy):
+        return not policy.network_allowed
 
 
 class SandboxTests(unittest.TestCase):
@@ -61,7 +68,7 @@ class SandboxTests(unittest.TestCase):
         class UnavailableBackend(RecordingBackend):
             available = False
 
-            def run(self, request, workspace, policy):
+            def run(self, request, workspace, policy, *, stdout, stderr):
                 raise AssertionError("unavailable backend must not receive a workspace")
 
         report = SandboxService(UnavailableBackend()).run(
@@ -79,6 +86,20 @@ class SandboxTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     SandboxFile(path, "safe")
 
+    def test_portable_case_unicode_and_file_directory_collisions_are_rejected(self):
+        for paths in (
+            ("Readme.txt", "README.TXT"),
+            ("src", "src/main.py"),
+            ("SRC/main.py", "src"),
+        ):
+            with self.subTest(paths=paths), self.assertRaisesRegex(ValueError, "unique|collision"):
+                SandboxRequest(
+                    "SB-collision", "murr", "python_tests", "Reject ambiguous trees.",
+                    tuple(SandboxFile(path, "safe") for path in paths),
+                )
+        with self.assertRaisesRegex(ValueError, "canonical Unicode"):
+            SandboxFile("cafe\u0301.txt", "safe")
+
     def test_invalid_paths_policy_and_input_limits_are_rejected_before_execution(self):
         with self.assertRaisesRegex(ValueError, "traversal"):
             SandboxFile("../outside.txt", "bad")
@@ -95,7 +116,12 @@ class SandboxTests(unittest.TestCase):
     def test_backend_errors_and_output_are_bounded_in_a_report(self):
         class BrokenBackend:
             name = "broken"
-            def run(self, request, workspace, policy):
+            available = True
+
+            def supports_policy(self, policy):
+                return True
+
+            def run(self, request, workspace, policy, *, stdout, stderr):
                 raise RuntimeError("secret=must-not-leak")
 
         report = SandboxService(BrokenBackend()).run(
@@ -111,6 +137,84 @@ class SandboxTests(unittest.TestCase):
         )
         self.assertTrue(bounded.stdout.endswith("[output truncated]"))
         self.assertTrue(bounded.stderr.endswith("[output truncated]"))
+        self.assertLessEqual(len(bounded.stdout.encode("utf-8")), 100)
+        self.assertLessEqual(len(bounded.stderr.encode("utf-8")), 100)
+
+    def test_backend_must_explicitly_claim_availability_and_policy_support(self):
+        class AmbiguousBackend:
+            name = "ambiguous"
+
+            def run(self, request, workspace, policy):
+                raise AssertionError("ambiguous backend must not receive files")
+
+        report = SandboxService(AmbiguousBackend()).run(
+            self._request(), policy=SandboxPolicy(execution_allowed=True),
+        )
+        self.assertEqual(report.status, "denied")
+        self.assertIn("No isolated sandbox backend", report.detail)
+
+        class NoPolicyBackend(RecordingBackend):
+            supports_policy = None
+
+        backend = NoPolicyBackend()
+        report = SandboxService(backend).run(
+            self._request(), policy=SandboxPolicy(execution_allowed=True),
+        )
+        self.assertEqual(report.status, "denied")
+        self.assertIsNone(backend.workspace)
+
+        class BrokenPolicyBackend(RecordingBackend):
+            def supports_policy(self, policy):
+                raise RuntimeError("secret policy detail")
+
+        backend = BrokenPolicyBackend()
+        report = SandboxService(backend).run(
+            self._request(), policy=SandboxPolicy(execution_allowed=True),
+        )
+        self.assertEqual(report.status, "denied")
+        self.assertIsNone(backend.workspace)
+        self.assertNotIn("secret", format_sandbox_report(report))
+
+    def test_materialization_and_cleanup_faults_are_safe_bounded_failures(self):
+        backend = RecordingBackend()
+        with patch("pipeline.sandbox.Path.write_text", side_effect=OSError("secret host path")):
+            report = SandboxService(backend).run(
+                self._request(), policy=SandboxPolicy(execution_allowed=True),
+            )
+        self.assertEqual(report.status, "failed")
+        self.assertEqual(report.detail, "Sandbox materialization error: OSError")
+        self.assertIsNone(backend.workspace)
+        self.assertNotIn("secret", format_sandbox_report(report))
+
+    def test_output_collector_caps_chunked_utf8_flood_and_marker_within_limit(self):
+        collector = SandboxOutputCollector(64)
+        for _ in range(100):
+            collector.write("🦊" * 20)
+        rendered = collector.text()
+        self.assertTrue(collector.truncated)
+        self.assertTrue(rendered.endswith("[output truncated]"))
+        self.assertLessEqual(len(rendered.encode("utf-8")), 64)
+        with self.assertRaisesRegex(ValueError, "valid UTF-8"):
+            SandboxOutputCollector(64).write("\ud800")
+
+        real_temporary_directory = tempfile.TemporaryDirectory
+
+        class CleanupFault:
+            def __init__(self, *args, **kwargs):
+                self._inner = real_temporary_directory(*args, **kwargs)
+                self.name = self._inner.name
+
+            def cleanup(self):
+                self._inner.cleanup()
+                raise OSError("secret cleanup path")
+
+        with patch("pipeline.sandbox.tempfile.TemporaryDirectory", CleanupFault):
+            report = SandboxService(RecordingBackend()).run(
+                self._request(), policy=SandboxPolicy(execution_allowed=True),
+            )
+        self.assertEqual(report.status, "failed")
+        self.assertEqual(report.detail, "Sandbox cleanup error: OSError")
+        self.assertNotIn("secret", format_sandbox_report(report))
 
 
 if __name__ == "__main__":

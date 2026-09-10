@@ -1,117 +1,23 @@
 # Pending copy manifest
 
-Roger confirmed the resident-activity smoke test and copied the preceding
-sprint to the WSL checkout. Every path listed below changed afterward and is
-pending the next copy/commit confirmation.
+Roger confirmed the B5 WSL tests. The paths below changed afterward for B6 and
+are pending the next copy/test confirmation.
 
 ## pipeline
 
-- `pipeline/resident_presentation.py`
-- `pipeline/resident_snapshot.py`
-- `pipeline/persona_assets.py`
-- `pipeline/persona_registry.py`
-- `pipeline/assistant.py`
-- `pipeline/command_help.py`
-- `pipeline/persona_asset_resolver.py`
-- `pipeline/adventure_turn_policy.py`
-- `pipeline/adventure_turn.py`
-- `pipeline/adventure_events.py`
-- `pipeline/adventure_participant.py`
-- `pipeline/adventure_turn_context.py`
-- `pipeline/adventure_turn_provider.py`
-- `pipeline/experiment_ledger.py`
-- `pipeline/adventure_turn_candidates.py`
-- `pipeline/adventure_turn_orchestration_eval.py`
-- `pipeline/task_routing.py`
-- `pipeline/provider_registry.py`
-- `pipeline/provider_state.py`
-- `pipeline/task_execution.py`
-- `pipeline/adventure_turn_candidate_inbox.py`
-- `pipeline/document_annotation.py`
-- `pipeline/document_intake.py`
-- `pipeline/application.py`
-- `pipeline/api.py`
-- `pipeline/task_profiles.py`
-- `pipeline/providers.py`
-- `pipeline/document_annotation_eval.py`
-- `pipeline/document_annotation_quality_eval.py`
-- `pipeline/document_annotation_quality_runner.py`
-- `pipeline/task_routing_eval.py`
-- `pipeline/tool_registry.py`
-- `pipeline/tool_permissions.py`
-- `pipeline/tool_contracts.py`
-- `pipeline/tool_grants.py`
-- `pipeline/tool_approval.py`
-- `pipeline/tool_audit.py`
-- `pipeline/tool_broker.py`
+- `pipeline/sandbox_paths.py`
 - `pipeline/sandbox.py`
-- `pipeline/tool_runs.py`
-- `pipeline/sandbox_backend.py`
+- `pipeline/tool_contracts.py`
 
 ## tests
 
-- `tests/test_resident_presentation.py`
-- `tests/test_resident_snapshot.py`
-- `tests/test_command_help.py`
-- `tests/test_persona_assets.py`
-- `tests/test_persona_registry.py`
-- `tests/test_persona_selection.py`
-- `tests/test_persona_asset_resolver.py`
-- `tests/test_adventure_turn_candidates.py`
-- `tests/test_adventure_turn.py`
-- `tests/test_adventure_events.py`
-- `tests/test_adventure_commands.py`
-- `tests/test_adventure_participant.py`
-- `tests/test_adventure_turn_context.py`
-- `tests/test_adventure_turn_provider.py`
-- `tests/test_experiment_ledger.py`
-- `tests/test_chat_provider.py`
-- `tests/test_application.py`
-- `tests/test_adventure_turn_candidate_eval.py`
-- `tests/fixtures/adventure_turn_candidate_cases.json`
-- `tests/test_adventure_turn_orchestration_eval.py`
-- `tests/test_task_routing.py`
-- `tests/test_provider_registry.py`
-- `tests/test_task_execution.py`
-- `tests/test_task_profiles.py`
-- `tests/test_document_annotation.py`
-- `tests/test_document_annotation_eval.py`
-- `tests/test_document_annotation_quality_eval.py`
-- `tests/test_document_annotation_quality_runner.py`
-- `tests/fixtures/document_annotation_quality_cases.json`
-- `tests/fixtures/document_annotation_quality_note.md`
-- `tests/test_task_routing_eval.py`
-- `tests/fixtures/task_routing_cases.json`
-- `tests/test_tool_registry.py`
-- `tests/test_tool_permissions.py`
-- `tests/test_tool_contracts.py`
-- `tests/test_tool_grants.py`
-- `tests/test_tool_approval.py`
-- `tests/test_tool_audit.py`
-- `tests/test_tool_broker.py`
 - `tests/test_sandbox.py`
-- `tests/test_tool_runs.py`
-- `tests/test_sandbox_backend.py`
-
-## presentation
-
-- `presentation/apartment.html`
+- `tests/test_tool_contracts.py`
 
 ## project/docs
 
-- `session.files.md`
 - `AGENTS.md`
+- `CHANGELOG.md`
 - `ROADMAP.md`
 - `ROADMAP.v5.md`
-- `astra.roadmap.sprint.md`
-- `docs/COMMANDS.md`
-- `starfur.py`
-- `model-comparison.md`
-
-## scripts
-
-- `scripts/sf_chat.sh`
-
-## configuration
-
-- `config/assistant.json`
+- `session.files.md`

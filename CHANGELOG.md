@@ -1452,3 +1452,10 @@
 - Behavior: an injected `ChatProvider` can be explicitly asked to complete a bounded adventure-turn request; only strict JSON response content proceeds to the separate ordinary-candidate validator.
 - Constraints: construction performs no provider call. The adapter has no session, command, retrieval, prompt-injection, inbox, staging, or event-log access; provider/malformed-output failures provide no partial candidates.
 - Verification: fake-provider tests cover explicit invocation, model/options forwarding, strict-JSON rejection, and invalid-envelope rejection.
+## 2026-09-10 - Align portable sandbox copy-in and bounded output contracts
+
+- Behavior: inert `sandbox.run` proposals and sandbox materialization now share one portable path/tree validator; case and Unicode aliases plus file/directory collisions are rejected consistently across Windows and Linux semantics.
+- Safety: a backend must explicitly affirm availability and policy support before temporary materialization. Materialization and cleanup faults become bounded failures without raw paths or exception text.
+- Output: backend streams have a UTF-8 byte-bounded collector whose truncation marker fits within the cap, while direct result envelopes reject invalid or oversized multibyte text.
+- Constraints: this adds no broker dispatch, native process, VM, host export, guest mount, provider call, or execution enablement.
+- Verification: focused sandbox, tool-contract, backend, supervisor, application, and API tests pass on Windows; WSL smoke is pending.

@@ -128,6 +128,18 @@ class ToolContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "size limit"):
             registry.validate_proposal(ToolProposal.from_mapping(oversized))
 
+        for paths in (("Readme.txt", "README.TXT"), ("src", "src/main.py")):
+            collision = valid_proposal_mapping()
+            collision["arguments"]["files"] = [
+                {"path": path, "content": "safe"} for path in paths
+            ]
+            with self.subTest(paths=paths), self.assertRaisesRegex(ValueError, "unique|collision"):
+                registry.validate_proposal(ToolProposal.from_mapping(collision))
+        unsafe = valid_proposal_mapping()
+        unsafe["arguments"]["files"][0]["path"] = "folder/NUL.txt"
+        with self.assertRaisesRegex(ValueError, "reserved"):
+            registry.validate_proposal(ToolProposal.from_mapping(unsafe))
+
     def test_result_envelope_is_strict_bounded_and_contract_matched(self):
         registry = build_core_tool_contract_registry()
         result = registry.validate_result(ToolResult.from_mapping(valid_result_mapping()))
@@ -145,6 +157,10 @@ class ToolContractTests(unittest.TestCase):
         huge_output["stdout"] = "x" * 8193
         with self.assertRaisesRegex(ValueError, "stdout"):
             ToolResult.from_mapping(huge_output)
+        multibyte_output = valid_result_mapping()
+        multibyte_output["stdout"] = "\U0001f98a" * 3000
+        with self.assertRaisesRegex(ValueError, "UTF-8 size"):
+            ToolResult.from_mapping(multibyte_output)
 
         decoded = decode_tool_result_json(json.dumps(valid_result_mapping()))
         self.assertEqual("TI-test_001", decoded.invocation_id)

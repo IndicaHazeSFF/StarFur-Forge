@@ -13,37 +13,95 @@ from pipeline.tool_broker import ToolBroker, ToolBrokerError, ToolDispatchContex
 from pipeline.tool_contracts import ToolProposal, ToolResult, build_core_tool_contract_registry
 from pipeline.tool_grants import SessionToolGrantController, ToolInvocationIssuer
 from pipeline.tool_runs import ToolRunJournal
+from pipeline.sandbox_supervisor import (
+    SUPERVISOR_SCHEMA_VERSION, SupervisorCancelReceipt, SupervisorCompletion,
+    SupervisorRunStatus,
+)
 
 
-class FakeExecutor:
+class FakeSupervisor:
     available = True
 
-    def __init__(self, *, result_factory=None, error=None):
-        self.result_factory = result_factory
+    def __init__(self, *, completion_factory=None, error=None, cancel_state="requested"):
+        self.completion_factory = completion_factory
         self.error = error
+        self.cancel_state = cancel_state
         self.calls = 0
+        self.cancel_calls = 0
 
-    def execute(self, invocation, proposal):
+    def run(self, request, invocation, proposal, cancellation):
         self.calls += 1
         if self.error is not None:
             raise self.error
-        if self.result_factory is not None:
-            return self.result_factory(invocation)
-        return ToolResult(
+        if self.completion_factory is not None:
+            return self.completion_factory(request, invocation)
+        result = ToolResult(
             1, invocation.invocation_id, invocation.tool_id, invocation.tool_version,
             "completed", 0, "ok", "", None,
         )
+        return SupervisorCompletion.from_request(
+            request, outcome="completed", stop_state="verified_stopped", result=result,
+        )
+
+    def request_cancel(self, request, cancellation):
+        self.cancel_calls += 1
+        return SupervisorCancelReceipt(
+            SUPERVISOR_SCHEMA_VERSION, request.invocation_id,
+            request.worker_generation, self.cancel_state,
+        )
+
+    def query(self, request):
+        return SupervisorRunStatus.from_request(request, state="running")
 
 
-class ExplodingDisabledExecutor:
+class ExplodingDisabledSupervisor:
     available = False
 
     def __init__(self):
         self.calls = 0
 
-    def execute(self, invocation, proposal):
+    def run(self, request, invocation, proposal, cancellation):
         self.calls += 1
-        raise AssertionError("disabled executor was called")
+        raise AssertionError("disabled supervisor was called")
+
+    def request_cancel(self, request, cancellation):
+        raise AssertionError("disabled supervisor cancellation was called")
+
+    def query(self, request):
+        raise AssertionError("disabled supervisor query was called")
+
+
+class SlowSupervisor(FakeSupervisor):
+    def __init__(self, *, cancel_state="requested"):
+        super().__init__(cancel_state=cancel_state)
+        self.started = threading.Event()
+        self.release = threading.Event()
+
+    def run(self, request, invocation, proposal, cancellation):
+        self.calls += 1
+        self.started.set()
+        self.release.wait(timeout=5)
+        if cancellation.requested:
+            return SupervisorCompletion.from_request(
+                request, outcome="cancelled", stop_state="verified_stopped",
+                result=ToolResult(
+                    1, invocation.invocation_id, invocation.tool_id,
+                    invocation.tool_version, "cancelled", None, "", "",
+                    "cancelled",
+                ),
+            )
+        result = ToolResult(
+            1, invocation.invocation_id, invocation.tool_id, invocation.tool_version,
+            "completed", 0, "ok", "", None,
+        )
+        return SupervisorCompletion.from_request(
+            request, outcome="completed", stop_state="verified_stopped", result=result,
+        )
+
+    def request_cancel(self, request, cancellation):
+        receipt = super().request_cancel(request, cancellation)
+        self.release.set()
+        return receipt
 
 
 def proposal(objective="Run safe tests."):
@@ -57,7 +115,11 @@ def proposal(objective="Run safe tests."):
 
 
 class ToolBrokerTests(unittest.TestCase):
-    def make_broker(self, executor=None, run_journal=None, run_journal_owner=None):
+    def make_broker(
+        self, supervisor=None, run_journal=None, run_journal_owner=None,
+        *, clock=lambda: 1000.0,
+        worker_generation_factory=lambda: "TW-broker-worker",
+    ):
         contracts = build_core_tool_contract_registry()
         ids = iter((f"TG-grant_{index}" for index in range(20)))
         approvals = iter((f"TA-approval_{index}" for index in range(20)))
@@ -66,10 +128,12 @@ class ToolBrokerTests(unittest.TestCase):
             ToolInvocationIssuer(contracts, clock=lambda: 1000.0),
             SessionToolGrantController(clock=lambda: 1000.0, id_factory=lambda: next(ids)),
             ToolApprovalController(clock=lambda: 1000.0, id_factory=lambda: next(approvals)),
-            executor=executor,
+            supervisor=supervisor,
             audit=ToolAuditLog(clock=lambda: 1000.0),
             run_journal=run_journal,
             run_journal_owner=run_journal_owner,
+            clock=clock,
+            worker_generation_factory=worker_generation_factory,
         )
         return broker
 
@@ -97,34 +161,34 @@ class ToolBrokerTests(unittest.TestCase):
         broker.grant(request_id)
         broker.approve(request_id)
 
-    def test_default_disabled_executor_fails_without_calling_it(self):
-        executor = ExplodingDisabledExecutor()
-        broker = self.make_broker(executor)
+    def test_default_disabled_supervisor_fails_without_calling_it(self):
+        supervisor = ExplodingDisabledSupervisor()
+        broker = self.make_broker(supervisor)
         self.submit(broker)
         self.authorize(broker)
         result = broker.dispatch("TI-request_1", context=self.context())
 
         self.assertEqual("failed", result.state)
-        self.assertEqual("executor_unavailable", result.reason)
-        self.assertEqual(0, executor.calls)
+        self.assertEqual("supervisor_unavailable", result.reason)
+        self.assertEqual(0, supervisor.calls)
         self.assertIsNone(result.result)
 
     def test_missing_authority_and_stale_context_deny_without_execution(self):
-        executor = FakeExecutor()
-        broker = self.make_broker(executor)
+        supervisor = FakeSupervisor()
+        broker = self.make_broker(supervisor)
         self.submit(broker)
         denied = broker.dispatch("TI-request_1", context=self.context())
         self.assertEqual(("denied", "authorization_missing"), (denied.state, denied.reason))
-        self.assertEqual(0, executor.calls)
+        self.assertEqual(0, supervisor.calls)
 
-        broker = self.make_broker(executor)
+        broker = self.make_broker(supervisor)
         self.submit(broker, request_id="TI-request_2")
         self.authorize(broker, "TI-request_2")
         stale = broker.dispatch(
             "TI-request_2", context=self.context(session_instance_id="session-recreated"),
         )
         self.assertEqual(("denied", "binding_stale"), (stale.state, stale.reason))
-        self.assertEqual(0, executor.calls)
+        self.assertEqual(0, supervisor.calls)
 
     def test_duplicate_submission_is_idempotent_and_conflict_fails(self):
         broker = self.make_broker()
@@ -139,44 +203,44 @@ class ToolBrokerTests(unittest.TestCase):
             )
 
     def test_success_is_once_only_and_public_status_excludes_payload(self):
-        executor = FakeExecutor()
-        broker = self.make_broker(executor)
+        supervisor = FakeSupervisor()
+        broker = self.make_broker(supervisor)
         self.submit(broker)
         self.authorize(broker)
         completed = broker.dispatch("TI-request_1", context=self.context())
         repeated = broker.dispatch("TI-request_1", context=self.context())
 
         self.assertEqual("completed", completed.state)
-        self.assertEqual(1, executor.calls)
+        self.assertEqual(1, supervisor.calls)
         self.assertIs(completed, repeated)
         rendered = repr(completed.public_dict()) + repr(broker.audit.public_dict())
         self.assertNotIn("secret-canary", rendered)
         self.assertNotIn("stdout", repr(completed.public_dict()))
 
-    def test_cancel_and_invalid_or_exploding_executor_fail_closed(self):
-        broker = self.make_broker(FakeExecutor())
+    def test_cancel_and_invalid_or_exploding_supervisor_fail_closed(self):
+        broker = self.make_broker(FakeSupervisor())
         self.submit(broker)
         self.assertEqual("cancelled", broker.cancel("TI-request_1").state)
 
-        malformed = FakeExecutor(result_factory=lambda invocation: object())
+        malformed = FakeSupervisor(completion_factory=lambda request, invocation: object())
         broker = self.make_broker(malformed)
         self.submit(broker, request_id="TI-request_2")
         self.authorize(broker, "TI-request_2")
-        self.assertEqual("result_invalid", broker.dispatch(
+        self.assertEqual("supervisor_outcome_unknown", broker.dispatch(
             "TI-request_2", context=self.context(),
         ).reason)
 
-        exploding = FakeExecutor(error=RuntimeError("secret-token-do-not-leak"))
+        exploding = FakeSupervisor(error=RuntimeError("secret-token-do-not-leak"))
         broker = self.make_broker(exploding)
         self.submit(broker, request_id="TI-request_3")
         self.authorize(broker, "TI-request_3")
         failed = broker.dispatch("TI-request_3", context=self.context())
-        self.assertEqual("executor_failed", failed.reason)
+        self.assertEqual("supervisor_outcome_unknown", failed.reason)
         self.assertNotIn("secret-token", repr(failed.public_dict()) + repr(broker.audit.public_dict()))
 
     def test_queued_request_can_be_cancelled_before_any_effect(self):
-        executor = FakeExecutor()
-        broker = self.make_broker(executor)
+        supervisor = FakeSupervisor()
+        broker = self.make_broker(supervisor)
         self.submit(broker)
         self.authorize(broker)
         queued = broker.queue("TI-request_1", context=self.context())
@@ -185,11 +249,12 @@ class ToolBrokerTests(unittest.TestCase):
         self.assertEqual("cancelled", broker.run_queued(
             "TI-request_1", context=self.context(),
         ).state)
-        self.assertEqual(0, executor.calls)
+        self.assertEqual(0, supervisor.calls)
 
-    def test_concurrent_dispatch_invokes_executor_once(self):
-        executor = FakeExecutor()
-        broker = self.make_broker(executor)
+    def test_concurrent_dispatch_invokes_supervisor_once(self):
+        supervisor = SlowSupervisor()
+        supervisor.release.set()
+        broker = self.make_broker(supervisor)
         self.submit(broker)
         self.authorize(broker)
         barrier = threading.Barrier(5)
@@ -207,8 +272,129 @@ class ToolBrokerTests(unittest.TestCase):
             thread.start()
         for thread in threads:
             thread.join()
-        self.assertEqual(1, executor.calls)
-        self.assertEqual(["completed"] * 5, sorted(states))
+        self.assertEqual(1, supervisor.calls)
+        self.assertEqual("completed", broker.get("TI-request_1").state)
+        self.assertTrue(set(states).issubset({"running", "completed"}))
+
+    def test_launch_rechecks_expiry_and_revocation_after_queue(self):
+        now = [1000.0]
+        supervisor = FakeSupervisor()
+        broker = self.make_broker(supervisor, clock=lambda: now[0])
+        self.submit(broker)
+        self.authorize(broker)
+        queued = broker.queue("TI-request_1", context=self.context())
+        broker._grants.revoke(queued.grant_id)
+
+        denied = broker.run_queued("TI-request_1", context=self.context())
+
+        self.assertEqual(("denied", "authorization_expired"), (denied.state, denied.reason))
+        self.assertEqual(0, supervisor.calls)
+
+        broker = self.make_broker(supervisor, clock=lambda: now[0])
+        self.submit(broker, request_id="TI-request_2")
+        self.authorize(broker, "TI-request_2")
+        broker.queue("TI-request_2", context=self.context())
+        now[0] = 1201.0
+        expired = broker.run_queued("TI-request_2", context=self.context())
+        self.assertEqual(("denied", "authorization_expired"), (expired.state, expired.reason))
+        self.assertEqual(0, supervisor.calls)
+
+    def test_running_cancel_reaches_supervisor_without_waiting_for_run_lock(self):
+        supervisor = SlowSupervisor()
+        broker = self.make_broker(supervisor)
+        self.submit(broker)
+        self.authorize(broker)
+        worker = threading.Thread(
+            target=lambda: broker.dispatch("TI-request_1", context=self.context()),
+        )
+        worker.start()
+        self.assertTrue(supervisor.started.wait(timeout=1))
+
+        requested = broker.cancel("TI-request_1")
+        worker.join(timeout=2)
+
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(1, supervisor.cancel_calls)
+        self.assertIn(requested.state, {"running", "cancelled"})
+        self.assertEqual("cancelled", broker.get("TI-request_1").state)
+        self.assertEqual(1, supervisor.calls)
+
+    def test_verified_timeout_is_terminal_but_unverified_or_mismatched_is_unknown(self):
+        def timeout(request, invocation):
+            return SupervisorCompletion.from_request(
+                request, outcome="timed_out", stop_state="verified_stopped",
+                result=ToolResult(
+                    1, invocation.invocation_id, invocation.tool_id,
+                    invocation.tool_version, "timed_out", None, "", "",
+                    "timed_out",
+                ),
+            )
+
+        broker = self.make_broker(FakeSupervisor(completion_factory=timeout))
+        self.submit(broker)
+        self.authorize(broker)
+        self.assertEqual("timed_out", broker.dispatch(
+            "TI-request_1", context=self.context(),
+        ).state)
+
+        def mismatched(request, invocation):
+            result = ToolResult(
+                1, invocation.invocation_id, invocation.tool_id,
+                invocation.tool_version, "completed", 0, "", "", None,
+            )
+            return SupervisorCompletion(
+                request.schema_version, request.invocation_id, request.tool_id,
+                request.tool_version, request.binding_fingerprint,
+                request.policy_revision, "TW-wrong-worker", "completed",
+                "verified_stopped", result,
+            )
+
+        broker = self.make_broker(FakeSupervisor(completion_factory=mismatched))
+        self.submit(broker, request_id="TI-request_2")
+        self.authorize(broker, "TI-request_2")
+        unknown = broker.dispatch("TI-request_2", context=self.context())
+        self.assertEqual(("outcome_unknown", "supervisor_outcome_unknown"), (
+            unknown.state, unknown.reason,
+        ))
+
+    def test_worker_generation_reuse_denies_second_launch(self):
+        supervisor = FakeSupervisor()
+        broker = self.make_broker(
+            supervisor, worker_generation_factory=lambda: "TW-reused-worker",
+        )
+        self.submit(broker)
+        self.authorize(broker)
+        self.assertEqual("completed", broker.dispatch(
+            "TI-request_1", context=self.context(),
+        ).state)
+
+        self.submit(broker, request_id="TI-request_2")
+        self.authorize(broker, "TI-request_2")
+        rejected = broker.dispatch("TI-request_2", context=self.context())
+
+        self.assertEqual(
+            ("failed", "supervisor_binding_invalid"), (rejected.state, rejected.reason),
+        )
+        self.assertEqual(1, supervisor.calls)
+
+    def test_unknown_cancel_receipt_fences_running_work(self):
+        supervisor = SlowSupervisor(cancel_state="unknown")
+        broker = self.make_broker(supervisor)
+        self.submit(broker)
+        self.authorize(broker)
+        worker = threading.Thread(
+            target=lambda: broker.dispatch("TI-request_1", context=self.context()),
+        )
+        worker.start()
+        self.assertTrue(supervisor.started.wait(timeout=1))
+
+        unknown = broker.cancel("TI-request_1")
+        worker.join(timeout=2)
+
+        self.assertEqual(("outcome_unknown", "supervisor_outcome_unknown"), (
+            unknown.state, unknown.reason,
+        ))
+        self.assertEqual("outcome_unknown", broker.get("TI-request_1").state)
 
     def test_optional_durable_journal_records_outcome_and_never_restores_authority(self):
         with tempfile.TemporaryDirectory() as root:
@@ -218,9 +404,9 @@ class ToolBrokerTests(unittest.TestCase):
             )
             owner = journal.acquire_owner("core.broker-test")
             try:
-                executor = FakeExecutor()
+                supervisor = FakeSupervisor()
                 broker = self.make_broker(
-                    executor, run_journal=journal, run_journal_owner=owner,
+                    supervisor, run_journal=journal, run_journal_owner=owner,
                 )
                 self.submit(broker)
                 self.authorize(broker)
@@ -232,7 +418,7 @@ class ToolBrokerTests(unittest.TestCase):
                 # A new broker only reconciles durable records; it does not recreate
                 # a dispatchable request, grant, or approval.
                 restarted = self.make_broker(
-                    FakeExecutor(), run_journal=journal, run_journal_owner=owner,
+                    FakeSupervisor(), run_journal=journal, run_journal_owner=owner,
                 )
                 self.assertEqual((), restarted.records())
             finally:
@@ -248,12 +434,12 @@ class ToolBrokerTests(unittest.TestCase):
             owner = journal.acquire_owner("core.broker-test")
             try:
                 first = self.make_broker(
-                    FakeExecutor(), run_journal=journal, run_journal_owner=owner,
+                    FakeSupervisor(), run_journal=journal, run_journal_owner=owner,
                 )
                 self.submit(first)
 
                 second = self.make_broker(
-                    FakeExecutor(), run_journal=journal, run_journal_owner=owner,
+                    FakeSupervisor(), run_journal=journal, run_journal_owner=owner,
                 )
                 self.assertEqual(("intent",), tuple(item.kind for item in journal.records()))
                 with self.assertRaisesRegex(ToolBrokerError, "cannot be journaled"):
@@ -263,6 +449,35 @@ class ToolBrokerTests(unittest.TestCase):
                 self.assertEqual("completed", first.dispatch(
                     "TI-request_1", context=self.context(),
                 ).state)
+            finally:
+                if owner.active:
+                    journal.release_owner(owner)
+
+    def test_post_launch_failure_is_durably_unknown_and_never_retried(self):
+        with tempfile.TemporaryDirectory() as root:
+            journal = ToolRunJournal(
+                root, clock=lambda: 1000.0,
+                owner_epoch_factory=lambda: "TO-unknown-owner",
+            )
+            owner = journal.acquire_owner("core.broker-test")
+            try:
+                supervisor = FakeSupervisor(error=RuntimeError("lost worker"))
+                broker = self.make_broker(
+                    supervisor, run_journal=journal, run_journal_owner=owner,
+                )
+                self.submit(broker)
+                self.authorize(broker)
+
+                unknown = broker.dispatch("TI-request_1", context=self.context())
+                repeated = broker.dispatch("TI-request_1", context=self.context())
+
+                self.assertEqual("outcome_unknown", unknown.state)
+                self.assertIs(unknown, repeated)
+                self.assertEqual(1, supervisor.calls)
+                self.assertEqual(
+                    ("submitted", "supervisor_outcome_unknown"),
+                    tuple(item.reason for item in journal.records()),
+                )
             finally:
                 if owner.active:
                     journal.release_owner(owner)

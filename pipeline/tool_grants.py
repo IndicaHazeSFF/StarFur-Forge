@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 import hashlib
 import json
+import hashlib
+import json
 import re
 import secrets
 from threading import RLock
@@ -127,6 +129,16 @@ class ToolInvocation:
             self.tool_id, self.tool_version, self.permission_scope, self.access_mode,
             self.operation_digest, self.resource_refs, self.policy_revision,
         )
+
+
+def tool_invocation_fingerprint(invocation: ToolInvocation) -> str:
+    """Return an opaque stable digest of an exact Core-issued binding."""
+    if not isinstance(invocation, ToolInvocation):
+        raise TypeError("tool invocation fingerprint input is invalid")
+    encoded = json.dumps(
+        invocation.binding_tuple(), ensure_ascii=False, separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 class ToolInvocationIssuer:
@@ -320,5 +332,5 @@ class SessionToolGrantController:
 
 __all__ = [
     "SessionToolGrant", "SessionToolGrantController", "ToolGrantError", "ToolInvocation",
-    "ToolInvocationIssuer",
+    "ToolInvocationIssuer", "tool_invocation_fingerprint",
 ]

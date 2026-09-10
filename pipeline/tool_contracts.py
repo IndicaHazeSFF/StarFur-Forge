@@ -10,12 +10,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
-from pathlib import PurePosixPath
 import re
 from types import MappingProxyType
 from typing import Callable, Iterable, Mapping
 
 from .tool_registry import MAX_REGISTERED_TOOLS, TOOL_ID_RE, ToolDescriptor, build_core_tool_registry
+from .sandbox_paths import validate_portable_sandbox_path, validate_portable_sandbox_tree
 
 
 TOOL_PROPOSAL_SCHEMA_VERSION = 1
@@ -31,6 +31,7 @@ MAX_SANDBOX_PATH_CHARACTERS = 240
 MAX_SANDBOX_TASK_KIND_CHARACTERS = 80
 MAX_SANDBOX_OBJECTIVE_CHARACTERS = 1200
 MAX_TOOL_RESULT_TEXT_CHARACTERS = 8192
+MAX_TOOL_RESULT_TEXT_BYTES = 8192
 MAX_TOOL_RESULT_ARTIFACTS = 16
 
 TOOL_RETRY_CLASSES = frozenset({"never", "proposal_only"})
@@ -197,6 +198,12 @@ class ToolResult:
         for label, text in (("stdout", self.stdout), ("stderr", self.stderr)):
             if not isinstance(text, str) or len(text) > MAX_TOOL_RESULT_TEXT_CHARACTERS:
                 raise ValueError(f"tool result {label} is invalid")
+            try:
+                text_size = len(text.encode("utf-8"))
+            except UnicodeEncodeError as error:
+                raise ValueError(f"tool result {label} is not valid UTF-8 text") from error
+            if text_size > MAX_TOOL_RESULT_TEXT_BYTES:
+                raise ValueError(f"tool result {label} UTF-8 size limit exceeded")
         if self.error_category is not None and self.error_category not in TOOL_RESULT_ERROR_CATEGORIES:
             raise ValueError("tool result error category is invalid")
         refs = tuple(self.artifact_refs)
@@ -394,7 +401,7 @@ def validate_sandbox_run_arguments(arguments: Mapping[str, object]) -> Mapping[s
     if not isinstance(files, (list, tuple)) or not 1 <= len(files) <= MAX_SANDBOX_ARGUMENT_FILES:
         raise ValueError("sandbox.run file count is invalid")
     validated_files: list[Mapping[str, object]] = []
-    seen_paths: set[str] = set()
+    validated_paths: list[str] = []
     total_bytes = 0
     for item in files:
         if not isinstance(item, Mapping):
@@ -402,18 +409,7 @@ def validate_sandbox_run_arguments(arguments: Mapping[str, object]) -> Mapping[s
         _require_exact_fields(item, frozenset({"path", "content"}), "sandbox.run file")
         path = item["path"]
         content = item["content"]
-        if (
-            not isinstance(path, str)
-            or not path
-            or len(path) > MAX_SANDBOX_PATH_CHARACTERS
-            or "\\" in path
-        ):
-            raise ValueError("sandbox.run file path is invalid")
-        parsed = PurePosixPath(path)
-        if parsed.is_absolute() or any(part in {"", ".", ".."} for part in parsed.parts):
-            raise ValueError("sandbox.run file path is invalid")
-        if path in seen_paths:
-            raise ValueError("sandbox.run file paths must be unique")
+        path = validate_portable_sandbox_path(path, max_characters=MAX_SANDBOX_PATH_CHARACTERS)
         if not isinstance(content, str):
             raise TypeError("sandbox.run file content must be text")
         try:
@@ -425,8 +421,9 @@ def validate_sandbox_run_arguments(arguments: Mapping[str, object]) -> Mapping[s
         total_bytes += content_bytes
         if total_bytes > MAX_SANDBOX_INLINE_TOTAL_BYTES:
             raise ValueError("sandbox.run inline input size limit exceeded")
-        seen_paths.add(path)
+        validated_paths.append(path)
         validated_files.append({"path": path, "content": content})
+    validate_portable_sandbox_tree(validated_paths)
     return MappingProxyType({
         "task_kind": task_kind,
         "objective": objective,
@@ -470,12 +467,14 @@ def build_core_tool_contract_registry() -> ToolContractRegistry:
             "max_inline_total_bytes": MAX_SANDBOX_INLINE_TOTAL_BYTES,
             "max_objective_characters": MAX_SANDBOX_OBJECTIVE_CHARACTERS,
             "max_result_text_characters": MAX_TOOL_RESULT_TEXT_CHARACTERS,
+            "max_result_text_bytes": MAX_TOOL_RESULT_TEXT_BYTES,
         },
     ),))
 
 
 __all__ = [
     "MAX_TOOL_JSON_DEPTH", "MAX_TOOL_PROPOSAL_BYTES", "MAX_TOOL_RESULT_BYTES",
+    "MAX_TOOL_RESULT_TEXT_BYTES",
     "TOOL_PROPOSAL_SCHEMA_VERSION", "TOOL_RESULT_SCHEMA_VERSION", "ToolContract",
     "ToolContractRegistry", "ToolProposal", "ToolResult", "build_core_tool_contract_registry",
     "decode_tool_proposal_json", "decode_tool_result_json", "validate_sandbox_run_arguments",

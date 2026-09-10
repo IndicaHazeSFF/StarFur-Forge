@@ -1,8 +1,8 @@
-"""Provider-free tool broker with a disabled-by-default executor boundary.
+"""Provider-free tool broker with a disabled-by-default supervisor boundary.
 
 This S3 broker joins validation, exact grants, and one-use approvals without
-exposing commands or providers.  The Core factory uses ``DisabledToolExecutor``
-and therefore cannot execute ``sandbox.run``.  Injected executors are test-only
+exposing commands or providers.  The Core factory uses ``DisabledToolSupervisor``
+and therefore cannot execute ``sandbox.run``.  Injected supervisors are test-only
 until a later reviewed isolation backend is implemented.
 """
 
@@ -10,7 +10,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from threading import RLock
-from typing import Protocol
+import time
+from typing import Callable
 
 from .tool_approval import ToolApprovalController, ToolApprovalError
 from .tool_audit import TOOL_AUDIT_REASONS, TOOL_LIFECYCLE_STATES, ToolAuditLog
@@ -20,6 +21,11 @@ from .tool_grants import (
 )
 from .tool_permissions import evaluate_tool_permission
 from .tool_runs import ToolRunJournal, ToolRunJournalError, ToolRunOwnerLease
+from .sandbox_supervisor import (
+    DisabledToolSupervisor, SupervisorCancellation, SupervisorCancelReceipt,
+    SupervisorCompletion, SupervisorLaunchRequest, ToolExecutionSupervisor,
+    new_worker_generation,
+)
 
 
 MAX_TOOL_BROKER_REQUESTS = 128
@@ -58,22 +64,6 @@ class ToolDispatchContext:
             invocation.adventure_id,
             invocation.policy_revision,
         )
-
-
-class ToolExecutor(Protocol):
-    @property
-    def available(self) -> bool: ...
-
-    def execute(self, invocation: ToolInvocation, proposal: ToolProposal) -> ToolResult: ...
-
-
-class DisabledToolExecutor:
-    """Default executor advertises no capability and must never be called."""
-
-    available = False
-
-    def execute(self, invocation: ToolInvocation, proposal: ToolProposal) -> ToolResult:
-        raise RuntimeError("tool execution is disabled")
 
 
 @dataclass(frozen=True)
@@ -115,13 +105,29 @@ class ToolBrokerRecord:
         }
 
 
+@dataclass(frozen=True)
+class _LaunchAuthorization:
+    grant_id: str
+    grant_revocation_generation: int
+    authorization_deadline: float
+
+
+@dataclass(frozen=True)
+class _ActiveSupervision:
+    request: SupervisorLaunchRequest
+    cancellation: SupervisorCancellation
+
+
 class ToolBroker:
     def __init__(
         self, contracts: ToolContractRegistry, issuer: ToolInvocationIssuer,
         grants: SessionToolGrantController, approvals: ToolApprovalController,
-        *, executor: ToolExecutor | None = None, audit: ToolAuditLog | None = None,
+        *, supervisor: ToolExecutionSupervisor | None = None,
+        audit: ToolAuditLog | None = None,
         run_journal: ToolRunJournal | None = None,
         run_journal_owner: ToolRunOwnerLease | None = None,
+        clock: Callable[[], float] = time.time,
+        worker_generation_factory: Callable[[], str] = new_worker_generation,
         maximum_requests: int = MAX_TOOL_BROKER_REQUESTS,
     ) -> None:
         if not isinstance(contracts, ToolContractRegistry):
@@ -140,19 +146,31 @@ class ToolBroker:
             raise TypeError("tool broker run journal owner lease is invalid")
         if isinstance(maximum_requests, bool) or not isinstance(maximum_requests, int) or not 1 <= maximum_requests <= 1024:
             raise ValueError("tool broker request limit is invalid")
-        selected_executor = executor or DisabledToolExecutor()
-        if not hasattr(selected_executor, "available") or not callable(getattr(selected_executor, "execute", None)):
-            raise TypeError("tool broker executor is invalid")
+        selected_supervisor = supervisor or DisabledToolSupervisor()
+        if (
+            not isinstance(getattr(selected_supervisor, "available", None), bool)
+            or not callable(getattr(selected_supervisor, "run", None))
+            or not callable(getattr(selected_supervisor, "request_cancel", None))
+            or not callable(getattr(selected_supervisor, "query", None))
+        ):
+            raise TypeError("tool broker supervisor is invalid")
+        if not callable(clock) or not callable(worker_generation_factory):
+            raise TypeError("tool broker lifecycle dependency is invalid")
         self._contracts = contracts
         self._issuer = issuer
         self._grants = grants
         self._approvals = approvals
-        self._executor = selected_executor
+        self._supervisor = selected_supervisor
         self._audit = audit or ToolAuditLog()
         self._run_journal = run_journal
         self._run_journal_owner = run_journal_owner
         self._maximum_requests = maximum_requests
+        self._clock = clock
+        self._worker_generation_factory = worker_generation_factory
         self._records: dict[str, ToolBrokerRecord] = {}
+        self._launch_authorizations: dict[str, _LaunchAuthorization] = {}
+        self._active_supervision: dict[str, _ActiveSupervision] = {}
+        self._used_worker_generations: set[str] = set()
         self._lock = RLock()
         if self._run_journal is not None:
             # The lifetime owner lease prevents another live process from being
@@ -218,11 +236,17 @@ class ToolBroker:
         if not isinstance(context, ToolDispatchContext):
             raise TypeError("tool dispatch context is invalid")
         changed = 0
+        running: list[str] = []
         with self._lock:
             for request_id, record in tuple(self._records.items()):
                 if record.state not in TERMINAL_TOOL_STATES and not context.matches(record.invocation):
-                    self._replace_terminal(record, "denied", "binding_stale")
+                    if record.state == "running":
+                        running.append(request_id)
+                    else:
+                        self._replace_terminal(record, "denied", "binding_stale")
                     changed += 1
+        for request_id in running:
+            self.cancel(request_id)
         return changed
 
     def grant(self, request_id: str, *, lifetime_seconds: float = 300) -> ToolBrokerRecord:
@@ -255,18 +279,54 @@ class ToolBroker:
             return updated
 
     def deny(self, request_id: str) -> ToolBrokerRecord:
+        with self._lock:
+            record = self._require_record(request_id)
+            running = record.state == "running"
+        if running:
+            return self.cancel(request_id)
         return self._terminate(request_id, state="denied", reason="denied_by_controller")
 
     def cancel(self, request_id: str) -> ToolBrokerRecord:
-        return self._terminate(request_id, state="cancelled", reason="cancelled")
+        with self._lock:
+            record = self._require_record(request_id)
+            if record.state in TERMINAL_TOOL_STATES:
+                return record
+            active = self._active_supervision.get(request_id)
+            if record.state != "running" or active is None:
+                return self._terminate(request_id, state="cancelled", reason="cancelled")
+            active.cancellation.request()
+            if record.grant_id is not None:
+                self._grants.revoke(record.grant_id)
+            requested = replace(record, reason="cancel_requested")
+            self._records[request_id] = requested
+            self._audit.append(
+                request_id, record.invocation.tool_id, "running", "cancel_requested",
+            )
+
+        try:
+            receipt = self._supervisor.request_cancel(active.request, active.cancellation)
+        except Exception:
+            return self._finish_unknown_if_running(request_id)
+        if not isinstance(receipt, SupervisorCancelReceipt) or not receipt.matches(active.request):
+            return self._finish_unknown_if_running(request_id)
+        if receipt.state == "unknown":
+            return self._finish_unknown_if_running(request_id)
+        if receipt.state == "verified_stopped":
+            with self._lock:
+                current = self._require_record(request_id)
+                if current.state in TERMINAL_TOOL_STATES:
+                    return current
+                self._active_supervision.pop(request_id, None)
+                return self._replace_terminal(current, "cancelled", "cancelled")
+        with self._lock:
+            return self._require_record(request_id)
 
     def dispatch(self, request_id: str, *, context: ToolDispatchContext) -> ToolBrokerRecord:
         """Authorize, queue, and attempt one execution through the injected adapter."""
-        with self._lock:
-            queued = self.queue(request_id, context=context)
-            if queued.state != "queued":
-                return queued
-            return self.run_queued(request_id, context=context)
+        queued = self.queue(request_id, context=context)
+        if queued.state != "queued":
+            return queued
+        return self.run_queued(request_id, context=context)
 
     def queue(self, request_id: str, *, context: ToolDispatchContext) -> ToolBrokerRecord:
         """Atomically consume exact authority and leave a cancellable queued request."""
@@ -275,6 +335,8 @@ class ToolBroker:
         with self._lock:
             record = self._require_record(request_id)
             if record.state in TERMINAL_TOOL_STATES:
+                return record
+            if record.state in {"queued", "running"}:
                 return record
             if not context.matches(record.invocation):
                 return self._replace_terminal(record, "denied", "binding_stale")
@@ -298,43 +360,126 @@ class ToolBroker:
                 return self._replace_terminal(record, "denied", "permission_denied")
             queued = replace(record, state="queued", reason="dispatch_queued")
             self._records[request_id] = queued
+            approval = self._approvals.get(record.approval_id)
+            if approval is None:
+                return self._replace_terminal(queued, "denied", "authorization_missing")
+            self._launch_authorizations[request_id] = _LaunchAuthorization(
+                grant.grant_id,
+                grant.revocation_generation,
+                min(record.invocation.expires_at, grant.expires_at, approval.expires_at),
+            )
             self._audit.append(request_id, record.invocation.tool_id, "queued", "dispatch_queued")
             return queued
 
     def run_queued(self, request_id: str, *, context: ToolDispatchContext) -> ToolBrokerRecord:
-        """Attempt one queued request; Core's default executor remains unavailable."""
+        """Run one queued request without holding the broker lock through the effect."""
         if not isinstance(context, ToolDispatchContext):
             raise TypeError("tool dispatch context is invalid")
         with self._lock:
             queued = self._require_record(request_id)
             if queued.state in TERMINAL_TOOL_STATES:
                 return queued
+            if queued.state == "running":
+                return queued
             if queued.state != "queued":
                 raise ToolBrokerError("tool request is not queued")
             if not context.matches(queued.invocation):
                 return self._replace_terminal(queued, "denied", "binding_stale")
-            if not self._executor.available:
-                return self._replace_terminal(queued, "failed", "executor_unavailable")
+            launch_time = self._clock()
+            if not self._launch_is_authorized(queued, now=launch_time):
+                return self._replace_terminal(queued, "denied", "authorization_expired")
+            if not self._supervisor.available:
+                return self._replace_terminal(queued, "failed", "supervisor_unavailable")
+            authorization = self._launch_authorizations[request_id]
+            try:
+                worker_generation = self._worker_generation_factory()
+                if worker_generation in self._used_worker_generations:
+                    raise ValueError("worker generation was reused")
+                request = SupervisorLaunchRequest.from_invocation(
+                    queued.invocation,
+                    worker_generation=worker_generation,
+                    issued_at=launch_time,
+                    authorization_deadline=authorization.authorization_deadline,
+                )
+            except (TypeError, ValueError):
+                return self._replace_terminal(queued, "failed", "supervisor_binding_invalid")
+            self._used_worker_generations.add(request.worker_generation)
+            cancellation = SupervisorCancellation()
             running = replace(queued, state="running", reason="dispatch_started")
             self._records[request_id] = running
+            self._active_supervision[request_id] = _ActiveSupervision(request, cancellation)
             self._audit.append(request_id, queued.invocation.tool_id, "running", "dispatch_started")
+
+        try:
+            completion = self._supervisor.run(
+                request, queued.invocation, queued.proposal, cancellation,
+            )
+        except Exception:
+            return self._finish_unknown_if_running(request_id)
+
+        with self._lock:
+            current = self._require_record(request_id)
+            if current.state in TERMINAL_TOOL_STATES:
+                return current
+            self._active_supervision.pop(request_id, None)
             try:
-                result = self._executor.execute(queued.invocation, queued.proposal)
-            except Exception:
-                return self._replace_terminal(running, "failed", "executor_failed")
-            try:
-                if not isinstance(result, ToolResult) or result.invocation_id != queued.invocation.invocation_id:
-                    raise ValueError("invalid result")
-                result = self._contracts.validate_result(result)
+                if not isinstance(completion, SupervisorCompletion) or not completion.matches(request):
+                    raise ValueError("invalid supervisor completion")
+                result = completion.result
+                if result is not None:
+                    if (
+                        result.invocation_id != queued.invocation.invocation_id
+                        or result.tool_id != queued.invocation.tool_id
+                        or result.tool_version != queued.invocation.tool_version
+                    ):
+                        raise ValueError("invalid result binding")
+                    contract = self._contracts.get(
+                        queued.invocation.tool_id, queued.invocation.tool_version,
+                    )
+                    if contract is None:
+                        raise ValueError("result contract unavailable")
+                    result = contract.validate_result(result)
             except (TypeError, ValueError):
-                return self._replace_terminal(running, "failed", "result_invalid")
-            final_state = result.outcome
-            if final_state not in TERMINAL_TOOL_STATES:
-                return self._replace_terminal(running, "failed", "result_invalid")
+                return self._replace_terminal(
+                    current, "outcome_unknown", "supervisor_outcome_unknown",
+                )
+            if completion.outcome == "outcome_unknown":
+                return self._replace_terminal(
+                    current, "outcome_unknown", "supervisor_outcome_unknown",
+                )
             return self._replace_terminal(
-                running, final_state,
-                "completed" if final_state == "completed" else "executor_failed",
+                current,
+                completion.outcome,
+                {
+                    "completed": "completed",
+                    "cancelled": "cancelled",
+                    "timed_out": "timed_out",
+                    "failed": "supervisor_failed",
+                }[completion.outcome],
                 result=result,
+            )
+
+    def _launch_is_authorized(self, record: ToolBrokerRecord, *, now: float) -> bool:
+        authorization = self._launch_authorizations.get(record.invocation.invocation_id)
+        if authorization is None or now >= authorization.authorization_deadline:
+            return False
+        grant = self._grants.get(authorization.grant_id)
+        return bool(
+            grant is not None
+            and not grant.revoked
+            and grant.invocation_id == record.invocation.invocation_id
+            and grant.binding == record.invocation.binding_tuple()
+            and grant.revocation_generation == authorization.grant_revocation_generation
+        )
+
+    def _finish_unknown_if_running(self, request_id: str) -> ToolBrokerRecord:
+        with self._lock:
+            record = self._require_record(request_id)
+            if record.state in TERMINAL_TOOL_STATES:
+                return record
+            self._active_supervision.pop(request_id, None)
+            return self._replace_terminal(
+                record, "outcome_unknown", "supervisor_outcome_unknown",
             )
 
     def _require_record(self, request_id: object) -> ToolBrokerRecord:
@@ -379,7 +524,8 @@ class ToolBroker:
         return {
             "completed": "completed", "failed": "failed", "denied": "denied",
             "cancelled": "cancelled", "timed_out": "timed_out",
-        }.get(state, "restart_reconciliation")
+            "outcome_unknown": "supervisor_outcome_unknown",
+        }.get(state, "supervisor_outcome_unknown")
 
     def _terminate(self, request_id: str, *, state: str, reason: str) -> ToolBrokerRecord:
         with self._lock:
@@ -394,6 +540,5 @@ class ToolBroker:
 
 
 __all__ = [
-    "DisabledToolExecutor", "ToolBroker", "ToolBrokerError", "ToolBrokerRecord",
-    "ToolDispatchContext", "ToolExecutor",
+    "ToolBroker", "ToolBrokerError", "ToolBrokerRecord", "ToolDispatchContext",
 ]

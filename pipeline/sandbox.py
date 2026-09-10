@@ -17,6 +17,7 @@ import time
 from typing import Protocol
 
 from pipeline.persona_state import PERSONA_ID_RE
+from pipeline.sandbox_paths import validate_portable_sandbox_path, validate_portable_sandbox_tree
 
 
 MAX_SANDBOX_FILES = 32
@@ -29,6 +30,7 @@ MAX_SANDBOX_OUTPUT_BYTES = 8_000
 MAX_SANDBOX_TIMEOUT_SECONDS = 600.0
 SANDBOX_STATUSES = ("completed", "failed", "timed_out", "denied")
 _RUN_ID_RE = re.compile(r"^SB-[a-z0-9][a-z0-9_-]{0,63}$")
+_OUTPUT_TRUNCATION_MARKER = b"\n[output truncated]"
 
 
 def _bounded_text(name: str, value: str, *, limit: int, allow_empty: bool = False) -> str:
@@ -51,20 +53,7 @@ def _persona_id(value: str) -> str:
 
 
 def _relative_path(value: str) -> str:
-    raw = _bounded_text("file path", value, limit=240)
-    path = PurePosixPath(raw)
-    if path.is_absolute() or raw != path.as_posix() or any(part in ("", ".", "..") for part in path.parts):
-        raise ValueError("file path must be a non-empty relative path without traversal.")
-    if "\\" in raw or ":" in raw or any(char in raw for char in '*?"<>|'):
-        raise ValueError("file path must use POSIX separators.")
-    reserved = {"con", "prn", "aux", "nul"}
-    for part in path.parts:
-        stem = part.split(".", 1)[0].casefold()
-        if stem in reserved or (len(stem) == 4 and stem[:3] in {"com", "lpt"} and stem[3].isdigit()):
-            raise ValueError("file path uses a reserved Windows name.")
-        if part.endswith((".", " ")):
-            raise ValueError("file path has a Windows-unsafe trailing character.")
-    return path.as_posix()
+    return validate_portable_sandbox_path(value)
 
 
 @dataclass(frozen=True)
@@ -139,8 +128,7 @@ class SandboxRequest:
             raise ValueError("files must not be empty.")
         if not all(isinstance(item, SandboxFile) for item in files):
             raise TypeError("files must contain SandboxFile values.")
-        if len({item.path for item in files}) != len(files):
-            raise ValueError("files must not contain duplicate paths.")
+        validate_portable_sandbox_tree(item.path for item in files)
         object.__setattr__(self, "files", tuple(sorted(files, key=lambda item: item.path)))
 
 
@@ -159,8 +147,17 @@ class SandboxBackendResult:
         if status not in SANDBOX_STATUSES:
             raise ValueError(f"status must be one of {SANDBOX_STATUSES}.")
         object.__setattr__(self, "status", status)
-        object.__setattr__(self, "stdout", _bounded_text("stdout", self.stdout, limit=MAX_SANDBOX_OUTPUT_CHARACTERS, allow_empty=True))
-        object.__setattr__(self, "stderr", _bounded_text("stderr", self.stderr, limit=MAX_SANDBOX_OUTPUT_CHARACTERS, allow_empty=True))
+        for name in ("stdout", "stderr"):
+            value = _bounded_text(
+                name, getattr(self, name), limit=MAX_SANDBOX_OUTPUT_CHARACTERS, allow_empty=True,
+            )
+            try:
+                size = len(value.encode("utf-8"))
+            except UnicodeEncodeError as error:
+                raise ValueError(f"{name} is not valid UTF-8 text.") from error
+            if size > MAX_SANDBOX_OUTPUT_BYTES:
+                raise ValueError(f"{name} must be at most {MAX_SANDBOX_OUTPUT_BYTES} UTF-8 bytes.")
+            object.__setattr__(self, name, value)
         object.__setattr__(self, "detail", _bounded_text("detail", self.detail, limit=800, allow_empty=True))
         if self.exit_code is not None and (isinstance(self.exit_code, bool) or not isinstance(self.exit_code, int)):
             raise TypeError("exit_code must be an integer or None.")
@@ -198,12 +195,66 @@ class SandboxReport:
         }
 
 
+class SandboxOutputCollector:
+    """Byte-bounded UTF-8 receiver for backend output chunks.
+
+    A platform adapter should feed bounded transport chunks here as they
+    arrive. The collector retains at most its configured byte ceiling,
+    including the truncation marker, and never interprets output framing.
+    """
+
+    def __init__(self, max_bytes: int):
+        if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes < 1:
+            raise ValueError("sandbox output byte limit must be a positive integer")
+        self._max_bytes = min(max_bytes, MAX_SANDBOX_OUTPUT_BYTES)
+        self._buffer = bytearray()
+        self._truncated = False
+
+    @property
+    def truncated(self) -> bool:
+        return self._truncated
+
+    def write(self, chunk: str) -> None:
+        if not isinstance(chunk, str):
+            raise TypeError("sandbox output chunks must be text")
+        try:
+            encoded = chunk.encode("utf-8")
+        except UnicodeEncodeError as error:
+            raise ValueError("sandbox output chunk is not valid UTF-8 text") from error
+        if self._truncated:
+            return
+        if len(self._buffer) + len(encoded) <= self._max_bytes:
+            self._buffer.extend(encoded)
+            return
+        self._truncated = True
+        content_limit = max(0, self._max_bytes - len(_OUTPUT_TRUNCATION_MARKER))
+        combined = bytes(self._buffer) + encoded[:max(0, content_limit - len(self._buffer))]
+        clipped = combined[:content_limit].decode("utf-8", errors="ignore").encode("utf-8")
+        marker = _OUTPUT_TRUNCATION_MARKER[:self._max_bytes - len(clipped)]
+        self._buffer = bytearray(clipped + marker)
+
+    def text(self) -> str:
+        return bytes(self._buffer).decode("utf-8")
+
+
 class SandboxBackend(Protocol):
     """Future isolated execution adapter; it must enforce policy independently."""
 
     name: str
+    available: bool
 
-    def run(self, request: SandboxRequest, workspace: Path, policy: SandboxPolicy) -> SandboxBackendResult:
+    def supports_policy(self, policy: SandboxPolicy) -> bool:
+        ...
+
+    def run(
+        self,
+        request: SandboxRequest,
+        workspace: Path,
+        policy: SandboxPolicy,
+        *,
+        stdout: SandboxOutputCollector,
+        stderr: SandboxOutputCollector,
+    ) -> SandboxBackendResult:
         ...
 
 
@@ -213,7 +264,18 @@ class DisabledSandboxBackend:
     name = "disabled"
     available = False
 
-    def run(self, request: SandboxRequest, workspace: Path, policy: SandboxPolicy) -> SandboxBackendResult:
+    def supports_policy(self, policy: SandboxPolicy) -> bool:
+        return False
+
+    def run(
+        self,
+        request: SandboxRequest,
+        workspace: Path,
+        policy: SandboxPolicy,
+        *,
+        stdout: SandboxOutputCollector,
+        stderr: SandboxOutputCollector,
+    ) -> SandboxBackendResult:
         return SandboxBackendResult(
             "denied",
             detail="No isolated sandbox backend is configured; execution was not attempted.",
@@ -241,7 +303,10 @@ class SandboxService:
             raise ValueError("request exceeds the sandbox input-size limit.")
 
         started = time.perf_counter()
-        backend_available = getattr(self.backend, "available", True)
+        output_limit = min(policy.max_output_characters, MAX_SANDBOX_OUTPUT_BYTES)
+        stdout = SandboxOutputCollector(output_limit)
+        stderr = SandboxOutputCollector(output_limit)
+        backend_available = getattr(self.backend, "available", None)
         supports_policy = getattr(self.backend, "supports_policy", None)
         if not isinstance(backend_available, bool) or not backend_available:
             result = SandboxBackendResult(
@@ -249,7 +314,11 @@ class SandboxService:
                 detail="No isolated sandbox backend is configured; execution was not attempted.",
             )
             return self._report(request, result, started, file_count, total_characters, policy)
-        if callable(supports_policy) and not supports_policy(policy):
+        try:
+            policy_supported = supports_policy(policy) if callable(supports_policy) else None
+        except Exception:
+            policy_supported = None
+        if policy_supported is not True:
             result = SandboxBackendResult(
                 "denied",
                 detail="The configured sandbox backend cannot enforce the requested policy.",
@@ -262,21 +331,44 @@ class SandboxService:
             )
             return self._report(request, result, started, file_count, total_characters, policy)
 
-        with tempfile.TemporaryDirectory(prefix="starfur-sandbox-") as temporary:
-            workspace = Path(temporary)
+        temporary: tempfile.TemporaryDirectory[str] | None = None
+        result: SandboxBackendResult
+        try:
+            temporary = tempfile.TemporaryDirectory(prefix="starfur-sandbox-")
+            workspace = Path(temporary.name)
             for item in request.files:
                 target = workspace.joinpath(*PurePosixPath(item.path).parts)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_text(item.content, encoding="utf-8")
+        except Exception as error:
+            result = SandboxBackendResult(
+                "failed", detail=f"Sandbox materialization error: {type(error).__name__}",
+            )
+        else:
             try:
-                result = self.backend.run(request, workspace, policy)
+                result = self.backend.run(
+                    request, workspace, policy, stdout=stdout, stderr=stderr,
+                )
                 if not isinstance(result, SandboxBackendResult):
                     raise TypeError("sandbox backend must return SandboxBackendResult.")
+                stdout.write(result.stdout)
+                stderr.write(result.stderr)
             except Exception as error:
                 # Exception text can contain paths, credentials, or provider
                 # output.  Keep only a bounded class label in the public report.
                 result = SandboxBackendResult("failed", detail=f"Sandbox backend error: {type(error).__name__}")
-        return self._report(request, result, started, file_count, total_characters, policy)
+        finally:
+            if temporary is not None:
+                try:
+                    temporary.cleanup()
+                except Exception as error:
+                    result = SandboxBackendResult(
+                        "failed", detail=f"Sandbox cleanup error: {type(error).__name__}",
+                    )
+        return self._report(
+            request, result, started, file_count, total_characters, policy,
+            stdout=stdout.text(), stderr=stderr.text(),
+        )
 
     @staticmethod
     def _report(
@@ -286,14 +378,21 @@ class SandboxService:
         file_count: int,
         total_characters: int,
         policy: SandboxPolicy,
+        *,
+        stdout: str | None = None,
+        stderr: str | None = None,
     ) -> SandboxReport:
         def cap(value: str) -> str:
             limit = min(policy.max_output_characters, MAX_SANDBOX_OUTPUT_BYTES)
-            if len(value.encode("utf-8")) <= limit:
+            encoded_value = value.encode("utf-8")
+            if len(encoded_value) <= limit:
                 return value
-            encoded = value.encode("utf-8")[:limit]
+            marker = _OUTPUT_TRUNCATION_MARKER
+            if limit <= len(marker):
+                return marker[:limit].decode("ascii")
+            encoded = encoded_value[:limit - len(marker)]
             clipped = encoded.decode("utf-8", errors="ignore")
-            return clipped + "\n[output truncated]"
+            return clipped + marker.decode("ascii")
 
         return SandboxReport(
             run_id=request.run_id,
@@ -303,8 +402,8 @@ class SandboxService:
             duration_ms=round((time.perf_counter() - started) * 1000, 2),
             file_count=file_count,
             total_characters=total_characters,
-            stdout=cap(result.stdout),
-            stderr=cap(result.stderr),
+            stdout=cap(result.stdout if stdout is None else stdout),
+            stderr=cap(result.stderr if stderr is None else stderr),
             exit_code=result.exit_code,
             detail=result.detail,
         )
@@ -347,6 +446,7 @@ __all__ = [
     "SandboxBackendResult",
     "SandboxFile",
     "SandboxPolicy",
+    "SandboxOutputCollector",
     "SandboxReport",
     "SandboxRequest",
     "SandboxService",
