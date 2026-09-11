@@ -395,6 +395,17 @@ invalid or oversized multibyte output. The broker remains disconnected from
 the sandbox service; no process, VM, host export, guest mount, provider call,
 or executable backend was added.
 
+**COMPLETED B7 READ-ONLY HYPER-V READINESS SLICE (PENDING NATIVE/WSL
+SMOKE):** A fixed explicit WMI/CIM query can produce privacy-bounded Windows
+host-prerequisite evidence without elevation, feature changes, VM inventory,
+service control, downloads, or guest launch. Import, startup, diagnostics, and
+apartment reads never trigger it. Host prerequisite success never implies
+execution readiness: the Generation 2 Linux image, authenticated Hyper-V-socket
+candidate transport, supervisor enrollment, and native containment conformance
+remain unconfigured, so execution stays unavailable. Failures expose only
+closed reason labels. Current Microsoft platform references and the optional
+Steam/distribution boundary are recorded in `docs/SANDBOX_BACKENDS.md`.
+
 ## Stage G — Perception and media (LATER)
 
 Permissioned one-shot screen/window/image/PDF inspection, TTS/STT, image generation, notifications, and presence signals through the provider registry. Media is bounded and provenance-bearing; generated images are noncanonical. Voice uses explicit push-to-talk/always-listen settings, confidence, cancellation, and interruption policy. Continuous surveillance is never the default.
