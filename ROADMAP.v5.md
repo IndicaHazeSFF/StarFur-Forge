@@ -395,16 +395,58 @@ invalid or oversized multibyte output. The broker remains disconnected from
 the sandbox service; no process, VM, host export, guest mount, provider call,
 or executable backend was added.
 
-**COMPLETED B7 READ-ONLY HYPER-V READINESS SLICE (PENDING NATIVE/WSL
-SMOKE):** A fixed explicit WMI/CIM query can produce privacy-bounded Windows
+**COMPLETED B7 READ-ONLY HYPER-V READINESS SLICE (WINDOWS/WSL BOUNDARY
+SMOKE PASSED):** A fixed explicit WMI/CIM query can produce privacy-bounded Windows
 host-prerequisite evidence without elevation, feature changes, VM inventory,
 service control, downloads, or guest launch. Import, startup, diagnostics, and
-apartment reads never trigger it. Host prerequisite success never implies
+apartment reads never trigger it. The WSL-to-Windows smoke correctly reported
+the development host's unsupported client edition and left execution unavailable.
+Host prerequisite success never implies
 execution readiness: the Generation 2 Linux image, authenticated Hyper-V-socket
 candidate transport, supervisor enrollment, and native containment conformance
 remain unconfigured, so execution stays unavailable. Failures expose only
 closed reason labels. Current Microsoft platform references and the optional
 Steam/distribution boundary are recorded in `docs/SANDBOX_BACKENDS.md`.
+
+**COMPLETED B8A LOCAL-SUPERVISOR IPC AUTHENTICATION CONTRACT (PENDING WSL
+TEST):** A provider-free inert contract now authenticates one future enrolled
+Core client through a strict byte-bounded HMAC envelope. It binds the enrollment,
+Core principal, server-created session instance, fixed operation, invocation
+fingerprint, worker generation, key ID, short lifetime, request ID, and nonce,
+and separately requires an OS-trusted peer principal. Alteration, expiry,
+revocation, wrong principal/key, malformed input, request/nonce replay, and full
+replay capacity deny. Authentication never supplies tool authorization or
+backend readiness; public views omit principals and tags. Native IPC, service
+installation, ACL/key storage and rotation, OS peer acquisition, restart-safe
+replay state, Hyper-V management, materialization, and execution remain disabled.
+
+**COMPLETED B8B IPC FRAMING/DISCONNECT CONTRACT (PENDING WSL TEST):** An
+in-memory fake receiver now frames strict authenticated requests with one fixed
+four-byte length prefix. Fragmented/coalesced reads remain bounded by finite
+per-connection byte and frame ceilings; invalid lengths/JSON, authentication
+failure, replay, overflow, and partial disconnect permanently close the
+connection. Abort discards only buffered bytes and is not cancellation or stop
+proof. No pipe/socket, response, dispatch, persistent replay store, native peer
+discovery, Hyper-V operation, or executable backend was added.
+
+**COMPLETED B8C AUTHENTICATED SUPERVISOR RESPONSE CONTRACT (PENDING WSL
+TEST):** The reverse channel now uses a service response key separate from the
+client request key. Strict framed responses bind the exact request, enrollment,
+service/transport revisions, invocation fingerprint, and worker generation and
+carry only operation-compatible validated status, cancellation, or completion
+objects. Wrong bindings/keys, altered or oversized payloads, replay, overflow,
+and partial disconnect deny. Public views omit response tags, principals, result
+text, and artifacts. No service, socket, key store, dispatch, persistence,
+readiness claim, or execution was added.
+
+**COMPLETED B8D PASSIVE SUPERVISOR/TRANSPORT READINESS CONTRACT (PENDING WSL
+TEST):** A pure evaluator now compares a Core-owned expected profile with
+short-lived supplied evidence. Exact backend/service/transport/policy revisions
+and every required ACL, directional-key, OS-peer, request/response auth/framing,
+and restart-replay dimension are mandatory. Host incompatibility, missing or
+unavailable evidence, stale/future timestamps, mismatches, and incomplete
+enforcement return only a sanitized unavailable reason. Synthetic readiness is
+not discovery, attestation, authority, selection, or execution permission.
 
 ## Stage G — Perception and media (LATER)
 
