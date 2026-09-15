@@ -64,6 +64,17 @@ class ToolRegistryTests(unittest.TestCase):
         self.assertTrue(descriptor.requires_confirmation)
         self.assertNotIn("executor", registry.public_dict())
 
+    def test_core_registry_describes_confirmed_public_fetch_without_network_authority(self):
+        registry = build_core_tool_registry()
+        descriptor = registry.get("web.fetch")
+        self.assertIsNotNone(descriptor)
+        self.assertEqual("read_only", descriptor.access_mode)
+        self.assertEqual("network.fetch.public", descriptor.permission_scope)
+        self.assertTrue(descriptor.requires_confirmation)
+        rendered = repr(descriptor.public_dict()).casefold()
+        for forbidden in ("executor", "socket", "credential", "cookie"):
+            self.assertNotIn(forbidden, rendered)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -3647,9 +3647,10 @@ def run_interactive(config_path=DEFAULT_CONFIG_PATH, input_fn=input, output_fn=p
         debug_level=debug_level,
         stream=True,
         stream_writer=stream_writer,
+        enable_native_web_tools=True,
     )
     session = application.session
-    output_fn("StarFur Assistant (model list/current/use, routing status/probe, tool help/list/status/preview/propose/grant/approve/deny/revoke/cancel [local, execution disabled], persona list/current/use/inspect, roleplay begin/end/status, adventure list/create/inspect/load/resume/restart/status/events/checkpoints/corrections/correct/retract/state/relationships/knowledge/turn/pause/end/unload, remember/forget, memory list/search/inspect/scope, proposal list/inspect/approve/reject/approve all/scope, context stats; quit to exit)")
+    output_fn("StarFur Assistant (model list/current/use, routing status/probe, tool help/list/status/preview/propose/grant/approve/prepare/execute/artifact/deny/revoke/cancel [trusted local only; sandbox execution disabled], persona list/current/use/inspect, roleplay begin/end/status, adventure list/create/inspect/load/resume/restart/status/events/checkpoints/corrections/correct/retract/state/relationships/knowledge/turn/pause/end/unload, remember/forget, memory list/search/inspect/scope, proposal list/inspect/approve/reject/approve all/scope, context stats; quit to exit)")
     while True:
         try:
             user_text = input_fn("You: ")

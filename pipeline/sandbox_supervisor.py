@@ -33,6 +33,7 @@ SUPERVISOR_CANCEL_STATES = frozenset({"requested", "verified_stopped", "unknown"
 SUPERVISOR_RUN_STATES = frozenset({
     "starting", "running", "cancel_requested", "verified_stopped", "unknown",
 })
+_DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 def _strict_version(value: object, label: str) -> int:
@@ -58,6 +59,27 @@ def new_worker_generation() -> str:
 
 
 @dataclass(frozen=True)
+class SupervisorPrerequisiteBinding:
+    """Content-free commitment to one exact Core-verified prerequisite."""
+
+    requirement_id: str
+    resource_ref: str
+    evidence_sha256: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.requirement_id, str) or not TOOL_ID_RE.fullmatch(self.requirement_id):
+            raise ValueError("supervisor prerequisite requirement is invalid")
+        if not isinstance(self.resource_ref, str) or not re.fullmatch(
+            r"TR-[A-Za-z0-9_-]{1,64}", self.resource_ref,
+        ):
+            raise ValueError("supervisor prerequisite resource is invalid")
+        if not isinstance(self.evidence_sha256, str) or not _DIGEST_RE.fullmatch(
+            self.evidence_sha256
+        ):
+            raise ValueError("supervisor prerequisite evidence digest is invalid")
+
+
+@dataclass(frozen=True)
 class SupervisorLaunchRequest:
     """Exact, payload-free binding for one authorized launch attempt."""
 
@@ -70,6 +92,7 @@ class SupervisorLaunchRequest:
     worker_generation: str
     issued_at: float
     authorization_deadline: float
+    prerequisite_bindings: tuple[SupervisorPrerequisiteBinding, ...] = ()
 
     def __post_init__(self) -> None:
         _strict_version(self.schema_version, "supervisor schema version")
@@ -95,13 +118,23 @@ class SupervisorLaunchRequest:
         deadline = _timestamp(self.authorization_deadline, "supervisor authorization deadline")
         if issued >= deadline:
             raise ValueError("supervisor authorization deadline is invalid")
+        prerequisites = tuple(self.prerequisite_bindings)
+        if len(prerequisites) > 16 or not all(
+            isinstance(item, SupervisorPrerequisiteBinding) for item in prerequisites
+        ):
+            raise ValueError("supervisor prerequisite bindings are invalid")
+        requirements = tuple(item.requirement_id for item in prerequisites)
+        if len(requirements) != len(set(requirements)):
+            raise ValueError("supervisor prerequisite requirements must be unique")
         object.__setattr__(self, "issued_at", issued)
         object.__setattr__(self, "authorization_deadline", deadline)
+        object.__setattr__(self, "prerequisite_bindings", prerequisites)
 
     @classmethod
     def from_invocation(
         cls, invocation: ToolInvocation, *, worker_generation: str,
         issued_at: float, authorization_deadline: float,
+        prerequisite_bindings: tuple[SupervisorPrerequisiteBinding, ...] = (),
     ) -> "SupervisorLaunchRequest":
         if not isinstance(invocation, ToolInvocation):
             raise TypeError("supervisor invocation is invalid")
@@ -117,6 +150,7 @@ class SupervisorLaunchRequest:
             worker_generation,
             issued_at,
             authorization_deadline,
+            prerequisite_bindings,
         )
 
     def matches_invocation(self, invocation: ToolInvocation) -> bool:
@@ -345,6 +379,8 @@ class ToolExecutionSupervisor(Protocol):
     @property
     def available(self) -> bool: ...
 
+    def supports(self, tool_id: str, tool_version: int) -> bool: ...
+
     def run(
         self, request: SupervisorLaunchRequest, invocation: ToolInvocation,
         proposal: ToolProposal, cancellation: SupervisorCancellation,
@@ -363,6 +399,9 @@ class DisabledToolSupervisor:
 
     available = False
 
+    def supports(self, tool_id, tool_version):
+        return False
+
     def run(self, request, invocation, proposal, cancellation):
         raise RuntimeError("tool execution supervisor is disabled")
 
@@ -376,5 +415,6 @@ class DisabledToolSupervisor:
 __all__ = [
     "DisabledToolSupervisor", "SUPERVISOR_SCHEMA_VERSION", "SupervisorCancellation",
     "SupervisorCancelReceipt", "SupervisorCompletion", "SupervisorLaunchRequest",
-    "SupervisorRunStatus", "ToolExecutionSupervisor", "new_worker_generation",
+    "SupervisorPrerequisiteBinding", "SupervisorRunStatus", "ToolExecutionSupervisor",
+    "new_worker_generation",
 ]

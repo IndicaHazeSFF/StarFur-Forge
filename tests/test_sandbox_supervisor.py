@@ -11,6 +11,7 @@ from pipeline.sandbox_supervisor import (
     SupervisorCancelReceipt,
     SupervisorCompletion,
     SupervisorLaunchRequest,
+    SupervisorPrerequisiteBinding,
     SupervisorRunStatus,
 )
 from pipeline.tool_contracts import ToolProposal, ToolResult, build_core_tool_contract_registry
@@ -80,6 +81,23 @@ class SandboxSupervisorContractTests(unittest.TestCase):
             policy_revision="policy-v1", lifetime_seconds=300,
         )
         self.assertFalse(launch.matches_invocation(changed))
+
+    def test_launch_binds_only_bounded_content_free_prerequisite_commitments(self):
+        binding = SupervisorPrerequisiteBinding(
+            "network.destination", "TR-destination", "a" * 64,
+        )
+        launch = SupervisorLaunchRequest.from_invocation(
+            invocation(), worker_generation="TW-worker-002",
+            issued_at=1001.0, authorization_deadline=1100.0,
+            prerequisite_bindings=(binding,),
+        )
+        self.assertEqual((binding,), launch.prerequisite_bindings)
+        with self.assertRaisesRegex(ValueError, "unique"):
+            SupervisorLaunchRequest.from_invocation(
+                invocation(), worker_generation="TW-worker-003",
+                issued_at=1001.0, authorization_deadline=1100.0,
+                prerequisite_bindings=(binding, binding),
+            )
 
     def test_cancellation_signal_is_a_request_not_stop_proof(self):
         signal = SupervisorCancellation()

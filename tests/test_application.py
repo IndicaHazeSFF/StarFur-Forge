@@ -1,6 +1,7 @@
 import sys
 import re
 import threading
+import time
 import types
 import unittest
 from pathlib import Path
@@ -13,8 +14,17 @@ from pipeline.application import AssistantApplication, ConversationNotFoundError
 from pipeline.document_intake import DocumentAnnotationExecution, prepare_document_text
 from pipeline.persona_registry import PersonaRegistry, load_persona_package
 from pipeline.provider_registry import ChatProviderRegistration, ChatProviderRegistry
+from pipeline.sandbox_execution_status import SandboxExecutionStatus
 from pipeline.system_metrics import SystemMetricsSnapshot
 from pipeline.task_profiles import TaskProfile, TaskProfiles
+from pipeline.tool_web_connector import WebDecodedChunk, WebFetchSupervisor, WebTransportResponse
+from pipeline.tool_web_native import (
+    NativeWebResolver,
+    NativeWebToolRuntime,
+    SessionWebPrerequisiteStore,
+    SessionWebQuarantineStore,
+)
+from pipeline.tool_web_response import WebResponseMetadata
 
 
 class FakeConfig:
@@ -102,6 +112,25 @@ class UnavailableProvider:
         raise RuntimeError("provider is offline")
 
 
+class FakeWebTransport:
+    available = True
+
+    def fetch(self, request, cancellation):
+        body = b"bounded public fixture"
+        return WebTransportResponse(
+            1,
+            request.invocation_id,
+            request.binding_fingerprint,
+            request.worker_generation,
+            request.selected_address,
+            WebResponseMetadata(1, 200, "text/plain", "identity", len(body)),
+            (WebDecodedChunk(body, len(body)),),
+        )
+
+    def request_cancel(self, request):
+        return None
+
+
 class AssistantApplicationTests(unittest.TestCase):
     def test_tool_namespace_is_reserved_and_shared_chat_cannot_control_it(self):
         session = FakeSession()
@@ -168,6 +197,48 @@ class AssistantApplicationTests(unittest.TestCase):
         self.assertIn("explicit approval is still required", granted)
         self.assertIn("Execution remains disabled", approved)
         self.assertIn("[approved]", status)
+        self.assertEqual([], session.calls)
+
+    def test_trusted_local_web_fetch_requires_inert_proposal_then_exact_preparation(self):
+        resolver_calls = []
+
+        def runtime_factory():
+            resolver = NativeWebResolver(
+                getaddrinfo=lambda *args: resolver_calls.append(args) or [
+                    (2, 1, 6, "", ("93.184.216.34", 443)),
+                ],
+                clock=time.time,
+            )
+            prerequisites = SessionWebPrerequisiteStore(resolver)
+            quarantine = SessionWebQuarantineStore()
+            supervisor = WebFetchSupervisor(
+                prerequisites, FakeWebTransport(), quarantine, clock=time.time,
+            )
+            return NativeWebToolRuntime(prerequisites, quarantine, supervisor)
+
+        session = FakeSession()
+        app = AssistantApplication(session, local_web_runtime_factory=runtime_factory)
+        created = app.respond(
+            'tool propose web.fetch {"url":"https://example.com/reference"}',
+            trusted_local_control=True,
+        )
+        request_id = re.search(r"TI-[A-Za-z0-9_-]+", created).group(0)
+        self.assertEqual([], resolver_calls)
+        self.assertIn("No DNS lookup", created)
+        self.assertIn("Exact public URL", app.respond(
+            f"tool preview {request_id}", trusted_local_control=True,
+        ))
+        app.respond(f"tool grant {request_id}", trusted_local_control=True)
+        app.respond(f"tool approve {request_id}", trusted_local_control=True)
+        prepared = app.respond(f"tool prepare {request_id}", trusted_local_control=True)
+        self.assertEqual(1, len(resolver_calls))
+        self.assertIn("URL-only disclosure evidence", prepared)
+
+        completed = app.respond(f"tool execute {request_id}", trusted_local_control=True)
+        artifact_ref = re.search(r"TF-[A-Za-z0-9_-]+", completed).group(0)
+        artifact = app.respond(f"tool artifact {artifact_ref}", trusted_local_control=True)
+        self.assertIn("untrusted_external", artifact)
+        self.assertIn("bounded public fixture", artifact)
         self.assertEqual([], session.calls)
 
     def test_local_tool_request_becomes_stale_after_persona_context_changes(self):
@@ -319,6 +390,18 @@ class AssistantApplicationTests(unittest.TestCase):
             "configured_task_count": 1, "routable_task_count": 1,
             "unavailable_task_count": 0, "storage": "session_ephemeral",
         })
+        self.assertEqual(result["sandbox_execution"], {
+            "schema_version": 1, "configured": False,
+            "host_status": "unprobed", "supervisor_status": "unprobed",
+            "execution_status": "disabled", "reason": "not_configured",
+            "storage": "presentation_ephemeral",
+        })
+        self.assertEqual(result["tool_activity"], {
+            "schema_version": 1, "total_count": 0,
+            "pending_review_count": 0, "approved_count": 0,
+            "queued_count": 0, "running_count": 0,
+            "terminal_count": 0, "storage": "session_ephemeral",
+        })
         self.assertEqual(result["candidate_inbox"]["ordinary_count"], 1)
         self.assertEqual(result["presentation"]["animation_slot"], "resident.murr.reviewing")
         self.assertEqual(result["system_metrics"]["cpu"]["logical_cores"], 4)
@@ -326,6 +409,59 @@ class AssistantApplicationTests(unittest.TestCase):
         self.assertNotIn("error", result["lifecycle"])
         self.assertNotIn("hidden_resource", result["adventure"])
         self.assertEqual(session.calls, [])
+
+    def test_resident_snapshot_exposes_aggregate_tool_status_for_exact_session(self):
+        app = AssistantApplication(FakeSession())
+        result = app.respond(
+            'tool propose sandbox.run {"task_kind":"python_tests",'
+            '"objective":"Count only.","files":[{"path":"fixture.py",'
+            '"content":"print(1)"}]}',
+            trusted_local_control=True,
+        )
+        self.assertIn("Registered inert tool proposal", result)
+
+        snapshot = app.resident_snapshot()
+
+        self.assertEqual(1, snapshot["tool_activity"]["total_count"])
+        self.assertEqual(1, snapshot["tool_activity"]["pending_review_count"])
+        rendered = repr(snapshot["tool_activity"])
+        self.assertNotIn("TI-", rendered)
+        self.assertNotIn("fixture.py", rendered)
+        self.assertNotIn("Count only", rendered)
+
+    def test_resident_snapshot_uses_only_injected_passive_sandbox_status(self):
+        class PassiveStatus:
+            def __init__(self):
+                self.calls = 0
+
+            def snapshot(self):
+                self.calls += 1
+                return SandboxExecutionStatus(
+                    1, True, "unsupported", "unavailable", "unavailable",
+                    "host_unsupported",
+                )
+
+        source = PassiveStatus()
+        session = FakeSession()
+        result = AssistantApplication(
+            session, sandbox_status_provider=source,
+        ).resident_snapshot()
+
+        self.assertEqual(1, source.calls)
+        self.assertEqual("host_unsupported", result["sandbox_execution"]["reason"])
+        self.assertNotIn("backend_id", result["sandbox_execution"])
+        self.assertEqual(session.calls, [])
+
+    def test_resident_snapshot_contains_status_source_failure(self):
+        class FailingStatus:
+            def snapshot(self):
+                raise RuntimeError("C:/private/service/key")
+
+        result = AssistantApplication(
+            FakeSession(), sandbox_status_provider=FailingStatus(),
+        ).resident_snapshot()
+        self.assertEqual("observation_failed", result["sandbox_execution"]["reason"])
+        self.assertNotIn("private", repr(result))
 
     def test_application_isolates_ephemeral_state_per_conversation(self):
         default = FakeSession()

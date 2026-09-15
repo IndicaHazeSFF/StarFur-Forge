@@ -12,6 +12,7 @@ from pipeline.tool_audit import ToolAuditLog
 from pipeline.tool_broker import ToolBroker, ToolBrokerError, ToolDispatchContext
 from pipeline.tool_contracts import ToolProposal, ToolResult, build_core_tool_contract_registry
 from pipeline.tool_grants import SessionToolGrantController, ToolInvocationIssuer
+from pipeline.tool_prerequisites import SessionToolPrerequisiteController
 from pipeline.tool_runs import ToolRunJournal
 from pipeline.sandbox_supervisor import (
     SUPERVISOR_SCHEMA_VERSION, SupervisorCancelReceipt, SupervisorCompletion,
@@ -28,9 +29,14 @@ class FakeSupervisor:
         self.cancel_state = cancel_state
         self.calls = 0
         self.cancel_calls = 0
+        self.requests = []
+
+    def supports(self, tool_id, tool_version):
+        return tool_id == "sandbox.run" and tool_version == 1
 
     def run(self, request, invocation, proposal, cancellation):
         self.calls += 1
+        self.requests.append(request)
         if self.error is not None:
             raise self.error
         if self.completion_factory is not None:
@@ -59,6 +65,9 @@ class ExplodingDisabledSupervisor:
 
     def __init__(self):
         self.calls = 0
+
+    def supports(self, tool_id, tool_version):
+        raise AssertionError("disabled supervisor support was queried")
 
     def run(self, request, invocation, proposal, cancellation):
         self.calls += 1
@@ -117,7 +126,7 @@ def proposal(objective="Run safe tests."):
 class ToolBrokerTests(unittest.TestCase):
     def make_broker(
         self, supervisor=None, run_journal=None, run_journal_owner=None,
-        *, clock=lambda: 1000.0,
+        *, prerequisites=None, clock=lambda: 1000.0,
         worker_generation_factory=lambda: "TW-broker-worker",
     ):
         contracts = build_core_tool_contract_registry()
@@ -132,6 +141,7 @@ class ToolBrokerTests(unittest.TestCase):
             audit=ToolAuditLog(clock=lambda: 1000.0),
             run_journal=run_journal,
             run_journal_owner=run_journal_owner,
+            prerequisites=prerequisites,
             clock=clock,
             worker_generation_factory=worker_generation_factory,
         )
@@ -145,6 +155,7 @@ class ToolBrokerTests(unittest.TestCase):
             "persona_id": "murr",
             "adventure_id": None,
             "policy_revision": "policy-v1",
+            "resource_refs": ("TR-backend_fixture",),
         }
         values.update(overrides)
         return broker.submit(proposal(), **values)
@@ -160,6 +171,67 @@ class ToolBrokerTests(unittest.TestCase):
     def authorize(self, broker, request_id="TI-request_1"):
         broker.grant(request_id)
         broker.approve(request_id)
+        return broker.record_prerequisite(
+            request_id,
+            requirement_id="sandbox.backend",
+            resource_ref="TR-backend_fixture",
+            evidence_sha256="a" * 64,
+        )
+
+    def test_revoked_prerequisite_is_rechecked_immediately_before_launch(self):
+        controller = SessionToolPrerequisiteController(
+            clock=lambda: 1000.0, id_factory=lambda: "TP-broker_fixture",
+        )
+        supervisor = FakeSupervisor()
+        broker = self.make_broker(supervisor, prerequisites=controller)
+        self.submit(broker)
+        receipt = self.authorize(broker)
+        self.assertEqual("queued", broker.queue("TI-request_1", context=self.context()).state)
+        controller.revoke(receipt.prerequisite_id)
+        denied = broker.run_queued("TI-request_1", context=self.context())
+        self.assertEqual(("denied", "authorization_expired"), (denied.state, denied.reason))
+        self.assertEqual(0, supervisor.calls)
+
+    def test_exact_prerequisite_commitment_reaches_supervisor_launch(self):
+        supervisor = FakeSupervisor()
+        broker = self.make_broker(supervisor)
+        self.submit(broker)
+        self.authorize(broker)
+        completed = broker.dispatch("TI-request_1", context=self.context())
+        self.assertEqual("completed", completed.state)
+        self.assertEqual(1, len(supervisor.requests))
+        commitments = supervisor.requests[0].prerequisite_bindings
+        self.assertEqual(1, len(commitments))
+        self.assertEqual("sandbox.backend", commitments[0].requirement_id)
+        self.assertEqual("TR-backend_fixture", commitments[0].resource_ref)
+        self.assertEqual("a" * 64, commitments[0].evidence_sha256)
+
+    def test_exact_resource_prerequisite_is_required_before_queueing(self):
+        supervisor = FakeSupervisor()
+        broker = self.make_broker(supervisor)
+        self.submit(broker)
+        broker.grant("TI-request_1")
+        broker.approve("TI-request_1")
+        denied = broker.queue("TI-request_1", context=self.context())
+        self.assertEqual(("denied", "resource_prerequisite_missing"), (denied.state, denied.reason))
+        self.assertEqual(0, supervisor.calls)
+
+        broker = self.make_broker(supervisor)
+        self.submit(broker, request_id="TI-request_2")
+        with self.assertRaisesRegex(ToolBrokerError, "could not be recorded"):
+            broker.record_prerequisite(
+                "TI-request_2",
+                requirement_id="sandbox.backend",
+                resource_ref="TR-wrong_fixture",
+                evidence_sha256="a" * 64,
+            )
+        with self.assertRaisesRegex(ToolBrokerError, "not required"):
+            broker.record_prerequisite(
+                "TI-request_2",
+                requirement_id="network.egress",
+                resource_ref="TR-backend_fixture",
+                evidence_sha256="a" * 64,
+            )
 
     def test_default_disabled_supervisor_fails_without_calling_it(self):
         supervisor = ExplodingDisabledSupervisor()
@@ -170,6 +242,18 @@ class ToolBrokerTests(unittest.TestCase):
 
         self.assertEqual("failed", result.state)
         self.assertEqual("supervisor_unavailable", result.reason)
+        self.assertEqual(0, supervisor.calls)
+
+    def test_available_supervisor_for_another_tool_is_not_called(self):
+        supervisor = FakeSupervisor()
+        supervisor.supports = lambda tool_id, tool_version: (
+            tool_id == "web.fetch" and tool_version == 1
+        )
+        broker = self.make_broker(supervisor)
+        self.submit(broker)
+        self.authorize(broker)
+        result = broker.dispatch("TI-request_1", context=self.context())
+        self.assertEqual(("failed", "executor_unavailable"), (result.state, result.reason))
         self.assertEqual(0, supervisor.calls)
         self.assertIsNone(result.result)
 

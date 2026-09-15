@@ -62,6 +62,8 @@
       <div class="card"><span class="label">Resident action</span><span id="resident-action" class="value">—</span></div>
       <div class="card"><span class="label">Provider / model</span><span id="provider" class="value">—</span></div>
       <div class="card"><span class="label">Task routes</span><span id="route-readiness" class="value">—</span></div>
+      <div class="card"><span class="label">Sandbox execution</span><span id="sandbox-execution" class="value">—</span></div>
+      <div class="card"><span class="label">Tool requests</span><span id="tool-activity" class="value">—</span></div>
       <div class="card"><span class="label">Last routed task</span><span id="last-route" class="value">—</span></div>
       <div class="card"><span class="label">Adventure</span><span id="adventure" class="value">—</span></div>
       <div class="card"><span class="label">Roleplay</span><span id="roleplay" class="value">—</span></div>
@@ -82,7 +84,7 @@
       const bytes = (amount) => typeof amount === 'number' ? `${(amount / 1073741824).toFixed(1)} GiB` : 'unavailable';
       const render = (data) => {
         const p = data.persona || {}; const provider = data.provider || {}; const adventure = data.adventure || {};
-        const roleplay = data.roleplay || {}; const turn = data.adventure_turn || {}; const inbox = data.candidate_inbox || {}; const routing = data.routing || {};
+        const roleplay = data.roleplay || {}; const turn = data.adventure_turn || {}; const inbox = data.candidate_inbox || {}; const routing = data.routing || {}; const sandbox = data.sandbox_execution || {}; const tools = data.tool_activity || {};
         const metrics = data.system_metrics || {}; const cpu = metrics.cpu || {}; const memory = metrics.memory || {}; const storage = metrics.storage || {}; const gpu = metrics.gpu || {};
         const plan = data.presentation || {}; const current = data.activity || 'idle';
         resident.dataset.state = plan.visual_state || 'idle';
@@ -100,6 +102,8 @@
         value(byId('resident-action'), `${residentAction.kind || 'idle'} · ${residentAction.source || 'core_default'}`);
         value(byId('provider'), `${provider.name || 'unavailable'} · ${provider.model || '—'} · ${provider.health || 'unknown'}`);
         value(byId('route-readiness'), `${routing.routable_task_count || 0} ready · ${routing.unavailable_task_count || 0} unavailable · ${routing.configured_task_count || 0} configured`);
+        value(byId('sandbox-execution'), `${sandbox.execution_status || 'disabled'} · ${sandbox.reason || 'not_configured'}`);
+        value(byId('tool-activity'), `${tools.pending_review_count || 0} review · ${tools.approved_count || 0} approved · ${tools.running_count || 0} running`);
         const routes = Array.isArray(turn.last_task_routes) ? turn.last_task_routes : [];
         const lastRoute = routes.at(-1);
         value(byId('last-route'), lastRoute

@@ -3,7 +3,8 @@
 Validation in this module is application-level input validation only.  It does
 not authenticate a caller, grant permission, record confirmation, issue an
 invocation identity, select an executor, materialize files, or execute work.
-The sole initial contract describes bounded ``sandbox.run`` exercise data.
+The initial contracts describe bounded inert ``sandbox.run`` exercise data and
+one URL-only ``web.fetch`` proposal.  Neither contract exposes an executor.
 """
 
 from __future__ import annotations
@@ -16,6 +17,8 @@ from typing import Callable, Iterable, Mapping
 
 from .tool_registry import MAX_REGISTERED_TOOLS, TOOL_ID_RE, ToolDescriptor, build_core_tool_registry
 from .sandbox_paths import validate_portable_sandbox_path, validate_portable_sandbox_tree
+from .tool_web_policy import MAX_WEB_REDIRECT_HOPS, MAX_WEB_URL_CHARACTERS, WebDestination
+from .tool_web_response import MAX_WEB_DECODED_BYTES, MAX_WEB_ENCODED_BYTES
 
 
 TOOL_PROPOSAL_SCHEMA_VERSION = 1
@@ -450,26 +453,66 @@ def validate_sandbox_run_result(result: ToolResult) -> ToolResult:
     return result
 
 
+def validate_web_fetch_arguments(arguments: Mapping[str, object]) -> Mapping[str, object]:
+    """Validate one inert URL-only public-text proposal without resolving it."""
+    if not isinstance(arguments, Mapping):
+        raise TypeError("web.fetch arguments must be an object")
+    _require_exact_fields(arguments, frozenset({"url"}), "web.fetch arguments")
+    destination = WebDestination(1, arguments["url"])
+    return MappingProxyType({"url": destination.url})
+
+
+def validate_web_fetch_result(result: ToolResult) -> ToolResult:
+    """Keep fetched content out of generic result text and return references only."""
+    if not isinstance(result, ToolResult):
+        raise TypeError("web.fetch result is invalid")
+    if result.exit_code is not None or result.stdout or result.stderr:
+        raise ValueError("web.fetch result cannot expose process or response text")
+    if result.outcome == "completed" and len(result.artifact_refs) != 1:
+        raise ValueError("completed web.fetch result requires one quarantined artifact reference")
+    if result.outcome != "completed" and result.artifact_refs:
+        raise ValueError("non-completed web.fetch result cannot include artifact references")
+    return result
+
+
 def build_core_tool_contract_registry() -> ToolContractRegistry:
-    descriptor = build_core_tool_registry().get("sandbox.run")
-    if descriptor is None:  # Defensive fail-closed guard against catalog drift.
-        raise ValueError("sandbox.run descriptor is unavailable")
-    return ToolContractRegistry((ToolContract(
-        descriptor=descriptor,
-        tool_version=1,
-        retry_class="never",
-        argument_validator=validate_sandbox_run_arguments,
-        result_validator=validate_sandbox_run_result,
-        resource_requirements=("sandbox.backend",),
-        limits={
-            "max_files": MAX_SANDBOX_ARGUMENT_FILES,
-            "max_inline_file_bytes": MAX_SANDBOX_INLINE_FILE_BYTES,
-            "max_inline_total_bytes": MAX_SANDBOX_INLINE_TOTAL_BYTES,
-            "max_objective_characters": MAX_SANDBOX_OBJECTIVE_CHARACTERS,
-            "max_result_text_characters": MAX_TOOL_RESULT_TEXT_CHARACTERS,
-            "max_result_text_bytes": MAX_TOOL_RESULT_TEXT_BYTES,
-        },
-    ),))
+    descriptors = build_core_tool_registry()
+    descriptor = descriptors.get("sandbox.run")
+    web_descriptor = descriptors.get("web.fetch")
+    if descriptor is None or web_descriptor is None:  # Defensive fail-closed guard against catalog drift.
+        raise ValueError("core tool descriptor is unavailable")
+    return ToolContractRegistry((
+        ToolContract(
+            descriptor=descriptor,
+            tool_version=1,
+            retry_class="never",
+            argument_validator=validate_sandbox_run_arguments,
+            result_validator=validate_sandbox_run_result,
+            resource_requirements=("sandbox.backend",),
+            limits={
+                "max_files": MAX_SANDBOX_ARGUMENT_FILES,
+                "max_inline_file_bytes": MAX_SANDBOX_INLINE_FILE_BYTES,
+                "max_inline_total_bytes": MAX_SANDBOX_INLINE_TOTAL_BYTES,
+                "max_objective_characters": MAX_SANDBOX_OBJECTIVE_CHARACTERS,
+                "max_result_text_characters": MAX_TOOL_RESULT_TEXT_CHARACTERS,
+                "max_result_text_bytes": MAX_TOOL_RESULT_TEXT_BYTES,
+            },
+        ),
+        ToolContract(
+            descriptor=web_descriptor,
+            tool_version=1,
+            retry_class="proposal_only",
+            argument_validator=validate_web_fetch_arguments,
+            result_validator=validate_web_fetch_result,
+            resource_requirements=("network.destination", "network.disclosure"),
+            limits={
+                "max_url_characters": MAX_WEB_URL_CHARACTERS,
+                "max_redirect_hops": MAX_WEB_REDIRECT_HOPS,
+                "max_encoded_bytes": MAX_WEB_ENCODED_BYTES,
+                "max_decoded_bytes": MAX_WEB_DECODED_BYTES,
+            },
+        ),
+    ))
 
 
 __all__ = [
@@ -478,5 +521,5 @@ __all__ = [
     "TOOL_PROPOSAL_SCHEMA_VERSION", "TOOL_RESULT_SCHEMA_VERSION", "ToolContract",
     "ToolContractRegistry", "ToolProposal", "ToolResult", "build_core_tool_contract_registry",
     "decode_tool_proposal_json", "decode_tool_result_json", "validate_sandbox_run_arguments",
-    "validate_sandbox_run_result",
+    "validate_sandbox_run_result", "validate_web_fetch_arguments", "validate_web_fetch_result",
 ]

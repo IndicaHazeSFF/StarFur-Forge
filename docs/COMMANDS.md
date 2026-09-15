@@ -60,7 +60,7 @@ Aliases also work:
 
 ---
 
-## Local Inert Tool Review
+## Trusted Local Tool Review
 
 The interactive local Assistant CLI now exposes the first trusted control
 surface for the provider-free tool broker:
@@ -72,17 +72,29 @@ Inside Assistant Mode:
     tool help
     tool list
     tool propose sandbox.run {"task_kind":"python_tests","objective":"Run a harmless fixture.","files":[{"path":"main.py","content":"print('safe')"}]}
+    tool propose web.fetch {"url":"https://example.com/public.txt"}
     tool preview <TI-id>
     tool grant <TI-id>
     tool approve <TI-id>
+    tool prepare <TI-id>
+    tool execute <TI-id>
+    tool artifact <TF-id>
     tool status <TI-id>
     tool deny <TI-id>
     tool revoke <TI-id>
     tool cancel <TI-id>
 
-This slice is deliberately inert. Validation, preview, a one-use
-session-ephemeral grant, and explicit approval do not create the supplied
-files or execute work. Tool requests disappear when their bounded application
+`sandbox.run` remains deliberately inert: validation, preview, a one-use
+session-ephemeral grant, and explicit approval do not create its supplied
+files or execute work. The local CLI additionally exposes a controlled
+`web.fetch` smoke path. Its proposal and preview perform no DNS or HTTP. After
+an exact grant and approval, `tool prepare` resolves and records short-lived
+destination and URL-only public-disclosure evidence; `tool execute` consumes
+that evidence once and may perform one pinned, credential-free HTTPS GET for
+plain text or Markdown. The result contains only a quarantined artifact
+reference, and `tool artifact` is the bounded local inspection step.
+
+Tool requests and fetched artifacts disappear when their bounded application
 session is evicted or the process restarts. Changing the active persona,
 mounted adventure, or policy binding makes an outstanding request stale and
 denies it.
@@ -91,7 +103,10 @@ The trust decision belongs to the local interactive CLI adapter, not to the
 text of a command. The shared chat/OpenWebUI/API path reserves the `tool`
 namespace but always rejects grant and approval controls; a conversation ID,
 bearer token, attached document, quoted instruction, or model response cannot
-become tool authority. There is no HTTP approval endpoint and no executor yet.
+become tool authority. There is no HTTP approval or execution endpoint. Native
+public fetching remains restricted to this explicit local flow until its WSL
+smoke gate passes; fetched text stays untrusted and cannot create memory,
+skills, commands, or provider instructions.
 
 ---
 
@@ -1041,7 +1056,7 @@ Lists timestamped backups, asks for a backup selection, and requires typing `Sta
 
 The local API exposes the bounded, read-only diagnostics snapshot at `GET /v1/starfur/diagnostics` (with the same bearer token as the other endpoints). It reports provider configuration and whether health was probed, active/startup model, capability manifest fingerprint and IDs, fallback state, lifecycle readiness, and the latest recorded turn timings plus its bounded task-route trace. Its `routing` section is a passive preview of whether configured task profiles would be routable through the current provider status; it does not switch, probe, or call a provider. Normal diagnostics never call Ollama or read/write memory stores. To explicitly run one non-generating provider availability probe, use `GET /v1/starfur/diagnostics?probe=provider`; it reports only health status, timestamp, model count when available, and a bounded error message.
 
-`GET /v1/starfur/persona-runtime` returns the active conversation's bounded persona-runtime snapshot for future dashboard, TUI, and apartment presentation. It includes public identity/trait/state metadata and local record counts only. It does not call a model, seed a persona state, reveal prompts or raw evidence, modify memory stores, or edit configuration. `GET /v1/starfur/resident-snapshot` additionally includes the last completed turn's bounded task-route summary in its adventure-turn read model and aggregate configured/routable/unavailable route counts; both are informational and cannot drive provider selection or state mutation.
+`GET /v1/starfur/persona-runtime` returns the active conversation's bounded persona-runtime snapshot for future dashboard, TUI, and apartment presentation. It includes public identity/trait/state metadata and local record counts only. It does not call a model, seed a persona state, reveal prompts or raw evidence, modify memory stores, or edit configuration. `GET /v1/starfur/resident-snapshot` additionally includes the last completed turn's bounded task-route summary, aggregate configured/routable/unavailable route counts, a passive sanitized optional-sandbox status, and aggregate session-local tool lifecycle counts. These are informational only. Tool counts reveal no request IDs, arguments, files, resources, grants, approvals, audit events, results, artifacts, or backend details. Snapshot polling does not probe, install, enroll, connect, authorize, approve, dispatch, cancel, or execute.
 ## Capability-aware assistant explanations
 
 StarFur Core owns a structured capability manifest rather than placing feature knowledge in persona files. During ordinary conversation no capability block is added. Explicit questions such as `What can you do?` receive the current public capability manifest; narrowly named features such as memory proposals or model switching receive only matching capability entries. Persona controls presentation, while Core remains authoritative for what is currently supported. This does not expose private databases, hidden reasoning, or unregistered future features.

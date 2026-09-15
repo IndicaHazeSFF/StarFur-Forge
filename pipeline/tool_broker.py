@@ -20,10 +20,15 @@ from .tool_grants import (
     SessionToolGrantController, ToolGrantError, ToolInvocation, ToolInvocationIssuer,
 )
 from .tool_permissions import evaluate_tool_permission
+from .tool_prerequisites import (
+    SessionToolPrerequisiteController, ToolPrerequisiteError, ToolPrerequisiteReceipt,
+)
 from .tool_runs import ToolRunJournal, ToolRunJournalError, ToolRunOwnerLease
+from .tool_status import ToolStatusSummary
 from .sandbox_supervisor import (
     DisabledToolSupervisor, SupervisorCancellation, SupervisorCancelReceipt,
-    SupervisorCompletion, SupervisorLaunchRequest, ToolExecutionSupervisor,
+    SupervisorCompletion, SupervisorLaunchRequest, SupervisorPrerequisiteBinding,
+    ToolExecutionSupervisor,
     new_worker_generation,
 )
 
@@ -110,6 +115,8 @@ class _LaunchAuthorization:
     grant_id: str
     grant_revocation_generation: int
     authorization_deadline: float
+    prerequisite_bindings: tuple[tuple[str, int], ...]
+    prerequisite_commitments: tuple[SupervisorPrerequisiteBinding, ...]
 
 
 @dataclass(frozen=True)
@@ -126,6 +133,7 @@ class ToolBroker:
         audit: ToolAuditLog | None = None,
         run_journal: ToolRunJournal | None = None,
         run_journal_owner: ToolRunOwnerLease | None = None,
+        prerequisites: SessionToolPrerequisiteController | None = None,
         clock: Callable[[], float] = time.time,
         worker_generation_factory: Callable[[], str] = new_worker_generation,
         maximum_requests: int = MAX_TOOL_BROKER_REQUESTS,
@@ -138,6 +146,8 @@ class ToolBroker:
             raise TypeError("tool broker grant controller is invalid")
         if not isinstance(approvals, ToolApprovalController):
             raise TypeError("tool broker approval controller is invalid")
+        if prerequisites is not None and not isinstance(prerequisites, SessionToolPrerequisiteController):
+            raise TypeError("tool broker prerequisite controller is invalid")
         if run_journal is not None and not isinstance(run_journal, ToolRunJournal):
             raise TypeError("tool broker run journal is invalid")
         if (run_journal is None) != (run_journal_owner is None):
@@ -160,6 +170,7 @@ class ToolBroker:
         self._issuer = issuer
         self._grants = grants
         self._approvals = approvals
+        self._prerequisites = prerequisites or SessionToolPrerequisiteController(clock=clock)
         self._supervisor = selected_supervisor
         self._audit = audit or ToolAuditLog()
         self._run_journal = run_journal
@@ -231,6 +242,13 @@ class ToolBroker:
         with self._lock:
             return tuple(self._records.values())
 
+    def status_summary(self) -> ToolStatusSummary:
+        """Return aggregate session-local lifecycle counts with no request detail."""
+        with self._lock:
+            return ToolStatusSummary.from_states(
+                record.state for record in self._records.values()
+            )
+
     def invalidate_context(self, context: ToolDispatchContext) -> int:
         """Fail closed any nonterminal request whose trusted context changed."""
         if not isinstance(context, ToolDispatchContext):
@@ -277,6 +295,44 @@ class ToolBroker:
             self._records[request_id] = updated
             self._audit.append(request_id, record.invocation.tool_id, "approved", "approval_recorded")
             return updated
+
+    def record_prerequisite(
+        self,
+        request_id: str,
+        *,
+        requirement_id: str,
+        resource_ref: str,
+        evidence_sha256: str,
+        lifetime_seconds: float = 120,
+    ) -> ToolPrerequisiteReceipt:
+        """Bind trusted Core-supplied prerequisite evidence to one invocation.
+
+        This method is intentionally absent from shared chat/API command paths.
+        Calling it is not a grant, approval, or execution request.
+        """
+        with self._lock:
+            record = self._require_active(request_id)
+            if record.state in {"queued", "running"}:
+                raise ToolBrokerError("tool request prerequisite phase has ended")
+            contract = self._contracts.get(
+                record.invocation.tool_id, record.invocation.tool_version,
+            )
+            if contract is None or requirement_id not in contract.resource_requirements:
+                raise ToolBrokerError("tool prerequisite is not required by this contract")
+            try:
+                receipt = self._prerequisites.issue(
+                    record.invocation,
+                    requirement_id=requirement_id,
+                    resource_ref=resource_ref,
+                    evidence_sha256=evidence_sha256,
+                    lifetime_seconds=lifetime_seconds,
+                )
+            except ToolPrerequisiteError as error:
+                raise ToolBrokerError("tool prerequisite could not be recorded") from error
+            self._audit.append(
+                request_id, record.invocation.tool_id, record.state, "prerequisite_recorded",
+            )
+            return receipt
 
     def deny(self, request_id: str) -> ToolBrokerRecord:
         with self._lock:
@@ -345,14 +401,23 @@ class ToolBroker:
             grant = self._grants.get(record.grant_id)
             if grant is None:
                 return self._replace_terminal(record, "denied", "authorization_missing")
+            contract = self._contracts.get(
+                record.invocation.tool_id, record.invocation.tool_version,
+            )
+            if contract is None:
+                return self._replace_terminal(record, "denied", "resource_prerequisite_missing")
+            try:
+                prerequisites = self._prerequisites.claim_all(
+                    record.invocation, contract.resource_requirements,
+                )
+            except ToolPrerequisiteError:
+                return self._replace_terminal(record, "denied", "resource_prerequisite_missing")
             try:
                 evidence = self._approvals.claim(record.approval_id, record.invocation, grant)
                 permission = self._grants.claim(record.grant_id, record.invocation)
             except (ToolApprovalError, ToolGrantError):
                 return self._replace_terminal(record, "denied", "permission_denied")
-            descriptor = self._contracts.get(
-                record.invocation.tool_id, record.invocation.tool_version,
-            ).descriptor
+            descriptor = contract.descriptor
             decision = evaluate_tool_permission(
                 descriptor, (permission,), confirmed=evidence.invocation_id == record.invocation.invocation_id,
             )
@@ -366,7 +431,22 @@ class ToolBroker:
             self._launch_authorizations[request_id] = _LaunchAuthorization(
                 grant.grant_id,
                 grant.revocation_generation,
-                min(record.invocation.expires_at, grant.expires_at, approval.expires_at),
+                min(
+                    record.invocation.expires_at,
+                    grant.expires_at,
+                    approval.expires_at,
+                    *(item.expires_at for item in prerequisites),
+                ),
+                tuple(
+                    (item.prerequisite_id, item.revocation_generation)
+                    for item in prerequisites
+                ),
+                tuple(
+                    SupervisorPrerequisiteBinding(
+                        item.requirement_id, item.resource_ref, item.evidence_sha256,
+                    )
+                    for item in prerequisites
+                ),
             )
             self._audit.append(request_id, record.invocation.tool_id, "queued", "dispatch_queued")
             return queued
@@ -388,8 +468,20 @@ class ToolBroker:
             launch_time = self._clock()
             if not self._launch_is_authorized(queued, now=launch_time):
                 return self._replace_terminal(queued, "denied", "authorization_expired")
-            if not self._supervisor.available:
+            try:
+                supervisor_available = self._supervisor.available is True
+            except Exception:
+                supervisor_available = False
+            if not supervisor_available:
                 return self._replace_terminal(queued, "failed", "supervisor_unavailable")
+            try:
+                supported = self._supervisor.supports(
+                    queued.invocation.tool_id, queued.invocation.tool_version,
+                )
+            except Exception:
+                supported = False
+            if supported is not True:
+                return self._replace_terminal(queued, "failed", "executor_unavailable")
             authorization = self._launch_authorizations[request_id]
             try:
                 worker_generation = self._worker_generation_factory()
@@ -400,6 +492,7 @@ class ToolBroker:
                     worker_generation=worker_generation,
                     issued_at=launch_time,
                     authorization_deadline=authorization.authorization_deadline,
+                    prerequisite_bindings=authorization.prerequisite_commitments,
                 )
             except (TypeError, ValueError):
                 return self._replace_terminal(queued, "failed", "supervisor_binding_invalid")
@@ -470,6 +563,9 @@ class ToolBroker:
             and grant.invocation_id == record.invocation.invocation_id
             and grant.binding == record.invocation.binding_tuple()
             and grant.revocation_generation == authorization.grant_revocation_generation
+            and self._prerequisites.claims_are_valid(
+                record.invocation, authorization.prerequisite_bindings,
+            )
         )
 
     def _finish_unknown_if_running(self, request_id: str) -> ToolBrokerRecord:
@@ -497,6 +593,7 @@ class ToolBroker:
     def _replace_terminal(
         self, record: ToolBrokerRecord, state: str, reason: str, *, result: ToolResult | None = None,
     ) -> ToolBrokerRecord:
+        self._prerequisites.revoke_invocation(record.invocation.invocation_id)
         if self._run_journal is not None:
             try:
                 self._run_journal.record_outcome(

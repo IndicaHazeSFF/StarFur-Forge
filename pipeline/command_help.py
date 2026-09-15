@@ -147,14 +147,17 @@ def detect_command_help(query: str) -> CommandHelp | None:
     )):
         return CommandHelp(
             intent="local_tool_controls",
-            title="The inert tool broker can currently be inspected only in the trusted local Assistant CLI:",
+            title="Tool controls are available only in the trusted local Assistant CLI:",
             commands=(
                 "tool help", "tool list", "tool status <TI-id>", "tool preview <TI-id>",
                 "tool propose sandbox.run <JSON arguments>", "tool grant <TI-id>",
-                "tool approve <TI-id>", "tool deny <TI-id>", "tool revoke <TI-id>",
-                "tool cancel <TI-id>",
+                'tool propose web.fetch {"url":"https://..."}', "tool approve <TI-id>",
+                "tool prepare <TI-id>", "tool execute <TI-id>", "tool artifact <TF-id>",
+                "tool deny <TI-id>", "tool revoke <TI-id>", "tool cancel <TI-id>",
             ),
-            notes=("Execution remains disabled. Shared chat/OpenWebUI/API requests cannot grant or approve tools.",),
+            notes=(
+                "sandbox.run execution remains disabled. web.fetch is explicit, one-use, public-text only, and native-smoke gated. Shared chat/OpenWebUI/API requests cannot control tools.",
+            ),
         )
 
     if _contains_any(value, ("how do i inspect the persona", "how can i inspect the persona", "how do i inspect murr", "how can i inspect murr")):

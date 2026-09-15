@@ -225,6 +225,11 @@ class APITests(unittest.TestCase):
         self.assertEqual(payload["conversation"]["id"], "default")
         self.assertEqual(payload["activity"], "provider_unavailable")
         self.assertEqual(payload["presentation"]["animation_slot"], "resident.default.offline")
+        self.assertEqual(payload["sandbox_execution"]["execution_status"], "disabled")
+        self.assertEqual(payload["sandbox_execution"]["reason"], "not_configured")
+        self.assertEqual(payload["tool_activity"]["total_count"], 0)
+        self.assertEqual(payload["tool_activity"]["pending_review_count"], 0)
+        self.assertNotIn("invocation_id", payload["tool_activity"])
         self.assertNotIn("messages", payload)
         self.assertEqual(self.session.calls, [])
 
@@ -251,6 +256,8 @@ class APITests(unittest.TestCase):
         self.assertIn(CONVERSATION_HEADER, page)
         self.assertIn(MURR_IDLE_ASSET_PATH, page)
         self.assertIn("dataset.failed", page)
+        self.assertIn("sandbox-execution", page)
+        self.assertIn("tool-activity", page)
         self.assertNotIn("local-test", page)
         self.assertEqual(self.session.calls, [])
 

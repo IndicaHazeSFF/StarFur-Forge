@@ -52,6 +52,19 @@ class ResidentSnapshotTests(unittest.TestCase):
                 "unavailable_task_count": 1, "tasks": {"private": "no"},
                 "raw_provider_payload": "private",
             },
+            sandbox_execution={
+                "schema_version": 1, "configured": True, "host_status": "unsupported",
+                "supervisor_status": "unavailable", "execution_status": "unavailable",
+                "reason": "host_unsupported", "endpoint": "private-pipe",
+                "principal": "private-user", "key_id": "private-key",
+            },
+            tool_activity={
+                "schema_version": 1, "total_count": 2,
+                "pending_review_count": 1, "approved_count": 0,
+                "queued_count": 0, "running_count": 0,
+                "terminal_count": 1, "invocation_ids": ["TI-private"],
+                "grant_ids": ["TG-private"], "arguments": "private",
+            },
         )
 
         payload = snapshot.public_dict()
@@ -72,6 +85,23 @@ class ResidentSnapshotTests(unittest.TestCase):
             "configured_task_count": 4, "routable_task_count": 3,
             "unavailable_task_count": 1, "storage": "session_ephemeral",
         })
+        self.assertEqual(payload["sandbox_execution"], {
+            "schema_version": 1, "configured": True, "host_status": "unsupported",
+            "supervisor_status": "unavailable", "execution_status": "unavailable",
+            "reason": "host_unsupported", "storage": "presentation_ephemeral",
+        })
+        self.assertNotIn("endpoint", payload["sandbox_execution"])
+        self.assertNotIn("principal", payload["sandbox_execution"])
+        self.assertNotIn("key_id", payload["sandbox_execution"])
+        self.assertEqual(payload["tool_activity"], {
+            "schema_version": 1, "total_count": 2,
+            "pending_review_count": 1, "approved_count": 0,
+            "queued_count": 0, "running_count": 0,
+            "terminal_count": 1, "storage": "session_ephemeral",
+        })
+        self.assertNotIn("invocation_ids", payload["tool_activity"])
+        self.assertNotIn("grant_ids", payload["tool_activity"])
+        self.assertNotIn("arguments", payload["tool_activity"])
 
     def test_explicit_resident_action_keeps_zero_provider_presentation_available(self):
         snapshot = ResidentSnapshot(
@@ -84,6 +114,7 @@ class ResidentSnapshotTests(unittest.TestCase):
 
         self.assertEqual(snapshot.activity, "idle")
         self.assertEqual(snapshot.public_dict()["provider"], {"configured": False})
+        self.assertEqual(snapshot.public_dict()["sandbox_execution"]["reason"], "not_configured")
 
 
 if __name__ == "__main__":

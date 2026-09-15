@@ -15,6 +15,7 @@ import hashlib
 import re
 import secrets
 import threading
+import time
 from time import perf_counter
 from typing import Callable, Iterator
 
@@ -38,6 +39,8 @@ from pipeline.tool_approval import ToolApprovalController
 from pipeline.tool_broker import ToolBroker, ToolBrokerError, ToolDispatchContext
 from pipeline.tool_contracts import build_core_tool_contract_registry, decode_tool_proposal_json
 from pipeline.tool_grants import SessionToolGrantController, ToolInvocationIssuer
+from pipeline.tool_execution_router import ToolExecutionBinding, ToolExecutionRouter
+from pipeline.tool_prerequisites import SessionToolPrerequisiteController
 from pipeline.persona_asset_resolver import InstalledPersonaAssetPackage, PersonaAssetResolver
 from pipeline.persona_assets import BUILTIN_MURR_ASSET_MANIFEST
 from pipeline.persona_registry import PersonaRegistry, load_persona_package
@@ -46,6 +49,12 @@ from pipeline.provider_registry import ChatProviderRegistry
 from pipeline.providers import ChatProvider, provider_health_snapshot, provider_is_configured
 from pipeline.resident_presentation import ResidentPresentationPlan
 from pipeline.resident_snapshot import ResidentSnapshot
+from pipeline.sandbox_execution_status import (
+    DisabledSandboxExecutionStatusProvider,
+    SandboxExecutionStatus,
+    SandboxExecutionStatusProvider,
+)
+from pipeline.tool_status import ToolStatusSummary
 from pipeline.system_metrics import LocalSystemMetricsProvider, NullSystemMetricsProvider, SystemMetricsProvider, SystemMetricsSnapshot
 
 
@@ -67,6 +76,7 @@ class _SessionSlot:
     lock: threading.RLock
     session_instance_id: str
     tool_broker: ToolBroker
+    local_web_runtime: object | None = None
     active_requests: int = 0
 
 
@@ -139,7 +149,9 @@ class AssistantApplication:
         max_conversations: int = DEFAULT_MAX_CONVERSATIONS,
         retriever: MemoryRetriever | None = None,
         system_metrics_provider: SystemMetricsProvider | None = None,
+        sandbox_status_provider: SandboxExecutionStatusProvider | None = None,
         persona_asset_resolver: PersonaAssetResolver | None = None,
+        local_web_runtime_factory: Callable[[], object] | None = None,
     ):
         if max_conversations <= 0:
             raise ValueError("max_conversations must be positive.")
@@ -148,6 +160,11 @@ class AssistantApplication:
         self.system_metrics_provider = system_metrics_provider or NullSystemMetricsProvider()
         if not callable(getattr(self.system_metrics_provider, "snapshot", None)):
             raise TypeError("system_metrics_provider must provide a callable snapshot method.")
+        self.sandbox_status_provider = (
+            sandbox_status_provider or DisabledSandboxExecutionStatusProvider()
+        )
+        if not callable(getattr(self.sandbox_status_provider, "snapshot", None)):
+            raise TypeError("sandbox_status_provider must provide a callable snapshot method.")
         if persona_asset_resolver is not None and not isinstance(persona_asset_resolver, PersonaAssetResolver):
             raise TypeError("persona_asset_resolver must be a PersonaAssetResolver or None.")
         self.persona_asset_resolver = persona_asset_resolver or PersonaAssetResolver()
@@ -159,6 +176,9 @@ class AssistantApplication:
         self._proposal_creator = proposal_creator
         self._session_factory = session_factory
         self._max_conversations = max_conversations
+        if local_web_runtime_factory is not None and not callable(local_web_runtime_factory):
+            raise TypeError("local_web_runtime_factory must be callable or None")
+        self._local_web_runtime_factory = local_web_runtime_factory
         self._tool_contracts = build_core_tool_contract_registry()
         self._sessions = OrderedDict([
             (DEFAULT_CONVERSATION_ID, self._new_session_slot(session)),
@@ -169,6 +189,18 @@ class AssistantApplication:
 
     def _new_session_slot(self, session: AssistantSession) -> _SessionSlot:
         session_instance_id = f"session-{secrets.token_hex(16)}"
+        prerequisites = SessionToolPrerequisiteController()
+        local_web_runtime = None
+        supervisor = None
+        if self._local_web_runtime_factory is not None:
+            local_web_runtime = self._local_web_runtime_factory()
+            if not all(hasattr(local_web_runtime, name) for name in (
+                "prerequisites", "quarantine", "supervisor",
+            )):
+                raise TypeError("local web tool runtime is invalid")
+            supervisor = ToolExecutionRouter((
+                ToolExecutionBinding("web.fetch", 1, local_web_runtime.supervisor),
+            ))
         return _SessionSlot(
             session,
             threading.RLock(),
@@ -178,7 +210,10 @@ class AssistantApplication:
                 ToolInvocationIssuer(self._tool_contracts),
                 SessionToolGrantController(),
                 ToolApprovalController(),
+                prerequisites=prerequisites,
+                supervisor=supervisor,
             ),
+            local_web_runtime,
         )
 
     def _attach_capability_manifest(self, session):
@@ -331,6 +366,24 @@ class AssistantApplication:
                 slot.active_requests -= 1
                 self._evict_sessions_if_needed()
 
+    @contextmanager
+    def _locked_existing_tool_slot_for(self, conversation_id=None) -> Iterator[_SessionSlot]:
+        """Borrow an existing complete slot for passive session-local views."""
+        with self._registry_lock:
+            key = normalize_conversation_id(conversation_id)
+            slot = self._sessions.get(key)
+            if slot is None:
+                raise ConversationNotFoundError("Conversation session was not found.")
+            self._sessions.move_to_end(key)
+            slot.active_requests += 1
+        try:
+            with slot.lock:
+                yield slot
+        finally:
+            with self._registry_lock:
+                slot.active_requests -= 1
+                self._evict_sessions_if_needed()
+
     @staticmethod
     def _active_model_for_session(session):
         return getattr(session, "active_model", None) or getattr(session.config, "chat_model", "unknown")
@@ -392,7 +445,7 @@ class AssistantApplication:
         )
 
     def _local_tool_control(self, slot: _SessionSlot, user_text: str) -> str:
-        """Handle exact local-only inert controls before any model command path."""
+        """Handle exact local-only tool controls before any model command path."""
         command = user_text.strip()
         lowered = command.casefold()
         context = self._tool_dispatch_context(slot)
@@ -400,13 +453,17 @@ class AssistantApplication:
 
         if lowered in {"tool", "tool help"}:
             return (
-                "Local tool controls (execution disabled):\n"
+                "Local tool controls (sandbox execution disabled):\n"
                 "tool propose sandbox.run <JSON arguments>\n"
+                "tool propose web.fetch {\"url\":\"https://...\"}\n"
                 "tool list\n"
                 "tool status <TI-id>\n"
                 "tool preview <TI-id>\n"
                 "tool grant <TI-id>\n"
                 "tool approve <TI-id>\n"
+                "tool prepare <TI-id>\n"
+                "tool execute <TI-id>\n"
+                "tool artifact <TF-id>\n"
                 "tool deny <TI-id>\n"
                 "tool revoke <TI-id>\n"
                 "tool cancel <TI-id>"
@@ -415,7 +472,7 @@ class AssistantApplication:
             records = slot.tool_broker.records()
             if not records:
                 return "No local tool requests are registered for this session."
-            lines = ["Local tool requests (execution disabled):"]
+            lines = ["Local tool requests:"]
             lines.extend(self._format_tool_record(item) for item in records[-20:])
             return "\n".join(lines)
 
@@ -440,20 +497,81 @@ class AssistantApplication:
                     adventure_id=context.adventure_id,
                     policy_revision=context.policy_revision,
                 )
-            except (TypeError, ValueError) as error:
+            except (TypeError, ValueError, RuntimeError) as error:
                 return f"Tool proposal was rejected safely: {error}"
             return (
                 f"Registered inert tool proposal {record.invocation.invocation_id} for sandbox.run. "
                 "No files were created and no work was executed. Use tool preview, then tool grant and tool approve."
             )
 
+        web_proposal_match = re.fullmatch(
+            r"tool\s+propose\s+web\.fetch\s+(.+)", command, flags=re.IGNORECASE | re.DOTALL,
+        )
+        if web_proposal_match:
+            if slot.local_web_runtime is None:
+                return "Native web.fetch is unavailable in this application mode."
+            raw_arguments = web_proposal_match.group(1).strip()
+            envelope = (
+                '{"schema_version":1,"tool_id":"web.fetch","tool_version":1,"arguments":'
+                + raw_arguments + "}"
+            )
+            references = ()
+            try:
+                proposal = decode_tool_proposal_json(envelope)
+                from pipeline.tool_web_policy import WebDestination
+                references = slot.local_web_runtime.prerequisites.reserve_public(
+                    WebDestination(1, proposal.arguments["url"]),
+                )
+                request_id = f"TI-{secrets.token_hex(16)}"
+                record = slot.tool_broker.submit(
+                    proposal,
+                    request_id=request_id,
+                    trusted_principal_id=context.principal_id,
+                    session_instance_id=context.session_instance_id,
+                    persona_id=context.persona_id,
+                    adventure_id=context.adventure_id,
+                    policy_revision=context.policy_revision,
+                    resource_refs=references,
+                )
+            except (TypeError, ValueError, RuntimeError) as error:
+                for reference in references:
+                    slot.local_web_runtime.prerequisites.revoke(reference)
+                return f"Tool proposal was rejected safely: {error}"
+            return (
+                f"Registered inert tool proposal {record.invocation.invocation_id} for web.fetch. "
+                "No DNS lookup or network request occurred. Use tool preview, grant, approve, prepare, then execute."
+            )
+
+        artifact_match = re.fullmatch(
+            r"tool\s+artifact\s+(TF-[A-Za-z0-9_-]{1,64})", command, flags=re.IGNORECASE,
+        )
+        if artifact_match:
+            if slot.local_web_runtime is None:
+                return "Local web artifact storage is unavailable."
+            artifact_ref = "TF-" + artifact_match.group(1)[3:]
+            artifact = slot.local_web_runtime.quarantine.get(artifact_ref)
+            if artifact is None:
+                return "Tool artifact was not found in this local session."
+            text = artifact.payload.text
+            visible = text[:12000]
+            suffix = "\n[display truncated]" if len(text) > len(visible) else ""
+            return (
+                f"Quarantined web artifact {artifact_ref}\n"
+                f"Source: {artifact.destination.url}\n"
+                f"Media: {artifact.payload.media_type}\n"
+                f"Trust: {artifact.payload.trust_label}\n"
+                f"Characters: {artifact.payload.character_count}\n"
+                f"Digest: {artifact.payload.prepared_sha256}\n\n{visible}{suffix}"
+            )
+
         action_match = re.fullmatch(
-            r"tool\s+(status|preview|grant|approve|deny|revoke|cancel)\s+(TI-[A-Za-z0-9_-]{1,64})",
+            r"tool\s+(status|preview|grant|approve|prepare|execute|deny|revoke|cancel)\s+(TI-[A-Za-z0-9_-]{1,64})",
             command,
             flags=re.IGNORECASE,
         )
         if action_match:
-            action, request_id = action_match.group(1).casefold(), action_match.group(2)
+            action = action_match.group(1).casefold()
+            request_id = "TI-" + action_match.group(2)[3:]
             record = slot.tool_broker.get(request_id)
             if record is None:
                 return "Tool request was not found in this local session."
@@ -462,31 +580,85 @@ class AssistantApplication:
                     return self._format_tool_record(record)
                 if action == "preview":
                     arguments = record.proposal.arguments
-                    files = arguments["files"]
-                    file_bytes = sum(len(item["content"].encode("utf-8")) for item in files)
-                    lines = [
-                        f"Tool proposal preview: {request_id}",
-                        "Status: " + record.state,
-                        "Tool: sandbox.run v1",
-                        "Task kind: " + arguments["task_kind"],
-                        "Objective: " + arguments["objective"],
-                        f"Inline files: {len(files)} ({file_bytes} UTF-8 bytes)",
-                    ]
-                    lines.extend(f"- {item['path']}" for item in files)
-                    lines.append("Preview only; file contents were not materialized or executed.")
+                    if record.invocation.tool_id == "sandbox.run":
+                        files = arguments["files"]
+                        file_bytes = sum(len(item["content"].encode("utf-8")) for item in files)
+                        lines = [
+                            f"Tool proposal preview: {request_id}",
+                            "Status: " + record.state,
+                            "Tool: sandbox.run v1",
+                            "Task kind: " + arguments["task_kind"],
+                            "Objective: " + arguments["objective"],
+                            f"Inline files: {len(files)} ({file_bytes} UTF-8 bytes)",
+                        ]
+                        lines.extend(f"- {item['path']}" for item in files)
+                        lines.append("Preview only; file contents were not materialized or executed.")
+                    else:
+                        lines = [
+                            f"Tool proposal preview: {request_id}",
+                            "Status: " + record.state,
+                            "Tool: web.fetch v1",
+                            "Exact public URL: " + arguments["url"],
+                            "Method: GET; credentials, redirects, proxies, and private disclosure disabled.",
+                            "Preview only; no DNS lookup or network request occurred.",
+                        ]
                     return "\n".join(lines)
                 if action == "grant":
                     record = slot.tool_broker.grant(request_id)
                     return f"Granted one session-local use for {request_id}; explicit approval is still required."
                 if action == "approve":
                     record = slot.tool_broker.approve(request_id)
-                    return f"Approved {request_id} once. Execution remains disabled."
+                    if record.invocation.tool_id == "sandbox.run":
+                        return f"Approved {request_id} once. Execution remains disabled."
+                    return f"Approved {request_id} once. Use tool prepare {request_id} before execution."
+                if action == "prepare":
+                    if record.invocation.tool_id != "web.fetch" or slot.local_web_runtime is None:
+                        return "Tool preparation is unavailable for this request."
+                    if record.state != "approved":
+                        return "Tool preparation requires the exact request to be granted and approved first."
+                    destination_record, disclosure_record = (
+                        slot.local_web_runtime.prerequisites.prepare_reserved(
+                            *record.invocation.resource_refs,
+                        )
+                    )
+                    remaining = destination_record.resolution.expires_at_epoch - time.time()
+                    if remaining <= 1:
+                        return "Tool preparation expired before it could be recorded; create a new request."
+                    slot.tool_broker.record_prerequisite(
+                        request_id,
+                        requirement_id="network.destination",
+                        resource_ref=destination_record.resource_ref,
+                        evidence_sha256=destination_record.evidence_sha256,
+                        lifetime_seconds=min(remaining, 25.0),
+                    )
+                    slot.tool_broker.record_prerequisite(
+                        request_id,
+                        requirement_id="network.disclosure",
+                        resource_ref=disclosure_record.resource_ref,
+                        evidence_sha256=disclosure_record.evidence_sha256,
+                        lifetime_seconds=min(remaining, 25.0),
+                    )
+                    return (
+                        f"Prepared exact public destination and URL-only disclosure evidence for {request_id}. "
+                        "Execute within 25 seconds or create a new request."
+                    )
+                if action == "execute":
+                    if record.invocation.tool_id != "web.fetch" or slot.local_web_runtime is None:
+                        return "Tool execution is unavailable for this request."
+                    record = slot.tool_broker.dispatch(request_id, context=context)
+                    result = record.result
+                    if result is not None and result.artifact_refs:
+                        return (
+                            f"Completed {request_id}; quarantined artifact: {result.artifact_refs[0]}. "
+                            f"Use tool artifact {result.artifact_refs[0]} to inspect untrusted text."
+                        )
+                    return f"Tool execution ended [{record.state}] {record.reason}; no artifact is available."
                 if action in {"deny", "revoke"}:
                     record = slot.tool_broker.deny(request_id)
                     return f"Revoked and denied {request_id}; it cannot execute."
                 record = slot.tool_broker.cancel(request_id)
                 return f"Cancelled {request_id}; it cannot execute."
-            except (ToolBrokerError, TypeError, ValueError) as error:
+            except (ToolBrokerError, TypeError, ValueError, RuntimeError) as error:
                 return f"Tool control was rejected safely: {error}"
 
         return (
@@ -555,7 +727,8 @@ class AssistantApplication:
         seeds runtime state nor reads canonical memory, provider payloads,
         prompt text, candidate content, or hidden adventure resource values.
         """
-        with self._locked_existing_session_for(conversation_id) as session:
+        with self._locked_existing_tool_slot_for(conversation_id) as slot:
+            session = slot.session
             runtime = getattr(session, "persona_runtime_state", None)
             runtime_public = getattr(runtime, "public_dict", None)
             lifecycle = getattr(session, "provider_lifecycle", None)
@@ -601,6 +774,20 @@ class AssistantApplication:
                 # Dashboard observation is never worth failing an otherwise
                 # healthy resident snapshot or leaking host exception text.
                 metrics_public = SystemMetricsSnapshot.unavailable("observation_failed").public_dict()
+            try:
+                sandbox_status = self.sandbox_status_provider.snapshot()
+                if not isinstance(sandbox_status, SandboxExecutionStatus):
+                    raise TypeError("sandbox status provider returned an invalid value")
+                sandbox_public = sandbox_status.public_dict()
+            except Exception:
+                # Apartment polling must remain safe and must not expose an
+                # injected status-source failure or turn it into a probe.
+                sandbox_public = SandboxExecutionStatus.observation_failed().public_dict()
+            try:
+                tool_activity = slot.tool_broker.status_summary().public_dict()
+            except Exception:
+                # Passive presentation never exposes broker failure details.
+                tool_activity = ToolStatusSummary.empty().public_dict()
             snapshot = ResidentSnapshot(
                 conversation_id=normalize_conversation_id(conversation_id),
                 persona=runtime_public() if callable(runtime_public) else None,
@@ -628,6 +815,8 @@ class AssistantApplication:
                     "storage": "session_ephemeral",
                 },
                 routing=routing,
+                sandbox_execution=sandbox_public,
+                tool_activity=tool_activity,
             ).public_dict()
             # A plan contains generic stable asset slots only.  It is derived
             # from the same bounded public snapshot rather than from prompt
@@ -856,10 +1045,20 @@ def create_assistant_application(
     max_conversations: int = DEFAULT_MAX_CONVERSATIONS,
     retriever: MemoryRetriever | None = None,
     system_metrics_provider: SystemMetricsProvider | None = None,
+    sandbox_status_provider: SandboxExecutionStatusProvider | None = None,
     provider: ChatProvider | None = None,
     provider_registry: ChatProviderRegistry | None = None,
+    enable_native_web_tools: bool = False,
+    local_web_runtime_factory: Callable[[], object] | None = None,
 ):
     """Create the standard Assistant Mode application for any presentation client."""
+    if not isinstance(enable_native_web_tools, bool):
+        raise TypeError("enable_native_web_tools must be a boolean")
+    if local_web_runtime_factory is not None and not callable(local_web_runtime_factory):
+        raise TypeError("local_web_runtime_factory must be callable or None")
+    if enable_native_web_tools and local_web_runtime_factory is None:
+        from pipeline.tool_web_native import build_native_web_tool_runtime
+        local_web_runtime_factory = build_native_web_tool_runtime
     config = load_config(config_path) if config_path else load_config()
     registry = capability_registry or build_core_capability_registry()
     manifest = registry.build_manifest()
@@ -918,7 +1117,9 @@ def create_assistant_application(
         max_conversations=max_conversations,
         retriever=shared_retriever,
         system_metrics_provider=system_metrics_provider or LocalSystemMetricsProvider(),
+        sandbox_status_provider=sandbox_status_provider,
         persona_asset_resolver=PersonaAssetResolver(installed_asset_packages),
+        local_web_runtime_factory=local_web_runtime_factory,
     )
 
 

@@ -78,6 +78,80 @@ def _resident_routing_public(value: object) -> dict[str, object]:
     }
 
 
+def _resident_sandbox_public(value: object) -> dict[str, object]:
+    """Render only passive optional-execution status, never backend detail."""
+    default = {
+        "schema_version": 1,
+        "configured": False,
+        "host_status": "unprobed",
+        "supervisor_status": "unprobed",
+        "execution_status": "disabled",
+        "reason": "not_configured",
+        "storage": "presentation_ephemeral",
+    }
+    if not isinstance(value, Mapping):
+        return default
+    configured = value.get("configured")
+    schema_version = value.get("schema_version")
+    host = value.get("host_status")
+    supervisor = value.get("supervisor_status")
+    execution = value.get("execution_status")
+    reason = value.get("reason")
+    if (
+        isinstance(schema_version, bool)
+        or schema_version != 1
+        or not isinstance(configured, bool)
+        or host not in {"unprobed", "unsupported", "unavailable", "prerequisites_met"}
+        or supervisor not in {"unprobed", "unavailable", "ready"}
+        or execution not in {"disabled", "unavailable"}
+        or reason not in {
+            "not_configured", "host_unprobed", "host_unsupported", "host_unavailable",
+            "supervisor_unprobed", "supervisor_unsupported", "supervisor_unavailable",
+            "observation_missing", "observation_stale", "binding_mismatch",
+            "enforcement_missing", "execution_not_enabled", "observation_failed",
+        }
+    ):
+        return default
+    return {
+        "schema_version": 1,
+        "configured": configured,
+        "host_status": host,
+        "supervisor_status": supervisor,
+        "execution_status": execution,
+        "reason": reason,
+        "storage": "presentation_ephemeral",
+    }
+
+
+def _resident_tool_status_public(value: object) -> dict[str, object]:
+    """Render aggregate broker counts without request or authority metadata."""
+    default = {
+        "schema_version": 1,
+        "total_count": 0,
+        "pending_review_count": 0,
+        "approved_count": 0,
+        "queued_count": 0,
+        "running_count": 0,
+        "terminal_count": 0,
+        "storage": "session_ephemeral",
+    }
+    if not isinstance(value, Mapping) or value.get("schema_version") != 1:
+        return default
+    names = (
+        "total_count", "pending_review_count", "approved_count", "queued_count",
+        "running_count", "terminal_count",
+    )
+    counts = {name: value.get(name) for name in names}
+    if any(
+        isinstance(item, bool) or not isinstance(item, int) or not 0 <= item <= 128
+        for item in counts.values()
+    ):
+        return default
+    if sum(counts[name] for name in names[1:]) != counts["total_count"]:
+        return default
+    return {"schema_version": 1, **counts, "storage": "session_ephemeral"}
+
+
 def derive_resident_activity(
     *,
     provider_lifecycle: Mapping[str, object] | None = None,
@@ -134,6 +208,8 @@ class ResidentSnapshot:
     turn: Mapping[str, object]
     candidates: Mapping[str, object]
     routing: Mapping[str, object] = field(default_factory=dict)
+    sandbox_execution: Mapping[str, object] = field(default_factory=dict)
+    tool_activity: Mapping[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not isinstance(self.conversation_id, str) or not self.conversation_id:
@@ -202,6 +278,8 @@ class ResidentSnapshot:
                 "ordinary_count", "mutation_count", "storage",
             })),
             "routing": _resident_routing_public(self.routing),
+            "sandbox_execution": _resident_sandbox_public(self.sandbox_execution),
+            "tool_activity": _resident_tool_status_public(self.tool_activity),
         }
 
 

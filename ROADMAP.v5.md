@@ -448,6 +448,139 @@ unavailable evidence, stale/future timestamps, mismatches, and incomplete
 enforcement return only a sanitized unavailable reason. Synthetic readiness is
 not discovery, attestation, authority, selection, or execution permission.
 
+**COMPLETED B12A PASSIVE SANDBOX-STATUS PRESENTATION SLICE (WSL/APARTMENT
+SMOKE PASSED):** The resident snapshot now exposes a strict sanitized
+optional-execution status from a passive injected source. Its Core default is
+unconfigured/disabled; invalid or failing sources become `observation_failed`.
+Only schema/configured and closed host/supervisor/execution/reason fields cross
+the boundary. The apartment renders the status without receiving backend,
+service, transport, endpoint, path, principal, key, inventory, or evidence data.
+Polling never probes, enrolls, connects, selects, authorizes, installs, or runs.
+
+**COMPLETED S9B AGGREGATE TOOL-STATUS PRESENTATION SLICE (PENDING
+WSL/APARTMENT SMOKE):** The resident snapshot and apartment now show only
+bounded session-local counts for pending-review, approved, queued, running,
+terminal, and total tool requests. They expose no request or tool identities,
+arguments, files, resources, grants, approvals, audit entries, results,
+artifacts, or backend details. Polling remains read-only and cannot create a
+session, grant authority, approve, dispatch, cancel, probe, or execute.
+
+**COMPLETED B9A GUEST-IMAGE COMPATIBILITY CONTRACT:** Core can now declare
+one exact expected Generation 2 Linux/x86-64/VHDX image binding and compare it
+with bounded short-lived supplied verification evidence. Digest, toolchain,
+required signer, license policy, patch policy, and revision mismatches fail
+closed. A passing result is only `compatible`, never trusted or ready. The
+contract opens, hashes, downloads, installs, selects, and launches nothing and
+creates no backend authority.
+
+**COMPLETED S11A INITIAL WEB-EGRESS POLICY CONTRACT:** A pure policy seam now
+validates one canonical HTTPS destination against separate short-lived supplied
+DNS evidence. Credentials, fragments, nonstandard ports, noncanonical hosts,
+localhost, and literal or resolved non-global addresses deny. A passing result
+is not authorization or a connection claim; no DNS, socket, redirect, proxy,
+HTTP, parsing, provider, or memory work exists yet. Connect-time address and
+redirect enforcement plus private-data disclosure policy remain later gates.
+
+**COMPLETED S11B REDIRECT/CONNECT PINNING CONTRACT:** Pure follow-up decisions
+now revalidate each redirect target against fresh target-bound DNS evidence,
+deny exact redirect loops and hops beyond the fixed ceiling, and require a
+supplied connect-time address to remain canonical, globally routable, and in
+the fresh approved address set. These contracts still perform no resolution,
+socket operation, redirect following, proxy use, HTTP request, authorization,
+or disclosure. Response/decompression limits, disclosure classification, and
+the actual brokered fetch adapter remain required before network access.
+
+**COMPLETED S11C BOUNDED RESPONSE-INGRESS CONTRACT:** A separate provider-free
+collector now accepts only sanitized successful public-text metadata and
+already-decoded byte chunks with exact encoded-byte accounting. It enforces
+independent encoded and decoded ceilings, declared-length consistency, a finite
+expansion ratio, a narrow media/encoding allowlist, and strict non-NUL UTF-8.
+It performs no HTTP or decompression and accepted text remains untrusted rather
+than prompt-safe, canonical, or authoritative. Disclosure classification,
+quarantined parsing, provenance, and the brokered connector remain later gates.
+
+**COMPLETED S11D DENY-BY-DEFAULT DISCLOSURE CLASSIFICATION:** A pure content-
+free intent binds trusted Core classification metadata to a byte count and
+digest. No-data and explicitly public data pass only this classification gate;
+private disclosure is unsupported and secret disclosure is forbidden. No raw
+content, grant, approval, destination authority, provider, or network operation
+enters the decision. Any future private path must use exact destination,
+content, invocation, expiry, and revocation binding through the broker rather
+than a boolean or model claim. Quarantined parsing and fetch remain disabled.
+
+**COMPLETED S11E QUARANTINED TEXT-PREPARATION CONTRACT:** A conservative pure
+boundary now accepts bounded plain text and Markdown only, canonicalizes Unicode
+and newlines, rejects hidden/control formatting and excessive character counts,
+and binds source/prepared digests. Instruction-like prose is deliberately
+preserved and every result remains labeled `untrusted_external`; normalization
+is not prompt-injection removal. HTML, JSON, and XML require dedicated parsers.
+No prompt assembly, provider, persistence, indexing, memory, or fetch was added.
+
+**RESOLVED S11 AUTHORITY GATE:** `web.fetch` was declared only after Core gained
+invocation-bound exact prerequisite receipts. Actual network execution remains
+a separate mandatory native smoke gate.
+
+**COMPLETED F/S11 EXACT-PREREQUISITE ADMISSION GATE:** Core now has bounded,
+session-local, one-use prerequisite receipts issued only through a trusted
+adapter seam. Each binds an invocation fingerprint, exact contract requirement,
+opaque invocation resource reference, evidence digest, policy revision, expiry,
+and revocation generation. Broker queueing atomically requires every declared
+prerequisite after grant/approval presence checks and rechecks claimed receipts
+immediately before launch. Preview and inert approval remain possible without
+pretending a backend exists. No evidence discovery, model/API issuance, public
+control, resource access, networking, or execution was added. This gate enabled
+the later inert public-fetch descriptor while connector execution stayed
+separately disabled.
+
+**COMPLETED S11F INERT PUBLIC-FETCH CONTRACT:** Core now describes one
+confirmation-required, read-only `web.fetch` v1 proposal with exact public-
+network permission scope. Its untrusted arguments contain one canonical HTTPS
+URL only—no headers, body, cookies, credentials, classification, approval, or
+policy controls. Contract admission declares separate exact destination and
+disclosure prerequisites, fixed redirect/response limits, proposal-only retry,
+and reference-only results that cannot carry response text. The shared CLI/API
+does not expose proposal or execution controls for it, and the default broker
+has no network connector. Resolver/HTTP adapter integration remains a mandatory
+controlled smoke gate.
+
+**COMPLETED S11G EXACT EXECUTOR AND LAUNCH COMMITMENTS:** A Core-owned router
+now maps one exact tool/version to one explicitly supporting supervisor without
+generic or cross-tool fallback. Before launch, the broker privately carries the
+claimed prerequisite requirement/resource/evidence-digest commitments and
+constrains the launch deadline by their expiry. Provider output, broad backend
+availability, and an adapter for another tool cannot select an effect.
+
+**COMPLETED S11H FAKE-ONLY WEB PREFLIGHT/CONNECTOR SEAM:** Exact preflight now
+rejoins trusted Core-held destination/disclosure evidence to those launch
+commitments and treats the URL itself as outbound classified data. An injected
+fake-ready supervisor issues only an exact pinned no-body HTTPS GET description
+with matching TLS/HTTP host and automatic redirects, environment proxies, and
+credentials disabled; it revalidates the connected address, bounded response,
+quarantined plain-text/Markdown representation, and reference-only result.
+At this slice there was no resolver, HTTP transport, prerequisite store,
+artifact persistence, public command, or configured executor. The subsequent
+native-adapter slice remains unregistered and smoke-gated, so normal research
+escalation stays disabled.
+
+**COMPLETED S11I NATIVE WEB ADAPTERS (SMOKE-GATED):** The first
+reference implementation now includes an explicit bounded system resolver,
+session-only prerequisite/quarantine stores, and a pinned certificate-validating
+TLS 1.2+ standard-library transport. It sends one fixed-header bodyless GET to
+the approved address while retaining exact TLS SNI/HTTP Host; redirects,
+environment proxies, credentials, cookies, content/transfer encodings,
+unsupported media, ambiguous framing, excessive data, timeout, and cancellation
+fail closed. Passive views and normal API startup do not invoke it.
+
+**COMPLETED S11J TRUSTED-LOCAL ORCHESTRATION (PENDING MANDATORY WSL SMOKE):**
+The interactive local CLI alone can reserve and preview an inert exact
+`web.fetch` request without DNS or HTTP, then separately grant, approve,
+prepare short-lived destination/disclosure evidence, execute once through the
+exact router, and inspect a bounded session-quarantined artifact. `sandbox.run`
+remains non-executable; shared chat/OpenWebUI/API controls remain denied; no
+fetched text reaches a provider, prompt, memory, skill, or canonical state.
+The next gate is a controlled direct public-text WSL smoke plus local/private
+and shared-API denial tests before any model-reachable research orchestration.
+
 ## Stage G — Perception and media (LATER)
 
 Permissioned one-shot screen/window/image/PDF inspection, TTS/STT, image generation, notifications, and presence signals through the provider registry. Media is bounded and provenance-bearing; generated images are noncanonical. Voice uses explicit push-to-talk/always-listen settings, confidence, cancellation, and interruption policy. Continuous surveillance is never the default.

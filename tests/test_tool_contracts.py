@@ -170,6 +170,47 @@ class ToolContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unique"):
             ToolContractRegistry((contract, contract))
 
+    def test_web_fetch_contract_is_url_only_inert_and_prerequisite_bound(self):
+        registry = build_core_tool_contract_registry()
+        proposal = ToolProposal.from_mapping({
+            "schema_version": 1,
+            "tool_id": "web.fetch",
+            "tool_version": 1,
+            "arguments": {"url": "https://example.com/reference?q=starfur"},
+        })
+        with patch("socket.create_connection", side_effect=AssertionError("must not connect")):
+            validated = registry.validate_proposal(proposal)
+        self.assertEqual("https://example.com/reference?q=starfur", validated.arguments["url"])
+        contract = registry.get("web.fetch", 1)
+        self.assertEqual(("network.destination", "network.disclosure"), contract.resource_requirements)
+        self.assertEqual("proposal_only", contract.retry_class)
+        self.assertEqual(2048, contract.limits["max_url_characters"])
+
+        for arguments in (
+            {"url": "http://example.com/"},
+            {"url": "https://127.0.0.1/"},
+            {"url": "https://example.com/", "confirmed": True},
+            {"url": "https://example.com/", "disclosure": "public"},
+        ):
+            with self.subTest(arguments=arguments), self.assertRaises(ValueError):
+                registry.validate_proposal(ToolProposal(1, "web.fetch", 1, arguments))
+
+    def test_web_fetch_result_is_reference_only(self):
+        registry = build_core_tool_contract_registry()
+        completed = ToolResult(
+            1, "TI-web_1", "web.fetch", 1, "completed", None, "", "", None,
+            ("TF-source_1",),
+        )
+        self.assertIs(completed, registry.validate_result(completed))
+        invalid = (
+            ToolResult(1, "TI-web_2", "web.fetch", 1, "completed", None, "body", "", None, ("TF-source_2",)),
+            ToolResult(1, "TI-web_3", "web.fetch", 1, "completed", None, "", "", None, ()),
+            ToolResult(1, "TI-web_4", "web.fetch", 1, "failed", None, "", "", "execution_failed", ("TF-source_4",)),
+        )
+        for result in invalid:
+            with self.subTest(result=result), self.assertRaises(ValueError):
+                registry.validate_result(result)
+
 
 if __name__ == "__main__":
     unittest.main()

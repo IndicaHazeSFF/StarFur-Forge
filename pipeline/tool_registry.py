@@ -95,15 +95,25 @@ class ToolRegistry:
 
 
 def build_core_tool_registry() -> ToolRegistry:
-    """Describe the first future tool without enabling or executing it."""
-    return ToolRegistry((ToolDescriptor(
-        "sandbox.run",
-        "Run isolated learning exercise",
-        "Submit bounded files and declarative task metadata to an isolated sandbox backend.",
-        "mutating",
-        "sandbox.execute",
-        requires_confirmation=True,
-    ),))
+    """Describe Core tools without enabling or executing them."""
+    return ToolRegistry((
+        ToolDescriptor(
+            "sandbox.run",
+            "Run isolated learning exercise",
+            "Submit bounded files and declarative task metadata to an isolated sandbox backend.",
+            "mutating",
+            "sandbox.execute",
+            requires_confirmation=True,
+        ),
+        ToolDescriptor(
+            "web.fetch",
+            "Fetch public text",
+            "Request one bounded public HTTPS text source after exact destination and disclosure review.",
+            "read_only",
+            "network.fetch.public",
+            requires_confirmation=True,
+        ),
+    ))
 
 
 __all__ = [

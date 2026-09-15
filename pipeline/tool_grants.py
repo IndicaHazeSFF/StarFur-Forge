@@ -62,7 +62,10 @@ def _validate_ttl(value: object) -> float:
     return float(value)
 
 
-def _proposal_digest(proposal: ToolProposal) -> str:
+def tool_proposal_digest(proposal: ToolProposal) -> str:
+    """Return the canonical digest used to bind a validated proposal."""
+    if not isinstance(proposal, ToolProposal):
+        raise TypeError("tool proposal digest input is invalid")
     canonical = json.dumps(
         proposal.public_dict(), sort_keys=True, separators=(",", ":"), ensure_ascii=False,
     ).encode("utf-8")
@@ -180,7 +183,7 @@ class ToolInvocationIssuer:
             validated.tool_version,
             descriptor.permission_scope,
             descriptor.access_mode,
-            _proposal_digest(validated),
+            tool_proposal_digest(validated),
             tuple(resource_refs),
             _validate_identity(policy_revision, "tool policy revision"),
             now,
@@ -332,5 +335,5 @@ class SessionToolGrantController:
 
 __all__ = [
     "SessionToolGrant", "SessionToolGrantController", "ToolGrantError", "ToolInvocation",
-    "ToolInvocationIssuer", "tool_invocation_fingerprint",
+    "ToolInvocationIssuer", "tool_invocation_fingerprint", "tool_proposal_digest",
 ]
