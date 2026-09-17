@@ -153,10 +153,12 @@ def detect_command_help(query: str) -> CommandHelp | None:
                 "tool propose sandbox.run <JSON arguments>", "tool grant <TI-id>",
                 'tool propose web.fetch {"url":"https://..."}', "tool approve <TI-id>",
                 "tool prepare <TI-id>", "tool execute <TI-id>", "tool artifact <TF-id>",
+                "tool research <TF-id>: <question>", "tool research brief <RR-id>",
+                "tool research answer <RR-id>",
                 "tool deny <TI-id>", "tool revoke <TI-id>", "tool cancel <TI-id>",
             ),
             notes=(
-                "sandbox.run execution remains disabled. web.fetch is explicit, one-use, public-text only, and native-smoke gated. Shared chat/OpenWebUI/API requests cannot control tools.",
+                "sandbox.run execution remains disabled. web.fetch is explicit, one-use, and public-text only. tool research returns nonpublishing cited claim proposals from one quarantined source. Shared chat/OpenWebUI/API requests cannot control tools.",
             ),
         )
 

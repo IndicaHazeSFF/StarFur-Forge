@@ -1,6 +1,6 @@
 # Pending copy manifest
 
-## Pipeline (21)
+## Pipeline (39)
 
 - `pipeline/assistant.py`
 - `pipeline/application.py`
@@ -23,12 +23,35 @@
 - `pipeline/tool_web_preflight.py`
 - `pipeline/tool_web_connector.py`
 - `pipeline/tool_web_native.py`
+- `pipeline/research_sources.py`
+- `pipeline/research_claims.py`
+- `pipeline/research_disclosure.py`
+- `pipeline/research_prompt.py`
+- `pipeline/research_coordinator.py`
+- `pipeline/research_provider.py`
+- `pipeline/research_review.py`
+- `pipeline/research_selection.py`
+- `pipeline/research_evidence.py`
+- `pipeline/research_brief.py`
+- `pipeline/research_answer_policy.py`
+- `pipeline/factual_research_policy.py`
+- `pipeline/research_discovery.py`
+- `pipeline/tool_web_search.py`
+- `pipeline/tool_web_search_preflight.py`
+- `pipeline/tool_web_search_connector.py`
+- `pipeline/task_profiles.py`
+- `pipeline/task_routing.py`
+
+## Configuration (2)
+
+- `config/assistant.json`
+- `config/assistant_policy.md`
 
 ## Presentation (1)
 
 - `presentation/apartment.html`
 
-## Tests (19)
+## Tests (37)
 
 - `tests/test_api.py`
 - `tests/test_application.py`
@@ -49,6 +72,24 @@
 - `tests/test_tool_web_preflight.py`
 - `tests/test_tool_web_connector.py`
 - `tests/test_tool_web_native.py`
+- `tests/test_research_sources.py`
+- `tests/test_research_claims.py`
+- `tests/test_research_disclosure.py`
+- `tests/test_research_prompt.py`
+- `tests/test_research_coordinator.py`
+- `tests/test_research_provider.py`
+- `tests/test_research_review.py`
+- `tests/test_research_selection.py`
+- `tests/test_research_evidence.py`
+- `tests/test_research_brief.py`
+- `tests/test_research_answer_policy.py`
+- `tests/test_factual_research_policy.py`
+- `tests/test_research_discovery.py`
+- `tests/test_tool_web_search.py`
+- `tests/test_tool_web_search_preflight.py`
+- `tests/test_tool_web_search_connector.py`
+- `tests/test_task_profiles.py`
+- `tests/test_task_routing.py`
 
 ## Documentation and policy (5)
 
@@ -84,4 +125,63 @@ Assistant CLI can reserve an inert `web.fetch`, grant and approve it, prepare
 short-lived exact DNS/disclosure evidence, execute it once, and inspect a
 bounded quarantined artifact. Shared chat/API, passive views, providers,
 prompts, memory, skills, and `sandbox.run` remain disconnected from execution.
-A controlled WSL public-text and denial smoke is mandatory before continuing.
+The controlled WSL smoke passed: direct public text was quarantined, loopback
+was denied before resolution, and shared chat/API refused tool control. Future
+research use still requires a separate source-data framing/evidence boundary.
+Provider-free S11k/S11l now supply that initial boundary: quarantined public
+artifacts can become bounded digest-bound untrusted source packets, and future
+provider output can be validated only as packet-local cited claim proposals.
+Neither contract calls a provider, verifies truth, composes an answer, or writes
+memory/learning/adventure/canon. Bounded source selection, disclosure approval,
+corroboration/conflict handling, and final cited-answer policy remain pending.
+S11m/S11n add a pure local-only provider disclosure decision and a matching
+claim-prompt envelope. Hosted disclosure remains unsupported, internal
+artifact/network/authority bindings stay out of the source frame, and no
+provider is selected or called. The next coordinator crosses the live-model
+boundary and is a focused smoke-test gate.
+S11o adds the fake-provider-tested nonpublishing coordinator. It has no runtime
+provider registration, retry/fallback, final-answer composition, citation
+renderer, or state writes. The next application-wiring slice is the first live-
+model boundary and requires the focused smoke test.
+S11p wires one exact local-Ollama research task into the trusted local CLI for
+explicit review of one quarantined public-text artifact. It returns only strict
+packet-local cited claim proposals and cannot enter ordinary chat, publish an
+answer, fall back, retry, or write any memory/learning/adventure/canonical
+state. Shared chat/API remains denied. The WSL/Ollama smoke passed with cited
+Python bytecode-ignore claims and no assistant proposal. S11q adds bounded
+session-local `RR-...` review records with list/inspect only; review source text
+is not retained and no approval/publication path exists. S11r adds pure bounded
+selection of one to eight already-quarantined artifacts; this is not
+corroboration or an answer. S11s adds citation-diversity labels only; source
+and host counts are always presented as not verification. S11t adds a
+provider-free unverified cited brief for an existing review record; it remains
+outside normal chat and cannot publish an answer or state. S11u adds a separate
+user-invoked unverified answer gate: reviewed cited claims can be displayed, or
+the system reports insufficient support. Normal chat stays outside the boundary.
+S11v adds the first pure classifier for explicit research, freshness-sensitive,
+and high-stakes factual requests. All other normal chat remains explicitly
+unclassified, fictional generation remains distinct, and the decision grants no
+provider, tool, network, consent, publication, or state authority.
+S11w wires only the mandatory-research outcome into normal chat before retrieval
+or provider use. It responds honestly that automatic research is not connected,
+does not create conversation/proposal state, and preserves fictional generation
+unless verification is explicit. Automatic discovery and publication remain
+outside this slice and require a focused WSL smoke before further automation.
+S11x adds only a content-free eligibility/consent boundary: local discovery may
+be eligible, public-web discovery requires exact broker confirmation, and
+private/secret query disclosure denies. It retains no query text and creates no
+tool, provider, network, source, or answer authority.
+S11y adds an inert confirmation-required `web.search` descriptor and query-only
+contract with exact search-service/disclosure prerequisites and reference-only
+results. No command, executor, search provider, network request, result parser,
+or automatic chat path exists.
+S11z adds a distinct provider-free quarantined search-result artifact with up to
+eight canonical public HTTPS candidates and untrusted titles. It contains no
+query text/snippets/evidence/authority, and every URL still requires a separate
+exact `web.fetch` path.
+S11aa adds only a bounded session-memory exact-reference store for those search
+artifacts. It has no list/query/persistence/application/broker path and creates
+no search execution authority.
+S11ab adds a pure exact search preflight over broker commitments, a short-lived
+configured service record, and public-query disclosure metadata. It performs no
+I/O and creates no prerequisite, connector, provider, or answer authority.

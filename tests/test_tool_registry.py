@@ -75,6 +75,17 @@ class ToolRegistryTests(unittest.TestCase):
         for forbidden in ("executor", "socket", "credential", "cookie"):
             self.assertNotIn(forbidden, rendered)
 
+    def test_core_registry_describes_confirmed_public_search_without_provider_authority(self):
+        registry = build_core_tool_registry()
+        descriptor = registry.get("web.search")
+        self.assertIsNotNone(descriptor)
+        self.assertEqual("read_only", descriptor.access_mode)
+        self.assertEqual("network.search.public", descriptor.permission_scope)
+        self.assertTrue(descriptor.requires_confirmation)
+        rendered = repr(descriptor.public_dict()).casefold()
+        for forbidden in ("executor", "provider", "engine", "credential", "query_text"):
+            self.assertNotIn(forbidden, rendered)
+
 
 if __name__ == "__main__":
     unittest.main()

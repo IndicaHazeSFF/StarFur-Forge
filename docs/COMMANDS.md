@@ -79,6 +79,11 @@ Inside Assistant Mode:
     tool prepare <TI-id>
     tool execute <TI-id>
     tool artifact <TF-id>
+    tool research <TF-id>[, TF-id...]: <question>
+    tool research list
+    tool research inspect <RR-id>
+    tool research brief <RR-id>
+    tool research answer <RR-id>
     tool status <TI-id>
     tool deny <TI-id>
     tool revoke <TI-id>
@@ -93,6 +98,22 @@ destination and URL-only public-disclosure evidence; `tool execute` consumes
 that evidence once and may perform one pinned, credential-free HTTPS GET for
 plain text or Markdown. The result contains only a quarantined artifact
 reference, and `tool artifact` is the bounded local inspection step.
+`tool research` explicitly submits one to eight already-quarantined public-text
+artifacts to the configured local research task profile. It returns strict packet-local
+cited claim proposals for review, not a final answer, and cannot create memory,
+learning, adventure, or canonical state. It is unavailable through shared
+chat/API requests and does not add automatic research behavior. Selecting
+multiple sources does not itself establish corroboration or truth.
+Each generation also creates a bounded session-local `RR-...` review record.
+`tool research list` and `tool research inspect <RR-id>` reopen only the cited
+claim proposals and public source labels; reviews are not approvals and vanish
+on session eviction or restart.
+`tool research brief <RR-id>` deterministically presents reviewed claims with
+their public citations, still labeled source-backed but unverified. It is not a
+new model response or verified final answer.
+`tool research answer <RR-id>` is the explicit local answer gate: it either
+renders those same cited claims as source-backed but unverified, or says no
+supported claims exist. It does not call a model, infer truth, or create state.
 
 Tool requests and fetched artifacts disappear when their bounded application
 session is evicted or the process restarts. Changing the active persona,

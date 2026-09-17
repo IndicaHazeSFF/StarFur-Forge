@@ -211,6 +211,49 @@ class ToolContractTests(unittest.TestCase):
             with self.subTest(result=result), self.assertRaises(ValueError):
                 registry.validate_result(result)
 
+    def test_web_search_contract_is_query_only_inert_and_confirmation_bound(self):
+        registry = build_core_tool_contract_registry()
+        proposal = ToolProposal.from_mapping({
+            "schema_version": 1,
+            "tool_id": "web.search",
+            "tool_version": 1,
+            "arguments": {"query": "  current   RTX 4070 price  "},
+        })
+        with patch("socket.create_connection", side_effect=AssertionError("must not connect")):
+            validated = registry.validate_proposal(proposal)
+        self.assertEqual("current RTX 4070 price", validated.arguments["query"])
+        contract = registry.get("web.search", 1)
+        self.assertEqual(("network.search", "network.disclosure"), contract.resource_requirements)
+        self.assertEqual("proposal_only", contract.retry_class)
+        self.assertEqual(512, contract.limits["max_query_characters"])
+        self.assertEqual(1024, contract.limits["max_query_bytes"])
+
+        for arguments in (
+            {"query": ""},
+            {"query": "hidden\u200bquery"},
+            {"query": "safe", "provider": "hosted"},
+            {"query": "safe", "confirmed": True},
+            {"query": "safe", "classification": "public"},
+        ):
+            with self.subTest(arguments=arguments), self.assertRaises((TypeError, ValueError)):
+                registry.validate_proposal(ToolProposal(1, "web.search", 1, arguments))
+
+    def test_web_search_result_is_one_quarantined_reference_only(self):
+        registry = build_core_tool_contract_registry()
+        completed = ToolResult(
+            1, "TI-search_1", "web.search", 1, "completed", None, "", "", None,
+            ("TF-search_1",),
+        )
+        self.assertIs(completed, registry.validate_result(completed))
+        invalid = (
+            ToolResult(1, "TI-search_2", "web.search", 1, "completed", None, "raw", "", None, ("TF-search_2",)),
+            ToolResult(1, "TI-search_3", "web.search", 1, "completed", None, "", "", None, ()),
+            ToolResult(1, "TI-search_4", "web.search", 1, "failed", None, "", "", "execution_failed", ("TF-search_4",)),
+        )
+        for result in invalid:
+            with self.subTest(result=result), self.assertRaises(ValueError):
+                registry.validate_result(result)
+
 
 if __name__ == "__main__":
     unittest.main()

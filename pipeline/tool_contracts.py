@@ -3,8 +3,9 @@
 Validation in this module is application-level input validation only.  It does
 not authenticate a caller, grant permission, record confirmation, issue an
 invocation identity, select an executor, materialize files, or execute work.
-The initial contracts describe bounded inert ``sandbox.run`` exercise data and
-one URL-only ``web.fetch`` proposal.  Neither contract exposes an executor.
+The contracts describe bounded inert ``sandbox.run`` exercise data, one
+URL-only ``web.fetch`` proposal, and one query-only ``web.search`` proposal.
+No contract exposes an executor or provider.
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ import json
 import re
 from types import MappingProxyType
 from typing import Callable, Iterable, Mapping
+import unicodedata
 
 from .tool_registry import MAX_REGISTERED_TOOLS, TOOL_ID_RE, ToolDescriptor, build_core_tool_registry
 from .sandbox_paths import validate_portable_sandbox_path, validate_portable_sandbox_tree
@@ -36,6 +38,8 @@ MAX_SANDBOX_OBJECTIVE_CHARACTERS = 1200
 MAX_TOOL_RESULT_TEXT_CHARACTERS = 8192
 MAX_TOOL_RESULT_TEXT_BYTES = 8192
 MAX_TOOL_RESULT_ARTIFACTS = 16
+MAX_WEB_SEARCH_QUERY_CHARACTERS = 512
+MAX_WEB_SEARCH_QUERY_BYTES = 1024
 
 TOOL_RETRY_CLASSES = frozenset({"never", "proposal_only"})
 TOOL_RESULT_OUTCOMES = frozenset({
@@ -475,11 +479,50 @@ def validate_web_fetch_result(result: ToolResult) -> ToolResult:
     return result
 
 
+def validate_web_search_arguments(arguments: Mapping[str, object]) -> Mapping[str, object]:
+    """Validate one inert public-query proposal without selecting a search service."""
+    if not isinstance(arguments, Mapping):
+        raise TypeError("web.search arguments must be an object")
+    _require_exact_fields(arguments, frozenset({"query"}), "web.search arguments")
+    query = arguments["query"]
+    if not isinstance(query, str):
+        raise TypeError("web.search query must be text")
+    query = unicodedata.normalize("NFC", " ".join(query.strip().split()))
+    if (
+        not query
+        or len(query) > MAX_WEB_SEARCH_QUERY_CHARACTERS
+        or any(unicodedata.category(character) in {"Cc", "Cf"} for character in query)
+    ):
+        raise ValueError("web.search query is invalid")
+    try:
+        size = len(query.encode("utf-8"))
+    except UnicodeEncodeError as error:
+        raise ValueError("web.search query is not valid UTF-8") from error
+    if size > MAX_WEB_SEARCH_QUERY_BYTES:
+        raise ValueError("web.search query size limit exceeded")
+    return MappingProxyType({"query": query})
+
+
+def validate_web_search_result(result: ToolResult) -> ToolResult:
+    """Require one quarantined reference; generic result text remains forbidden."""
+    if not isinstance(result, ToolResult):
+        raise TypeError("web.search result is invalid")
+    if result.exit_code is not None or result.stdout or result.stderr:
+        raise ValueError("web.search result cannot expose process or response text")
+    if result.outcome == "completed" and len(result.artifact_refs) != 1:
+        raise ValueError("completed web.search result requires one quarantined artifact reference")
+    if result.outcome != "completed" and result.artifact_refs:
+        raise ValueError("non-completed web.search result cannot include artifact references")
+    return result
+
+
 def build_core_tool_contract_registry() -> ToolContractRegistry:
     descriptors = build_core_tool_registry()
     descriptor = descriptors.get("sandbox.run")
     web_descriptor = descriptors.get("web.fetch")
-    if descriptor is None or web_descriptor is None:  # Defensive fail-closed guard against catalog drift.
+    search_descriptor = descriptors.get("web.search")
+    if descriptor is None or web_descriptor is None or search_descriptor is None:
+        # Defensive fail-closed guard against catalog drift.
         raise ValueError("core tool descriptor is unavailable")
     return ToolContractRegistry((
         ToolContract(
@@ -512,14 +555,29 @@ def build_core_tool_contract_registry() -> ToolContractRegistry:
                 "max_decoded_bytes": MAX_WEB_DECODED_BYTES,
             },
         ),
+        ToolContract(
+            descriptor=search_descriptor,
+            tool_version=1,
+            retry_class="proposal_only",
+            argument_validator=validate_web_search_arguments,
+            result_validator=validate_web_search_result,
+            resource_requirements=("network.search", "network.disclosure"),
+            limits={
+                "max_query_characters": MAX_WEB_SEARCH_QUERY_CHARACTERS,
+                "max_query_bytes": MAX_WEB_SEARCH_QUERY_BYTES,
+                "max_artifact_references": 1,
+            },
+        ),
     ))
 
 
 __all__ = [
     "MAX_TOOL_JSON_DEPTH", "MAX_TOOL_PROPOSAL_BYTES", "MAX_TOOL_RESULT_BYTES",
     "MAX_TOOL_RESULT_TEXT_BYTES",
+    "MAX_WEB_SEARCH_QUERY_BYTES", "MAX_WEB_SEARCH_QUERY_CHARACTERS",
     "TOOL_PROPOSAL_SCHEMA_VERSION", "TOOL_RESULT_SCHEMA_VERSION", "ToolContract",
     "ToolContractRegistry", "ToolProposal", "ToolResult", "build_core_tool_contract_registry",
     "decode_tool_proposal_json", "decode_tool_result_json", "validate_sandbox_run_arguments",
     "validate_sandbox_run_result", "validate_web_fetch_arguments", "validate_web_fetch_result",
+    "validate_web_search_arguments", "validate_web_search_result",
 ]

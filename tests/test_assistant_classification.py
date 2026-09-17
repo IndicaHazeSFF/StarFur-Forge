@@ -94,6 +94,54 @@ class AssistantClassificationTests(unittest.TestCase):
         self.assertEqual(session.proposals, [])
         self.assertIn("proposal_skipped", [event["event"] for event in session.trace.events])
 
+    def test_mandatory_research_request_fails_closed_before_retrieval_or_provider(self):
+        calls = []
+        retrievals = []
+        session = AssistantSession(
+            self.config,
+            "Persona",
+            chat=lambda **kwargs: calls.append(kwargs) or {"message": {"content": "invented"}},
+            memory_loader=lambda **kwargs: retrievals.append(kwargs) or [],
+        )
+        response = session.respond("What is the current price of this GPU?")
+        self.assertIn("needs verified, source-backed research", response)
+        self.assertIn("will not invent an answer", response)
+        self.assertEqual([], calls)
+        self.assertEqual([], retrievals)
+        self.assertEqual([], session.messages)
+        self.assertEqual([], session.proposals)
+        event = next(item for item in session.trace.events if item["event"] == "factual_research_required")
+        self.assertEqual("freshness_sensitive_request", event["reason"])
+        self.assertNotIn("query", event)
+
+    def test_fictional_high_stakes_language_can_remain_in_story_generation(self):
+        calls = []
+        session = AssistantSession(
+            self.config,
+            "Persona",
+            chat=lambda **kwargs: calls.append(kwargs) or {"message": {"content": "A fictional prescription."}},
+            memory_loader=lambda **kwargs: [],
+        )
+        session.roleplay_state = session.roleplay_state.begin()
+        self.assertEqual(
+            "A fictional prescription.",
+            session.respond("What medication dosage does the ship doctor prescribe?"),
+        )
+        self.assertEqual(1, len(calls))
+
+    def test_explicit_verification_in_roleplay_still_fails_closed(self):
+        calls = []
+        session = AssistantSession(
+            self.config,
+            "Persona",
+            chat=lambda **kwargs: calls.append(kwargs) or {"message": {"content": "invented"}},
+            memory_loader=lambda **kwargs: [],
+        )
+        session.roleplay_state = session.roleplay_state.begin()
+        response = session.respond("Pause the story and verify this using sources.")
+        self.assertIn("will not invent an answer", response)
+        self.assertEqual([], calls)
+
 
     def test_speculative_future_statement_skips_proposal_generation(self):
         calls = []

@@ -15,7 +15,7 @@ from pipeline.assistant import AssistantConfig, AssistantSession, load_config
 from pipeline.document_intake import prepare_document_text
 from pipeline.provider_registry import ChatProviderRegistration, ChatProviderRegistry
 from pipeline.task_profiles import (
-    TASK_ADVENTURE_TURN_GENERATION, TASK_ADVENTURE_TURN_MUTATION_GENERATION, TASK_ASSISTANT_CHAT, TASK_DOCUMENT_ANNOTATION, TASK_DOCUMENT_ANNOTATION_FALLBACK, TaskProfile, TaskProfiles,
+    TASK_ADVENTURE_TURN_GENERATION, TASK_ADVENTURE_TURN_MUTATION_GENERATION, TASK_ASSISTANT_CHAT, TASK_DOCUMENT_ANNOTATION, TASK_DOCUMENT_ANNOTATION_FALLBACK, TASK_RESEARCH_CLAIM_GENERATION, TaskProfile, TaskProfiles,
     load_task_profiles,
 )
 
@@ -186,6 +186,58 @@ class TaskProfileTests(unittest.TestCase):
         self.assertEqual(result.candidates, ())
         self.assertEqual(provider.calls[0]["model"], "annotation-model")
         self.assertEqual(provider.calls[0]["options"], {"temperature": 0.1, "num_predict": 333})
+
+    def test_research_claim_provider_uses_one_exact_local_route(self):
+        profiles = TaskProfiles({
+            TASK_RESEARCH_CLAIM_GENERATION: TaskProfile(
+                TASK_RESEARCH_CLAIM_GENERATION,
+                provider="ollama",
+                model="research-model",
+                max_output_tokens=777,
+            ),
+        })
+        provider = FakeProvider()
+        session = AssistantSession(
+            config_with_profiles(profiles), "Persona", provider=provider,
+            memory_loader=lambda **_kwargs: [], policy="Policy",
+        )
+        adapter = session.local_research_claim_provider()
+
+        content = adapter.propose_claims(
+            ({"role": "system", "content": "strict"}, {"role": "user", "content": "packet"}),
+            model="research-model",
+        )
+
+        self.assertEqual("answer", content)
+        self.assertEqual("local", adapter.target.deployment)
+        self.assertEqual("ollama", adapter.target.provider_id)
+        self.assertEqual("research-model", provider.calls[0]["model"])
+        self.assertEqual({"temperature": 0.4, "num_predict": 777}, provider.calls[0]["options"])
+        self.assertEqual(1, len(provider.calls))
+
+    def test_research_claim_provider_rejects_configured_fallback_route(self):
+        profiles = TaskProfiles({
+            TASK_RESEARCH_CLAIM_GENERATION: TaskProfile(
+                TASK_RESEARCH_CLAIM_GENERATION,
+                provider="missing",
+                model="missing-model",
+                fallback_task=TASK_ASSISTANT_CHAT,
+            ),
+            TASK_ASSISTANT_CHAT: TaskProfile(
+                TASK_ASSISTANT_CHAT,
+                provider="ollama",
+                model="qwen3:8b",
+            ),
+        })
+        provider = FakeProvider()
+        session = AssistantSession(
+            config_with_profiles(profiles), "Persona", provider=provider,
+            memory_loader=lambda **_kwargs: [], policy="Policy",
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "local research provider route is unavailable"):
+            session.local_research_claim_provider()
+        self.assertEqual([], provider.calls)
 
     def test_document_annotation_uses_explicit_bounded_fallback_profile(self):
         profiles = TaskProfiles({

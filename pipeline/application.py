@@ -47,6 +47,13 @@ from pipeline.persona_registry import PersonaRegistry, load_persona_package
 from pipeline.persona_runtime import PersonaRuntimeRegistry
 from pipeline.provider_registry import ChatProviderRegistry
 from pipeline.providers import ChatProvider, provider_health_snapshot, provider_is_configured
+from pipeline.research_coordinator import ResearchClaimCoordinator, ResearchCoordinatorError
+from pipeline.research_brief import build_research_cited_brief
+from pipeline.research_answer_policy import evaluate_research_answer_policy
+from pipeline.research_disclosure import ResearchDisclosureIntent, evaluate_research_disclosure
+from pipeline.research_review import SessionResearchReviewStore
+from pipeline.research_selection import select_research_sources
+from pipeline.research_sources import build_research_source_packet
 from pipeline.resident_presentation import ResidentPresentationPlan
 from pipeline.resident_snapshot import ResidentSnapshot
 from pipeline.sandbox_execution_status import (
@@ -76,6 +83,7 @@ class _SessionSlot:
     lock: threading.RLock
     session_instance_id: str
     tool_broker: ToolBroker
+    research_reviews: SessionResearchReviewStore
     local_web_runtime: object | None = None
     active_requests: int = 0
 
@@ -202,10 +210,10 @@ class AssistantApplication:
                 ToolExecutionBinding("web.fetch", 1, local_web_runtime.supervisor),
             ))
         return _SessionSlot(
-            session,
-            threading.RLock(),
-            session_instance_id,
-            ToolBroker(
+            session=session,
+            lock=threading.RLock(),
+            session_instance_id=session_instance_id,
+            tool_broker=ToolBroker(
                 self._tool_contracts,
                 ToolInvocationIssuer(self._tool_contracts),
                 SessionToolGrantController(),
@@ -213,7 +221,8 @@ class AssistantApplication:
                 prerequisites=prerequisites,
                 supervisor=supervisor,
             ),
-            local_web_runtime,
+            research_reviews=SessionResearchReviewStore(),
+            local_web_runtime=local_web_runtime,
         )
 
     def _attach_capability_manifest(self, session):
@@ -464,6 +473,11 @@ class AssistantApplication:
                 "tool prepare <TI-id>\n"
                 "tool execute <TI-id>\n"
                 "tool artifact <TF-id>\n"
+                "tool research <TF-id>: <question>\n"
+                "tool research list\n"
+                "tool research inspect <RR-id>\n"
+                "tool research brief <RR-id>\n"
+                "tool research answer <RR-id>\n"
                 "tool deny <TI-id>\n"
                 "tool revoke <TI-id>\n"
                 "tool cancel <TI-id>"
@@ -563,6 +577,178 @@ class AssistantApplication:
                 f"Characters: {artifact.payload.character_count}\n"
                 f"Digest: {artifact.payload.prepared_sha256}\n\n{visible}{suffix}"
             )
+
+        if lowered == "tool research list":
+            summaries = slot.research_reviews.summaries()
+            if not summaries:
+                return "No session-local research claim reviews are available."
+            lines = ["Session-local research claim reviews:"]
+            for item in summaries:
+                lines.append(
+                    f"{item['review_id']} [{item['status']}] "
+                    f"{item['claim_count']} claim(s), {item['source_count']} source(s)"
+                )
+            lines.append("Review records are noncanonical and disappear when this session is evicted or restarted.")
+            return "\n".join(lines)
+
+        review_match = re.fullmatch(
+            r"tool\s+research\s+inspect\s+(RR-[0-9a-f]{24})",
+            command,
+            flags=re.IGNORECASE,
+        )
+        if review_match:
+            review_id = "RR-" + review_match.group(1)[3:]
+            review = slot.research_reviews.get(review_id)
+            if review is None:
+                return "Research claim review was not found in this local session."
+            lines = [
+                f"Research claim review {review.review_id} [{review.status}]",
+                "Sources:",
+            ]
+            lines.extend(f"- {source_id} {url}" for source_id, url in review.source_labels)
+            if review.result.claims.claims:
+                lines.append("Untrusted cited claim proposals:")
+                for claim in review.result.claims.claims:
+                    lines.append(f"{claim.claim_id} [confidence {claim.confidence:.2f}] {claim.statement}")
+                    lines.append("  Cites: " + ", ".join(claim.source_ids))
+                    evidence = review.evidence.for_claim(claim.claim_id)
+                    if evidence is not None:
+                        lines.append(
+                            f"  Citation diversity: {evidence.citation_diversity} "
+                            f"({evidence.cited_source_count} source(s), {evidence.cited_host_count} host(s)); "
+                            "not verification."
+                        )
+            else:
+                lines.append("No directly supported claims were proposed from these sources.")
+            lines.append(
+                "Read-only review record; it is not a final answer and cannot create memory, learning, adventure, or canonical state."
+            )
+            return "\n".join(lines)
+
+        brief_match = re.fullmatch(
+            r"tool\s+research\s+brief\s+(RR-[0-9a-f]{24})",
+            command,
+            flags=re.IGNORECASE,
+        )
+        if brief_match:
+            review_id = "RR-" + brief_match.group(1)[3:]
+            review = slot.research_reviews.get(review_id)
+            if review is None:
+                return "Research claim review was not found in this local session."
+            try:
+                brief = build_research_cited_brief(review)
+            except (TypeError, ValueError) as error:
+                return f"Research brief was rejected safely: {error}"
+            if not brief.claims:
+                return (
+                    f"Source-backed research brief for {brief.review_id}: no directly supported claims were proposed. "
+                    "No final answer was composed."
+                )
+            lines = [
+                f"Source-backed research brief for {brief.review_id} (unverified; not a final answer)",
+            ]
+            for claim in brief.claims:
+                lines.append(f"- {claim.statement}")
+                lines.extend(f"  Source: {citation.url}" for citation in claim.citations)
+                lines.append(f"  Citation diversity: {claim.citation_diversity}; not verification.")
+            lines.append(
+                "Deterministic presentation of reviewed claim proposals only; no memory, learning, adventure, or canonical state was created."
+            )
+            return "\n".join(lines)
+
+        answer_match = re.fullmatch(
+            r"tool\s+research\s+answer\s+(RR-[0-9a-f]{24})",
+            command,
+            flags=re.IGNORECASE,
+        )
+        if answer_match:
+            review_id = "RR-" + answer_match.group(1)[3:]
+            review = slot.research_reviews.get(review_id)
+            if review is None:
+                return "Research claim review was not found in this local session."
+            try:
+                decision = evaluate_research_answer_policy(review)
+                brief = build_research_cited_brief(review)
+            except (TypeError, ValueError) as error:
+                return f"Research answer was rejected safely: {error}"
+            if decision.status == "insufficient_support":
+                return (
+                    "Research answer unavailable: no directly supported claims were proposed from the reviewed sources. "
+                    "StarFur will not invent an answer."
+                )
+            lines = [
+                "Research answer (source-backed, unverified)",
+                "This is a deterministic presentation of explicitly reviewed cited claims, not verified truth:",
+            ]
+            for claim in brief.claims:
+                lines.append(f"- {claim.statement}")
+                lines.extend(f"  Source: {citation.url}" for citation in claim.citations)
+                lines.append(f"  Citation diversity: {claim.citation_diversity}; not verification.")
+            lines.append(
+                "No model was called for this answer. No memory, learning, adventure, or canonical state was created."
+            )
+            return "\n".join(lines)
+
+        research_match = re.fullmatch(
+            r"tool\s+research\s+((?:TF-[A-Za-z0-9_-]{1,64})(?:\s*,\s*TF-[A-Za-z0-9_-]{1,64}){0,7})\s*:\s*(.+)",
+            command,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        if research_match:
+            if slot.local_web_runtime is None:
+                return "Local research source storage is unavailable."
+            artifact_refs = tuple(
+                "TF-" + item.strip()[3:]
+                for item in research_match.group(1).split(",")
+            )
+            artifacts = []
+            for artifact_ref in artifact_refs:
+                artifact = slot.local_web_runtime.quarantine.get(artifact_ref)
+                if artifact is None:
+                    return "Research source was not found in this local session."
+                artifacts.append((artifact_ref, artifact))
+            try:
+                sources = select_research_sources(artifacts)
+                packet = build_research_source_packet(research_match.group(2), sources)
+                provider = slot.session.local_research_claim_provider()
+                target = provider.target
+                intent = ResearchDisclosureIntent.from_packet(packet, target)
+                decision = evaluate_research_disclosure(intent, packet)
+                result = ResearchClaimCoordinator(provider).propose(packet, target, decision)
+                review = slot.research_reviews.create(packet, result)
+            except ResearchCoordinatorError as error:
+                return (
+                    f"Research claim generation failed safely ({error.reason}); "
+                    "no claim, memory, learning record, or canonical state was published."
+                )
+            except (TypeError, ValueError, RuntimeError) as error:
+                return f"Research request was rejected safely: {error}"
+            lines = [
+                "Research claim proposals (untrusted; not a final answer)",
+                f"Review: {review.review_id} (session-local)",
+                "Sources:",
+            ]
+            lines.extend(f"- {source.source_id} {source.url}" for source in sources)
+            if result.claims.claims:
+                for claim in result.claims.claims:
+                    lines.append(
+                        f"{claim.claim_id} [confidence {claim.confidence:.2f}] {claim.statement}"
+                    )
+                    lines.append("  Cites: " + ", ".join(claim.source_ids))
+                    evidence = review.evidence.for_claim(claim.claim_id)
+                    if evidence is not None:
+                        lines.append(
+                            f"  Citation diversity: {evidence.citation_diversity} "
+                            f"({evidence.cited_source_count} source(s), {evidence.cited_host_count} host(s)); "
+                            "not verification."
+                        )
+            else:
+                lines.append("No directly supported claims were proposed from this source.")
+            lines.append(
+                "Review output only; no final answer, memory, learning, adventure, or canonical state was created."
+            )
+            lines.append(f"Use tool research inspect {review.review_id} to reopen this claim review.")
+            return "\n".join(lines)
 
         action_match = re.fullmatch(
             r"tool\s+(status|preview|grant|approve|prepare|execute|deny|revoke|cancel)\s+(TI-[A-Za-z0-9_-]{1,64})",

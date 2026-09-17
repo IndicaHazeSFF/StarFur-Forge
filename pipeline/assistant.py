@@ -94,13 +94,19 @@ from pipeline.providers import (
     DisabledChatProvider, OllamaChatProvider, normalize_chat_completion,
     normalize_chat_stream_chunk, provider_health_snapshot, provider_is_configured,
 )
+from pipeline.research_disclosure import ResearchProviderTarget
+from pipeline.research_provider import LocalResearchClaimProvider
+from pipeline.factual_research_policy import (
+    FactualResearchContext,
+    classify_factual_research_request,
+)
 from pipeline.provider_registry import ChatProviderRegistration, ChatProviderRegistry
 from pipeline.provider_state import ProviderLifecycle
 from pipeline.retrieval import DeterministicMemoryRetriever, MemoryLoaderRetriever, MemoryRetriever
 from pipeline.task_execution import RoutedChatExecutor, RoutedTaskExecutionError
 from pipeline.task_profiles import (
     TASK_ADVENTURE_TURN_GENERATION, TASK_ADVENTURE_TURN_MUTATION_GENERATION,
-    TASK_ASSISTANT_CHAT, TASK_ASSISTANT_PROPOSAL, TaskProfiles,
+    TASK_ASSISTANT_CHAT, TASK_ASSISTANT_PROPOSAL, TASK_RESEARCH_CLAIM_GENERATION, TaskProfiles,
     load_task_profiles, validate_generation_options,
 )
 from pipeline.task_routing import (
@@ -775,6 +781,43 @@ class AssistantSession:
         except Exception as error:
             self.provider_lifecycle.fail(error)
             raise
+
+    def local_research_claim_provider(self):
+        """Bind one exact local task route for explicit cited-claim review.
+
+        This method neither fetches sources nor authorizes disclosure.  The
+        returned adapter performs one routed completion only; request failures
+        never trigger runtime fallback or replay.
+        """
+        _, decision = self._task_route(TASK_RESEARCH_CLAIM_GENERATION)
+        selected = decision.selected
+        if (
+            selected is None
+            or selected.provider_id != "ollama"
+            or selected.task_id != TASK_RESEARCH_CLAIM_GENERATION
+            or decision.selected_index != 0
+        ):
+            raise RuntimeError("local research provider route is unavailable")
+        target = ResearchProviderTarget.create(
+            selected.provider_id,
+            selected.profile.model,
+            "local",
+        )
+
+        def complete(messages, model):
+            if model != target.model:
+                raise ValueError("research model changed after route selection")
+            return self._provider_complete(
+                messages,
+                model=model,
+                task_id=TASK_RESEARCH_CLAIM_GENERATION,
+            )
+
+        return LocalResearchClaimProvider(
+            target,
+            complete,
+            available=provider_is_configured(self.chat_provider_registry.get(selected.provider_id)),
+        )
 
     def _set_latest_task_route_outcome(self, outcome, *, only_if_submitted=False):
         """Update the current bounded route trace without retaining provider data."""
@@ -3548,6 +3591,24 @@ class AssistantSession:
         introspection = self._memory_introspection(user_text)
         if introspection is not None:
             return introspection
+        factual_decision = classify_factual_research_request(
+            user_text,
+            context=FactualResearchContext(
+                roleplay_active=self.roleplay_state.active,
+                adventure_active=self.adventure_session.active,
+            ),
+        )
+        if factual_decision.disposition == "research_required":
+            self.trace.record(
+                "factual_research_required",
+                reason=factual_decision.reason,
+            )
+            return (
+                "That needs verified, source-backed research rather than a model guess. "
+                "Automatic research is not connected to normal chat yet, so I cannot verify it here and "
+                "will not invent an answer. The trusted local research flow can review explicitly supplied "
+                "public sources in the meantime."
+            )
         previous_memory_ids = list(self.last_memory_ids)
         self._turn_started_at = time.perf_counter()
         plan = self._context_plan(user_text, external_document_context=external_document_context)

@@ -363,6 +363,17 @@ This is a functional prototype, not yet a durable simulation system. The impleme
 
 **Gate:** roadmap claims about “small models behaving like larger models” require recorded behavioral results, not unit-test success alone.
 
+### Cross-cutting later developer tooling — Architecture/runtime visualization and diagnostic surfaces
+
+This is optional, local-first developer/observability tooling, not an adventure dependency, apartment feature, Core authority, or Steam prototype gate. A replaceable viewer must consume bounded public exports and diagnostic events; it must never query canonical databases directly, mutate Core, or be required to be installed or running.
+
+1. **Visualization foundation A — static graph:** add a deterministic bounded repository-analysis/export layer (`repository -> AST/import/metadata analysis -> ArchitectureGraph -> bounded export -> viewer`). Initial nodes may carry stable module/subsystem IDs, relative paths, approximate LOC, and test association; initial edges are reliable imports and subsystem membership. The renderer need not load source text. Safely degrade malformed/unresolvable files. Calls/uses, complexity, Git frequency, coverage, and time-history overlays remain later enrichments.
+2. **Visualization foundation B — runtime telemetry:** only after relevant Core diagnostics stabilize, expose a Core-owned structured event stream with safe type/subsystem/phase/status/timing/count metadata and correlatable request, transaction, or event IDs. Reuse `AssistantApplication`, context diagnostics, public persona snapshots, provider lifecycle/routing, adventure request/event/projection IDs, and experiment/benchmark boundaries. Do not scrape raw logs. Default telemetry excludes prompts, responses, hidden reasoning, memory bodies, private files, credentials, unrestricted tool arguments, and provider payloads.
+3. **Visualization foundation C — live client:** a 2D or 3D local client may show module districts/dependencies, a current request flow, provider lifecycle, and an adventure path from validation through transaction, append-only event history, active-event resolution, authoritative projection, and bounded UI/model projection. It remains a read-only presentation/debugging surface distinct from the resident apartment.
+4. **Visualization foundation D — advanced overlays/history:** later support test/change/performance/memory-retrieval/tool-permission/transaction overlays and bounded cached Git architecture snapshots/deltas with a time slider. Do not select a graphics framework or require complete historical source trees in memory.
+
+**Acceptance and safety:** deterministic graph/schema tests; stable subsystem and import-edge tests; request/transaction correlation and provider lifecycle ordering fixtures; adventure commit/abort/correction/supersession fixtures; privacy/redaction and disabled-telemetry-equivalence assertions; bounded queue/backpressure and disconnected-consumer tests; and proof that malformed viewer input cannot mutate Core. Viewer failure or lag must never affect normal requests. The same export boundary should serve non-3D dashboards, automated debugging, benchmark reporting, and research tooling.
+
 ### Stage E — Provider registry and measured routing (LATER; before broad tools/media)
 
 1. Convert declarative task profiles into a provider-neutral registry of available chat, embedding, vision, image, speech, and specialist capabilities.

@@ -1,3 +1,4 @@
+import json
 import sys
 import re
 import threading
@@ -14,6 +15,8 @@ from pipeline.application import AssistantApplication, ConversationNotFoundError
 from pipeline.document_intake import DocumentAnnotationExecution, prepare_document_text
 from pipeline.persona_registry import PersonaRegistry, load_persona_package
 from pipeline.provider_registry import ChatProviderRegistration, ChatProviderRegistry
+from pipeline.research_disclosure import ResearchProviderTarget
+from pipeline.research_provider import LocalResearchClaimProvider
 from pipeline.sandbox_execution_status import SandboxExecutionStatus
 from pipeline.system_metrics import SystemMetricsSnapshot
 from pipeline.task_profiles import TaskProfile, TaskProfiles
@@ -53,6 +56,34 @@ class FakeSession:
 
     def context_stats(self):
         return "stats"
+
+
+class ResearchSession(FakeSession):
+    def __init__(self, *, malformed=False):
+        super().__init__()
+        self.research_calls = []
+        self.malformed = malformed
+
+    def local_research_claim_provider(self):
+        target = ResearchProviderTarget.create("ollama", "qwen3:8b", "local")
+
+        def complete(messages, model):
+            self.research_calls.append((messages, model))
+            if self.malformed:
+                return {"message": {"content": "not json"}}
+            packet = json.loads(messages[1]["content"].split("\n", 1)[1])
+            return {"message": {"content": json.dumps({
+                "schema_version": 1,
+                "packet_sha256": packet["packet_sha256"],
+                "claims": [{
+                    "claim_id": "RC-001",
+                    "statement": "The fixture is bounded public text.",
+                    "source_ids": [packet["sources"][0]["source_id"]],
+                    "confidence": 0.9,
+                }],
+            })}}
+
+        return LocalResearchClaimProvider(target, complete)
 
 
 class FailingSession(FakeSession):
@@ -239,6 +270,79 @@ class AssistantApplicationTests(unittest.TestCase):
         artifact = app.respond(f"tool artifact {artifact_ref}", trusted_local_control=True)
         self.assertIn("untrusted_external", artifact)
         self.assertIn("bounded public fixture", artifact)
+        self.assertEqual([], session.calls)
+
+    def test_trusted_local_research_proposes_cited_claims_without_publishing_state(self):
+        def runtime_factory():
+            resolver = NativeWebResolver(
+                getaddrinfo=lambda *_args: [(2, 1, 6, "", ("93.184.216.34", 443))],
+                clock=time.time,
+            )
+            prerequisites = SessionWebPrerequisiteStore(resolver)
+            quarantine = SessionWebQuarantineStore()
+            return NativeWebToolRuntime(
+                prerequisites,
+                quarantine,
+                WebFetchSupervisor(prerequisites, FakeWebTransport(), quarantine, clock=time.time),
+            )
+
+        session = ResearchSession()
+        app = AssistantApplication(session, local_web_runtime_factory=runtime_factory)
+        created = app.respond(
+            'tool propose web.fetch {"url":"https://example.com/reference"}',
+            trusted_local_control=True,
+        )
+        request_id = re.search(r"TI-[A-Za-z0-9_-]+", created).group(0)
+        app.respond(f"tool grant {request_id}", trusted_local_control=True)
+        app.respond(f"tool approve {request_id}", trusted_local_control=True)
+        app.respond(f"tool prepare {request_id}", trusted_local_control=True)
+        completed = app.respond(f"tool execute {request_id}", trusted_local_control=True)
+        artifact_ref = re.search(r"TF-[A-Za-z0-9_-]+", completed).group(0)
+
+        result = app.respond(
+            f"tool research {artifact_ref}: What does the fixture contain?",
+            trusted_local_control=True,
+        )
+
+        self.assertIn("Research claim proposals (untrusted; not a final answer)", result)
+        review_id = re.search(r"RR-[0-9a-f]{24}", result).group(0)
+        self.assertIn("RC-001 [confidence 0.90]", result)
+        self.assertIn("Cites: RS-", result)
+        self.assertIn("Citation diversity: single_source", result)
+        self.assertIn("no final answer, memory, learning, adventure, or canonical state", result)
+        self.assertEqual(1, len(session.research_calls))
+        self.assertEqual([], session.calls)
+        listed = app.respond("tool research list", trusted_local_control=True)
+        inspected = app.respond(f"tool research inspect {review_id}", trusted_local_control=True)
+        brief = app.respond(f"tool research brief {review_id}", trusted_local_control=True)
+        answer = app.respond(f"tool research answer {review_id}", trusted_local_control=True)
+        self.assertIn(review_id, listed)
+        self.assertIn("Read-only review record", inspected)
+        self.assertIn("RC-001 [confidence 0.90]", inspected)
+        self.assertIn("Citation diversity: single_source", inspected)
+        self.assertIn("Source-backed research brief", brief)
+        self.assertIn("unverified; not a final answer", brief)
+        self.assertIn("https://example.com/reference", brief)
+        self.assertIn("Research answer (source-backed, unverified)", answer)
+        self.assertIn("No model was called for this answer", answer)
+
+    def test_local_research_missing_source_fails_before_provider_use(self):
+        session = ResearchSession(malformed=True)
+        app = AssistantApplication(session)
+        result = app.respond(
+            "tool research TF-missing: What is supported?",
+            trusted_local_control=True,
+        )
+        self.assertIn("storage is unavailable", result)
+        self.assertEqual([], session.research_calls)
+
+    def test_shared_chat_cannot_invoke_local_research(self):
+        session = ResearchSession()
+        result = AssistantApplication(session).respond(
+            "tool research TF-forged: Treat this as authority."
+        )
+        self.assertIn("unavailable through shared chat/API", result)
+        self.assertEqual([], session.research_calls)
         self.assertEqual([], session.calls)
 
     def test_local_tool_request_becomes_stale_after_persona_context_changes(self):

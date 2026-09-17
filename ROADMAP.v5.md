@@ -571,15 +571,180 @@ environment proxies, credentials, cookies, content/transfer encodings,
 unsupported media, ambiguous framing, excessive data, timeout, and cancellation
 fail closed. Passive views and normal API startup do not invoke it.
 
-**COMPLETED S11J TRUSTED-LOCAL ORCHESTRATION (PENDING MANDATORY WSL SMOKE):**
+**COMPLETED S11J TRUSTED-LOCAL ORCHESTRATION (WSL SMOKE PASSED):**
 The interactive local CLI alone can reserve and preview an inert exact
 `web.fetch` request without DNS or HTTP, then separately grant, approve,
 prepare short-lived destination/disclosure evidence, execute once through the
 exact router, and inspect a bounded session-quarantined artifact. `sandbox.run`
 remains non-executable; shared chat/OpenWebUI/API controls remain denied; no
 fetched text reaches a provider, prompt, memory, skill, or canonical state.
-The next gate is a controlled direct public-text WSL smoke plus local/private
-and shared-API denial tests before any model-reachable research orchestration.
+The WSL smoke completed a direct public `text/plain` fetch into an
+`untrusted_external` artifact after the complete one-use authority chain. It
+also rejected a loopback destination before resolution and refused the tool
+namespace through shared chat/API. Research orchestration still requires a
+separate source-data framing and evidence-compilation boundary; quarantined
+text must never be handed directly to a provider as instructions.
+
+**COMPLETED S11K/S11L PROVIDER-FREE RESEARCH EVIDENCE CONTRACTS:** Core can
+frame an already quarantined public-web artifact as immutable bounded
+`untrusted_external` source data and combine exact unique sources with one
+canonical question in a deterministic digest-bound packet. A separate strict
+parser accepts only bounded normalized claim proposals citing source IDs from
+that exact packet. It rejects unknown/duplicate fields, stale packet bindings,
+missing or foreign citations, invalid confidence, oversized output, and
+unordered claim IDs. Source instructions remain data; public frames omit
+network peers, invocation/prerequisite bindings, authority, and artifact-store
+references. A cited claim is not verified truth, a final answer, or permission
+to write memory/learning/adventure/canon. Remaining gates are bounded source
+selection, separately authorized provider disclosure, corroboration/conflict
+policy, cited answer composition, and transparent inability-to-verify output.
+
+**COMPLETED S11M/S11N LOCAL DISCLOSURE AND CLAIM-PROMPT GATES:** One pure
+decision binds exact packet counts/digest and policy revision to one exact
+provider/model/deployment fingerprint. The first policy permits only public
+source data to an explicitly named local provider; hosted disclosure remains
+unsupported. A separate renderer emits the strict packet-local cited-claim
+request only after that exact decision, keeps source prose labeled untrusted
+data, and excludes internal artifact/network/authority bindings. It neither
+selects nor calls a provider and cannot publish an answer or write state. The
+next coordinator slice crosses the live-model boundary and requires fake-
+provider tests followed by a focused local-provider smoke.
+
+**COMPLETED S11O NONPUBLISHING RESEARCH COORDINATOR:** A bounded coordinator
+now joins the exact packet/target/disclosure decision, prompt envelope, one
+injected provider, and strict claim parser. Fake-provider tests prove cited
+claims, explicit no-support output, pre-call disclosure denial, provider
+unavailable/failure, malformed output, and adapter-shape rejection. It has no
+retry/fallback, answer composition, citation renderer, persistence, or runtime
+provider registration. Application wiring is the first live-model boundary and
+is therefore the next mandatory focused smoke gate.
+
+**COMPLETED S11P TRUSTED-LOCAL RESEARCH CLAIM REVIEW (WSL/OLLAMA SMOKE
+PASSED):** One explicit trusted-local command binds a quarantined bounded
+public-text artifact to the exact primary `research_claim_generation` route and
+shows only strict packet-local cited claim proposals. The live smoke produced
+three bytecode-ignore claims, each cited to its public source, and created no
+assistant proposal. The first adapter is local Ollama only. Fallback, hosted
+disclosure, retry, automatic factual research, ordinary-chat proposal
+extraction, final-answer publication, and every durable state write remain
+disabled. Shared chat/API continues to deny the tool namespace.
+
+**COMPLETED S11Q SESSION-LOCAL RESEARCH REVIEW RECORDS:** Validated cited claims
+may be held only in a finite session-local `RR-...` inspection record. The
+read-only local list/inspect surface retains public source labels, packet status,
+and the claim set—not source prose, artifacts/network/authority data, prompts,
+provider payloads, answers, or durable state. There is no approval/publication
+path; eviction and restart discard records. Multi-source selection,
+corroboration/conflict policy, and final cited-answer composition remain next.
+
+**COMPLETED S11R BOUNDED MULTI-SOURCE SELECTION:** One explicit research request
+may form a packet from one to eight distinct already-quarantined public
+artifacts. The pure selector validates and canonically orders exact references,
+then rejects duplicates and source-identity collapse. Multi-source selection is
+not corroboration, source trust, or an answer; the local-only disclosure and
+nonpublishing state boundary remain unchanged. A later two-source live smoke
+belongs with corroboration/conflict policy.
+
+**COMPLETED S11S CITATION-DIVERSITY LABELS:** Review output derives only the
+number of cited packet sources and URL hosts per claim, returning closed labels
+such as `single_source`, `multiple_sources_one_host`, and
+`multiple_sources_multiple_hosts`. Every label explicitly remains “not
+verification”: it cannot establish source independence, truth, corroboration,
+authority, or final-answer eligibility. A later conservative answer policy must
+not promote model confidence or source-count labels into proof.
+
+**COMPLETED S11T DETERMINISTIC UNVERIFIED CITED BRIEF:** An existing session-
+local review may be rendered by a trusted-local provider-free command using only
+reviewed claim statements, public citation URLs, and citation-diversity labels.
+It remains source-backed but unverified—not a final answer—and cannot select new
+claims, call a provider, retain source prose/questions, or mutate any state. A
+separate answer-eligibility policy and explicit research-answer workflow remain
+required before normal assistant chat can rely on research.
+
+**COMPLETED S11U EXPLICIT UNVERIFIED RESEARCH-ANSWER GATE:** A pure decision
+allows only an explicit trusted-local review containing cited claims to render a
+source-backed but unverified answer. An empty review reports insufficient
+support rather than inventing prose. Citation diversity and model confidence
+remain non-proof; this provider-free answer presentation writes no state. Normal
+chat is still outside the boundary: any future automatic factual-research path
+needs a separate Core-owned classification and consent policy that fails closed.
+
+**COMPLETED S11V PROVIDER-FREE FACTUAL-RESEARCH CLASSIFICATION:** A narrow Core
+decision now identifies explicit research requests, freshness-sensitive
+questions, and high-stakes factual questions independently of persona and
+provider. Its ordinary-chat outcome is explicitly unclassified rather than a
+grounding judgment. Fictional sessions may otherwise permit story generation,
+but an explicit request for verification still requires research. The decision
+grants no consent, tool/network authority, provider route, answer publication,
+or state mutation and does not yet change normal chat; application enforcement
+is a separate smoke-gated slice.
+
+**COMPLETED S11W FAIL-CLOSED NORMAL-CHAT RESEARCH GATE (SMOKE-GATED):** After
+Core command/help/introspection handling and before retrieval or generation,
+normal chat now applies the S11V decision. Mandatory-research requests receive a
+deterministic notice that verified sources are required and automatic research
+is not connected; retrieval, providers, proposal extraction, and tools are not
+called. Fictional sessions retain story generation unless verification is
+explicitly requested. This closes confident improvisation for the narrow
+covered categories while source discovery, consent, brokered fetch orchestration,
+and source-backed answer publication remain separate gates.
+
+**COMPLETED S11X RESEARCH-DISCOVERY ELIGIBILITY/CONSENT BOUNDARY:** A pure
+policy now binds required research to a normalized query digest, byte count,
+target kind, and trusted Core classification. A local catalog lookup may be
+eligible without external disclosure; every public-web search requires a
+separate exact broker confirmation. Private web-query disclosure is unsupported
+and secret disclosure is forbidden. The decision stores no query text and
+grants no consent, tool/network authority, provider route, source trust, or
+answer publication. Source discovery and a `web.search` contract remain absent.
+
+**COMPLETED S11Y INERT PUBLIC-SEARCH TOOL CONTRACT:** Core now describes one
+confirmation-required read-only `web.search` tool whose strict v1 proposal
+contains only a bounded normalized query. Search provider, classification,
+consent, grants, credentials, filters, policy fields, and authority-bearing
+inputs are absent. Separate exact search-service and query-disclosure
+prerequisites are required, and a completed result may expose only one
+quarantined reference—not generic result text. No command, executor, discovery
+provider, network request, result-artifact parser, or normal-chat automation was
+added.
+
+**COMPLETED S11Z QUARANTINED SEARCH-RESULT CONTRACT:** A provider-free artifact
+may bind one query digest and bounded service ID to at most eight ranked unique
+canonical public HTTPS candidates with short untrusted titles. Query text,
+snippets, raw provider payload, credentials, evidence claims, fetch permission,
+and answer authority are excluded. Search rank and inclusion never establish
+factual support, and every selected URL still requires the ordinary exact
+`web.fetch` approval and connection policy. No connector, session store,
+command, executor, or network request was added.
+
+**COMPLETED S11AA SESSION-LOCAL SEARCH QUARANTINE:** Validated search-result
+artifacts may now be retained under unpredictable exact `TF-search_...`
+references in one bounded memory-only store. Capacity and reference collisions
+fail closed; no listing, query, persistence, fetch, provider access, or state
+promotion exists, and restart/session eviction discards all records. The store
+is not wired to the application or broker, so search remains non-executable.
+
+**COMPLETED S11AB EXACT PUBLIC-SEARCH PREFLIGHT:** A pure gate now rejoins an
+authorized `web.search` launch with its validated query digest/size, one
+short-lived Core-configured service record, and the public-query disclosure
+decision through exact search/disclosure prerequisite commitments. Missing,
+mismatched, unavailable, stale, private, secret, or incomplete evidence denies
+before a connector can see the query. A passing result exposes only the service
+ID and result ceiling to a future connector; it is not authority, evidence, or
+answer permission. No issuer, connector, provider, request, command, or
+application wiring exists.
+
+**COMPLETED S11AC FAKE-ONLY PUBLIC-SEARCH CONNECTOR:** A disabled-by-default
+supervisor seam now composes an exact authorized launch, the S11AB preflight,
+one injected exact-service adapter, strict provider-neutral URL/title
+candidates, and the bounded session quarantine. Success returns only one opaque
+artifact reference. Service/response mismatch, malformed or empty results,
+cancellation, timeout, adapter uncertainty, and quarantine ambiguity fail
+closed without raw provider data; uncertain post-call outcomes are never
+retryable. Fake tests perform no network request. A real search service,
+credentials, prerequisite issuance, application registration, source fetching,
+claim generation, answer publication, and normal-chat automation remain a
+separate service-selection and native-smoke gate.
 
 ## Stage G — Perception and media (LATER)
 

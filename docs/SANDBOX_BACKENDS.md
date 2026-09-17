@@ -340,8 +340,117 @@ local `tool artifact` command and remains `untrusted_external`.
 
 This path has no HTTP approval/execution endpoint, no model proposal path, no
 provider/prompt bridge, no memory or skill write, and no `sandbox.run`
-executor. It must pass the controlled WSL public-text and denial smoke matrix
-before research escalation is considered.
+executor. Its controlled WSL smoke passed: a direct public `text/plain` source
+became a bounded `untrusted_external` artifact, a loopback destination was
+rejected before resolution, and shared chat/API refused tool control. This
+does not authorize research escalation to consume the artifact; source-data
+framing and evidence compilation remain separate future gates.
+
+### S11k/S11l research source and claim boundaries
+
+`pipeline/research_sources.py` can frame an already quarantined public-text
+artifact as immutable `untrusted_external`/`source_data_only` material. One
+deterministic packet binds a canonical question to exact unique source IDs,
+URLs, timestamps, prepared-content digests, and bounded text. It deliberately
+does not include connected addresses, invocation fingerprints, prerequisite
+evidence, authority records, or artifact-store references in its public source
+view. Sources above the research-context ceiling require a later bounded
+selector and are not silently truncated.
+
+`pipeline/research_claims.py` validates a future provider's JSON claim
+proposals against one exact packet. Each claim must cite at least one packet-
+local source ID; stale packet digests, external or missing citations, unknown
+or duplicate fields, invalid confidence, and oversized output reject. Passing
+this parser proves only structural citation binding. It does not prove the
+source or claim true and cannot publish an answer, invoke a provider, approve
+memory, reinforce a skill, or affect fictional state. Provider disclosure,
+corroboration/conflict policy, cited answer composition, and research
+orchestration remain disabled.
+
+### S11m/S11n local disclosure and claim-prompt gates
+
+`pipeline/research_disclosure.py` binds one packet's digest, source count, and
+character count to one exact provider/model/deployment fingerprint and policy
+revision. The first policy permits only public source material to an explicitly
+named local provider. Hosted disclosure is unsupported; no chat field, model
+claim, persona, adventure, conversation ID, or boolean can widen it. Passing
+the decision does not prove the provider available or a source true.
+
+`pipeline/research_prompt.py` renders source data only when that exact local
+decision matches both packet and target. Its system contract tells a future
+provider to treat source prose as untrusted data and return only packet-bound
+cited claim proposals. The serialized source frame omits artifact-store refs,
+network peers, invocation fingerprints, prerequisite evidence, grants, and
+approvals. This builder performs no provider selection/call, claim verification,
+answer composition, persistence, memory, learning, or adventure mutation.
+
+### S11o nonpublishing research coordinator
+
+`pipeline/research_coordinator.py` performs one attempt using an exact source
+packet, local provider target, matching disclosure decision, injected minimal
+provider, and strict claim parser. Denied disclosure prevents the provider call;
+unavailable/failing providers and malformed output return bounded categories
+without raw output or exception details. A successful result contains only
+untrusted claim proposals or an explicit no-supported-claims status. It does
+not retry, fall back, route, compose an answer, render citations, or write any
+state. No real provider adapter is registered yet, so application integration
+requires a focused local-model smoke.
+
+### S11p trusted-local research claim review (WSL/Ollama smoke passed)
+
+The trusted local Assistant CLI may explicitly pass one already-quarantined,
+bounded public-text artifact through the exact primary
+`research_claim_generation` route. The runtime adapter is currently restricted
+to local Ollama and returns only strict packet-local cited claim proposals.
+Configured fallback, retry, hosted disclosure, automatic research, ordinary
+chat/proposal extraction, final-answer publication, and memory/learning/
+adventure/canonical writes remain disabled. Shared chat/API cannot invoke the
+command. The smoke returned cited public-source claims and verified no assistant
+proposal was created.
+
+### S11q session-local research review records
+
+`pipeline/research_review.py` retains only a finite in-memory inspection record
+after strict cited-claim validation. The record contains packet status, public
+source ID/URL labels, and cited claim proposals, but no source prose,
+artifact/network/authority data, prompt/provider payload, answer, or durable
+state. Trusted-local `tool research list` and `tool research inspect <RR-id>`
+are read-only; no approval or publication path exists. Records are discarded on
+session eviction or restart.
+
+### S11r bounded multi-source selection
+
+`pipeline/research_selection.py` validates one to eight explicit distinct
+quarantined artifacts and converts them into deterministically ordered source
+frames. The application resolves only the supplied session-local artifact refs;
+the pure selector itself cannot read a quarantine store or fetch. Duplicate
+references and source-identity collapse fail closed. Multiple source selection
+does not establish corroboration, truth, or authority.
+
+### S11s citation-diversity labels
+
+`pipeline/research_evidence.py` derives only count-based labels for each cited
+claim: number of packet sources and number of URL hosts. The review surface
+always labels this as “not verification.” More sources or more hosts are not
+proof of independence, corroboration, or truth and cannot authorize an answer
+or state change.
+
+### S11t deterministic unverified cited brief
+
+`pipeline/research_brief.py` turns one existing review record into a compact
+provider-free presentation of its reviewed claim statements, public source URLs,
+and citation-diversity labels. It is labeled source-backed but unverified and is
+not a new model answer. The trusted-local brief command cannot fetch, invoke a
+provider, select new claims, retain source prose/questions, verify facts, or
+write state.
+
+### S11u explicit unverified research-answer gate
+
+`pipeline/research_answer_policy.py` allows only a user-invoked trusted-local
+review that has cited claims to render as a source-backed but unverified answer.
+Empty reviews yield `insufficient_support`; they never receive invented prose.
+The command is provider-free and cannot turn citation counts or model confidence
+into proof, invoke normal chat, or mutate state.
 
 ### S11e quarantined text preparation
 

@@ -113,6 +113,14 @@ def build_core_tool_registry() -> ToolRegistry:
             "network.fetch.public",
             requires_confirmation=True,
         ),
+        ToolDescriptor(
+            "web.search",
+            "Search public sources",
+            "Propose one bounded public search query after exact query-disclosure review.",
+            "read_only",
+            "network.search.public",
+            requires_confirmation=True,
+        ),
     ))
 
 
