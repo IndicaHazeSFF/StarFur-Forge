@@ -3693,7 +3693,15 @@ def format_assistant_memory_proposal(inspected):
     lines.extend(["", f"Created: {proposal.get('created_at', 'unknown')}", f"Updated: {proposal.get('updated_at', 'unknown')}"])
     return "\n".join(lines)
 
-def run_interactive(config_path=DEFAULT_CONFIG_PATH, input_fn=input, output_fn=print, debug_level=None):
+def run_interactive(
+    config_path=DEFAULT_CONFIG_PATH,
+    input_fn=input,
+    output_fn=print,
+    debug_level=None,
+    *,
+    enable_brave_web_search=False,
+    enable_tavily_web_search=False,
+):
     config = load_config(config_path)
     stream_started = {"value": False}
     def stream_writer(text):
@@ -3709,6 +3717,8 @@ def run_interactive(config_path=DEFAULT_CONFIG_PATH, input_fn=input, output_fn=p
         stream=True,
         stream_writer=stream_writer,
         enable_native_web_tools=True,
+        enable_brave_web_search=enable_brave_web_search,
+        enable_tavily_web_search=enable_tavily_web_search,
     )
     session = application.session
     output_fn("StarFur Assistant (model list/current/use, routing status/probe, tool help/list/status/preview/propose/grant/approve/prepare/execute/artifact/deny/revoke/cancel [trusted local only; sandbox execution disabled], persona list/current/use/inspect, roleplay begin/end/status, adventure list/create/inspect/load/resume/restart/status/events/checkpoints/corrections/correct/retract/state/relationships/knowledge/turn/pause/end/unload, remember/forget, memory list/search/inspect/scope, proposal list/inspect/approve/reject/approve all/scope, context stats; quit to exit)")

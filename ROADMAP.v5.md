@@ -746,6 +746,62 @@ credentials, prerequisite issuance, application registration, source fetching,
 claim generation, answer publication, and normal-chat automation remain a
 separate service-selection and native-smoke gate.
 
+**COMPLETED S11AD SESSION-LOCAL SEARCH PREREQUISITE PREPARATION:** A bounded
+in-memory store now reserves one explicit public factual-research query with its
+digest-only discovery decision, then binds it only to a separately supplied
+short-lived service observation matching the Core-configured service ID,
+deployment, and result ceiling. Reservation, preparation, revocation, and
+lookup are provider-free; no adapter, probe, credential, network call, command,
+execution, or persistence exists. This closes the exact service/disclosure
+handoff for a future injected runtime without choosing a service.
+
+**COMPLETED S11AE INJECTED SEARCH-RUNTIME APPLICATION SEAM:**
+`AssistantApplication` can now wire an explicitly injected local `web.search`
+runtime through the exact broker and trusted local CLI controls. The query is
+withheld from passive previews; Core reserves it only for mandatory factual
+research, requires grant/approval/preparation, and exposes returned candidates
+only through a separate quarantined-link inspection command. The standard
+factory supplies no runtime, so normal CLI/API/OpenWebUI behavior remains
+unavailable and makes no provider probe or network request. Fake-runtime
+integration tests cover the explicit lifecycle. A real service, live readiness
+evidence, credentials, and native network smoke remain separate.
+
+**COMPLETED S11AF HOSTED-SEARCH REDUCTION ADAPTER:** The first concrete
+provider adapter targets the exact `brave.search` service behind the existing
+provider-neutral seam. A user-owned API key comes only from an injected trusted
+secret source at execution time; proposals, grants, prerequisites, previews,
+artifacts, diagnostics, and public status cannot carry it. Strict bounded JSON
+is reduced to canonical public HTTPS URL/title candidates only, excluding
+snippets, provider payloads, metadata, and answer claims. Wrong service
+bindings, missing/invalid credentials, malformed output, duplicate URLs,
+cancellation, and size/depth/node violations fail closed under fake transport
+tests.
+
+**COMPLETED S11AG OPT-IN NATIVE BRAVE TRANSPORT (LIVE SMOKE REQUIRED):** The
+trusted local Assistant CLI now has an explicit `--enable-brave-search` switch.
+Without that switch, normal construction remains search-disabled; with it, the
+runtime remains unavailable unless `STARFUR_BRAVE_SEARCH_API_KEY` is supplied
+out of band. Construction performs no DNS or HTTP. Authorized execution uses
+only the fixed Brave API host/path, rejects non-global DNS answers, pins the
+selected peer under normal TLS hostname verification, ignores environment
+proxies, follows no redirects, bounds time/bytes, and quarantines only reduced
+untrusted links. Shared chat/API cannot control it, automatic normal-chat
+research remains disconnected, and self-hosted search stays a later adapter
+option. Native WSL/API-key behavior is not considered released until the
+focused live smoke passes.
+
+**COMPLETED S11AH OPTIONAL TAVILY SEARCH ADAPTER (LIVE SMOKE REQUIRED):** Brave
+remains available as an optional backend, and the trusted local CLI may instead
+select Tavily with `--enable-tavily-search`. Selection is explicit and mutually
+exclusive, so StarFur never silently crosses providers or spends fallback
+credits. The Tavily key is read just in time from `STARFUR_TAVILY_API_KEY`;
+startup performs no network access. The fixed HTTPS POST asks only for basic
+results with answer/raw-content/image/automatic-parameter/usage output disabled,
+then reduces the response to bounded untrusted canonical URL/title candidates.
+Provider prose, snippets, scores, request metadata, and the credential never
+cross into Core artifacts. Shared chat/API and automatic normal-chat research
+remain disconnected. The WSL live-key lifecycle is still smoke-gated.
+
 ## Stage G — Perception and media (LATER)
 
 Permissioned one-shot screen/window/image/PDF inspection, TTS/STT, image generation, notifications, and presence signals through the provider registry. Media is bounded and provenance-bearing; generated images are noncanonical. Voice uses explicit push-to-talk/always-listen settings, confidence, cancellation, and interruption policy. Continuous surveillance is never the default.

@@ -73,12 +73,14 @@ Inside Assistant Mode:
     tool list
     tool propose sandbox.run {"task_kind":"python_tests","objective":"Run a harmless fixture.","files":[{"path":"main.py","content":"print('safe')"}]}
     tool propose web.fetch {"url":"https://example.com/public.txt"}
+    tool propose web.search {"query":"Please research the current public price of X."}
     tool preview <TI-id>
     tool grant <TI-id>
     tool approve <TI-id>
     tool prepare <TI-id>
     tool execute <TI-id>
     tool artifact <TF-id>
+    tool search artifact <TF-search_id>
     tool research <TF-id>[, TF-id...]: <question>
     tool research list
     tool research inspect <RR-id>
@@ -98,6 +100,32 @@ destination and URL-only public-disclosure evidence; `tool execute` consumes
 that evidence once and may perform one pinned, credential-free HTTPS GET for
 plain text or Markdown. The result contains only a quarantined artifact
 reference, and `tool artifact` is the bounded local inspection step.
+`web.search` uses the same explicit grant/approval/preparation lifecycle. It is
+disabled by default. Two opt-in hosted adapters are available, selected
+explicitly when the trusted local CLI starts. They are alternatives for that
+session; StarFur never silently switches providers or spends another provider's
+credits. Supply only the selected provider's user-owned key through the process
+environment:
+
+    read -rsp "Brave Search API key: " STARFUR_BRAVE_SEARCH_API_KEY; export STARFUR_BRAVE_SEARCH_API_KEY; echo
+    python3 starfur.py assistant --enable-brave-search
+
+or:
+
+    read -rsp "Tavily API key: " STARFUR_TAVILY_API_KEY; export STARFUR_TAVILY_API_KEY; echo
+    python3 starfur.py assistant --enable-tavily-search
+
+Do not place the key in `assistant.json`, a persona, a tool proposal, a shell
+history entry, or a committed file. Each flag is accepted only by the trusted
+local Assistant CLI, and the flags are mutually exclusive; shared chat/API
+still cannot control tools. Startup and
+proposal preview perform no search request, the preview intentionally withholds
+the query, and every query still requires its own grant, approval, preparation,
+and execution. A completed search exposes only one quarantined list of
+untrusted public links through `tool search artifact`. Search results are not
+factual support and do not fetch their links automatically. The provider-neutral
+runtime remains provider-neutral and injectable so another hosted or self-hosted
+adapter can be added later without changing Core authority or artifact contracts.
 `tool research` explicitly submits one to eight already-quarantined public-text
 artifacts to the configured local research task profile. It returns strict packet-local
 cited claim proposals for review, not a final answer, and cannot create memory,

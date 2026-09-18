@@ -28,6 +28,14 @@ from pipeline.tool_web_native import (
     SessionWebQuarantineStore,
 )
 from pipeline.tool_web_response import WebResponseMetadata
+from pipeline.tool_web_search import SessionWebSearchArtifactStore, WebSearchCandidate
+from pipeline.tool_web_search_connector import WebSearchResponse, WebSearchSupervisor
+from pipeline.tool_web_search_preflight import (
+    WEB_SEARCH_PREFLIGHT_POLICY_REVISION, WebSearchServicePrerequisite,
+)
+from pipeline.tool_web_search_runtime import (
+    LocalWebSearchRuntime, SessionWebSearchPrerequisiteStore,
+)
 
 
 class FakeConfig:
@@ -270,6 +278,75 @@ class AssistantApplicationTests(unittest.TestCase):
         artifact = app.respond(f"tool artifact {artifact_ref}", trusted_local_control=True)
         self.assertIn("untrusted_external", artifact)
         self.assertIn("bounded public fixture", artifact)
+        self.assertEqual([], session.calls)
+
+    def test_trusted_local_web_search_requires_injected_runtime_and_exact_preparation(self):
+        adapter_calls = []
+
+        class FakeSearchAdapter:
+            available = True
+            service_id = "fixture.search"
+
+            def search(self, request, cancellation):
+                adapter_calls.append(request)
+                return WebSearchResponse(
+                    1, request.invocation_id, request.binding_fingerprint,
+                    request.worker_generation, request.service_id, request.query_sha256,
+                    (WebSearchCandidate(1, "https://example.com/result", "Fixture result"),),
+                )
+
+            def request_cancel(self, request):
+                return None
+
+        def runtime_factory():
+            prerequisites = SessionWebSearchPrerequisiteStore(
+                service_id="fixture.search", deployment="local", maximum_results=4,
+            )
+            quarantine = SessionWebSearchArtifactStore(ref_factory=lambda: "TF-search_fixture")
+
+            def observation(service_ref):
+                now = time.time()
+                return WebSearchServicePrerequisite(
+                    1, service_ref, "fixture.search", "local", 4, True,
+                    now, now + 60.0, WEB_SEARCH_PREFLIGHT_POLICY_REVISION,
+                )
+
+            supervisor = WebSearchSupervisor(
+                prerequisites, FakeSearchAdapter(), quarantine, clock=time.time,
+            )
+            return LocalWebSearchRuntime(
+                prerequisites, quarantine, supervisor, observation,
+            )
+
+        session = FakeSession()
+        app = AssistantApplication(
+            session, local_web_search_runtime_factory=runtime_factory,
+        )
+        created = app.respond(
+            'tool propose web.search {"query":"Please research the current price of an RTX 4070."}',
+            trusted_local_control=True,
+        )
+        request_id = re.search(r"TI-[A-Za-z0-9_-]+", created).group(0)
+        self.assertIn("No provider probe or search request", created)
+        self.assertEqual([], adapter_calls)
+        preview = app.respond(f"tool preview {request_id}", trusted_local_control=True)
+        self.assertIn("Public query is intentionally withheld", preview)
+        self.assertNotIn("RTX 4070", preview)
+        app.respond(f"tool grant {request_id}", trusted_local_control=True)
+        app.respond(f"tool approve {request_id}", trusted_local_control=True)
+        prepared = app.respond(f"tool prepare {request_id}", trusted_local_control=True)
+        self.assertIn("search-service and public-query disclosure", prepared)
+        self.assertEqual([], adapter_calls)
+        completed = app.respond(f"tool execute {request_id}", trusted_local_control=True)
+        match = re.search(r"TF-search_[A-Za-z0-9_-]+", completed)
+        self.assertIsNotNone(match, completed)
+        artifact_ref = match.group(0)
+        inspected = app.respond(
+            f"tool search artifact {artifact_ref}", trusted_local_control=True,
+        )
+        self.assertIn("Fixture result", inspected)
+        self.assertIn("untrusted_discovery", inspected)
+        self.assertEqual(1, len(adapter_calls))
         self.assertEqual([], session.calls)
 
     def test_trusted_local_research_proposes_cited_claims_without_publishing_state(self):
@@ -1032,6 +1109,32 @@ class AssistantApplicationTests(unittest.TestCase):
     def test_factory_rejects_a_provider_registry_without_a_selected_active_provider(self):
         with self.assertRaisesRegex(ValueError, "explicit active provider"):
             create_assistant_application(provider_registry=ChatProviderRegistry())
+
+    def test_factory_explicitly_selects_tavily_without_affecting_default_setup(self):
+        from pipeline.tool_web_search_tavily_native import create_tavily_web_search_runtime
+
+        runtime = create_tavily_web_search_runtime(getenv=lambda name: None)
+        with patch(
+            "pipeline.tool_web_search_tavily_native.create_tavily_web_search_runtime",
+            return_value=runtime,
+        ) as builder:
+            app = create_assistant_application(
+                session_factory=FakeSession,
+                enable_tavily_web_search=True,
+            )
+
+        builder.assert_called_once_with()
+        self.assertIs(
+            runtime,
+            app._sessions["default"].local_web_search_runtime,
+        )
+
+    def test_factory_rejects_multiple_hosted_search_providers(self):
+        with self.assertRaisesRegex(ValueError, "exactly one"):
+            create_assistant_application(
+                enable_brave_web_search=True,
+                enable_tavily_web_search=True,
+            )
 
     def test_standard_factory_resolves_only_the_declared_builtin_murr_idle_slot(self):
         app = create_assistant_application(session_factory=FakeSession)

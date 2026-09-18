@@ -85,6 +85,7 @@ class _SessionSlot:
     tool_broker: ToolBroker
     research_reviews: SessionResearchReviewStore
     local_web_runtime: object | None = None
+    local_web_search_runtime: object | None = None
     active_requests: int = 0
 
 
@@ -160,6 +161,7 @@ class AssistantApplication:
         sandbox_status_provider: SandboxExecutionStatusProvider | None = None,
         persona_asset_resolver: PersonaAssetResolver | None = None,
         local_web_runtime_factory: Callable[[], object] | None = None,
+        local_web_search_runtime_factory: Callable[[], object] | None = None,
     ):
         if max_conversations <= 0:
             raise ValueError("max_conversations must be positive.")
@@ -186,7 +188,10 @@ class AssistantApplication:
         self._max_conversations = max_conversations
         if local_web_runtime_factory is not None and not callable(local_web_runtime_factory):
             raise TypeError("local_web_runtime_factory must be callable or None")
+        if local_web_search_runtime_factory is not None and not callable(local_web_search_runtime_factory):
+            raise TypeError("local_web_search_runtime_factory must be callable or None")
         self._local_web_runtime_factory = local_web_runtime_factory
+        self._local_web_search_runtime_factory = local_web_search_runtime_factory
         self._tool_contracts = build_core_tool_contract_registry()
         self._sessions = OrderedDict([
             (DEFAULT_CONVERSATION_ID, self._new_session_slot(session)),
@@ -199,16 +204,25 @@ class AssistantApplication:
         session_instance_id = f"session-{secrets.token_hex(16)}"
         prerequisites = SessionToolPrerequisiteController()
         local_web_runtime = None
-        supervisor = None
+        local_web_search_runtime = None
+        bindings = []
         if self._local_web_runtime_factory is not None:
             local_web_runtime = self._local_web_runtime_factory()
             if not all(hasattr(local_web_runtime, name) for name in (
                 "prerequisites", "quarantine", "supervisor",
             )):
                 raise TypeError("local web tool runtime is invalid")
-            supervisor = ToolExecutionRouter((
-                ToolExecutionBinding("web.fetch", 1, local_web_runtime.supervisor),
+            bindings.append(ToolExecutionBinding("web.fetch", 1, local_web_runtime.supervisor))
+        if self._local_web_search_runtime_factory is not None:
+            local_web_search_runtime = self._local_web_search_runtime_factory()
+            if not all(hasattr(local_web_search_runtime, name) for name in (
+                "prerequisites", "quarantine", "supervisor", "service_observation",
+            )) or not callable(local_web_search_runtime.service_observation):
+                raise TypeError("local web search tool runtime is invalid")
+            bindings.append(ToolExecutionBinding(
+                "web.search", 1, local_web_search_runtime.supervisor,
             ))
+        supervisor = ToolExecutionRouter(tuple(bindings)) if bindings else None
         return _SessionSlot(
             session=session,
             lock=threading.RLock(),
@@ -223,6 +237,7 @@ class AssistantApplication:
             ),
             research_reviews=SessionResearchReviewStore(),
             local_web_runtime=local_web_runtime,
+            local_web_search_runtime=local_web_search_runtime,
         )
 
     def _attach_capability_manifest(self, session):
@@ -465,6 +480,7 @@ class AssistantApplication:
                 "Local tool controls (sandbox execution disabled):\n"
                 "tool propose sandbox.run <JSON arguments>\n"
                 "tool propose web.fetch {\"url\":\"https://...\"}\n"
+                "tool propose web.search {\"query\":\"...\"}\n"
                 "tool list\n"
                 "tool status <TI-id>\n"
                 "tool preview <TI-id>\n"
@@ -473,6 +489,7 @@ class AssistantApplication:
                 "tool prepare <TI-id>\n"
                 "tool execute <TI-id>\n"
                 "tool artifact <TF-id>\n"
+                "tool search artifact <TF-search_id>\n"
                 "tool research <TF-id>: <question>\n"
                 "tool research list\n"
                 "tool research inspect <RR-id>\n"
@@ -556,6 +573,45 @@ class AssistantApplication:
                 "No DNS lookup or network request occurred. Use tool preview, grant, approve, prepare, then execute."
             )
 
+        search_proposal_match = re.fullmatch(
+            r"tool\s+propose\s+web\.search\s+(.+)", command, flags=re.IGNORECASE | re.DOTALL,
+        )
+        if search_proposal_match:
+            if slot.local_web_search_runtime is None:
+                return "Public web.search is unavailable in this application mode."
+            raw_arguments = search_proposal_match.group(1).strip()
+            envelope = (
+                '{"schema_version":1,"tool_id":"web.search","tool_version":1,"arguments":'
+                + raw_arguments + "}"
+            )
+            references = ()
+            try:
+                proposal = decode_tool_proposal_json(envelope)
+                from pipeline.factual_research_policy import classify_factual_research_request
+                factual = classify_factual_research_request(proposal.arguments["query"])
+                references = slot.local_web_search_runtime.prerequisites.reserve_public(
+                    proposal.arguments["query"], factual,
+                )
+                request_id = f"TI-{secrets.token_hex(16)}"
+                record = slot.tool_broker.submit(
+                    proposal,
+                    request_id=request_id,
+                    trusted_principal_id=context.principal_id,
+                    session_instance_id=context.session_instance_id,
+                    persona_id=context.persona_id,
+                    adventure_id=context.adventure_id,
+                    policy_revision=context.policy_revision,
+                    resource_refs=references,
+                )
+            except (TypeError, ValueError, RuntimeError) as error:
+                for reference in references:
+                    slot.local_web_search_runtime.prerequisites.revoke(reference)
+                return f"Tool proposal was rejected safely: {error}"
+            return (
+                f"Registered inert tool proposal {record.invocation.invocation_id} for web.search. "
+                "No provider probe or search request occurred. Use tool preview, grant, approve, prepare, then execute."
+            )
+
         artifact_match = re.fullmatch(
             r"tool\s+artifact\s+(TF-[A-Za-z0-9_-]{1,64})", command, flags=re.IGNORECASE,
         )
@@ -577,6 +633,29 @@ class AssistantApplication:
                 f"Characters: {artifact.payload.character_count}\n"
                 f"Digest: {artifact.payload.prepared_sha256}\n\n{visible}{suffix}"
             )
+
+        search_artifact_match = re.fullmatch(
+            r"tool\s+search\s+artifact\s+(TF-search_[A-Za-z0-9_-]{1,64})",
+            command,
+            flags=re.IGNORECASE,
+        )
+        if search_artifact_match:
+            if slot.local_web_search_runtime is None:
+                return "Local web-search artifact storage is unavailable."
+            artifact_ref = "TF-search_" + search_artifact_match.group(1)[10:]
+            artifact = slot.local_web_search_runtime.quarantine.get(artifact_ref)
+            if artifact is None:
+                return "Search artifact was not found in this local session."
+            lines = [
+                f"Quarantined search artifact {artifact_ref}",
+                f"Service: {artifact.service_id}",
+                f"Trust: {artifact.trust_label}",
+                f"Digest: {artifact.artifact_sha256}",
+                "Untrusted discovery links:",
+            ]
+            lines.extend(f"{item.rank}. {item.title} — {item.url}" for item in artifact.results)
+            lines.append("Discovery links are not factual support or permission to fetch them.")
+            return "\n".join(lines)
 
         if lowered == "tool research list":
             summaries = slot.research_reviews.summaries()
@@ -779,7 +858,7 @@ class AssistantApplication:
                         ]
                         lines.extend(f"- {item['path']}" for item in files)
                         lines.append("Preview only; file contents were not materialized or executed.")
-                    else:
+                    elif record.invocation.tool_id == "web.fetch":
                         lines = [
                             f"Tool proposal preview: {request_id}",
                             "Status: " + record.state,
@@ -787,6 +866,15 @@ class AssistantApplication:
                             "Exact public URL: " + arguments["url"],
                             "Method: GET; credentials, redirects, proxies, and private disclosure disabled.",
                             "Preview only; no DNS lookup or network request occurred.",
+                        ]
+                    else:
+                        lines = [
+                            f"Tool proposal preview: {request_id}",
+                            "Status: " + record.state,
+                            "Tool: web.search v1",
+                            "Public query is intentionally withheld from passive preview.",
+                            "Public-data disclosure, service readiness, and explicit confirmation are required.",
+                            "Preview only; no provider probe or search request occurred.",
                         ]
                     return "\n".join(lines)
                 if action == "grant":
@@ -798,42 +886,71 @@ class AssistantApplication:
                         return f"Approved {request_id} once. Execution remains disabled."
                     return f"Approved {request_id} once. Use tool prepare {request_id} before execution."
                 if action == "prepare":
-                    if record.invocation.tool_id != "web.fetch" or slot.local_web_runtime is None:
-                        return "Tool preparation is unavailable for this request."
                     if record.state != "approved":
                         return "Tool preparation requires the exact request to be granted and approved first."
-                    destination_record, disclosure_record = (
-                        slot.local_web_runtime.prerequisites.prepare_reserved(
-                            *record.invocation.resource_refs,
+                    if record.invocation.tool_id == "web.fetch" and slot.local_web_runtime is not None:
+                        destination_record, disclosure_record = (
+                            slot.local_web_runtime.prerequisites.prepare_reserved(
+                                *record.invocation.resource_refs,
+                            )
                         )
-                    )
-                    remaining = destination_record.resolution.expires_at_epoch - time.time()
+                        remaining = destination_record.resolution.expires_at_epoch - time.time()
+                        requirement_records = (
+                            ("network.destination", destination_record),
+                            ("network.disclosure", disclosure_record),
+                        )
+                        prepared_message = (
+                            f"Prepared exact public destination and URL-only disclosure evidence for {request_id}. "
+                            "Execute within 25 seconds or create a new request."
+                        )
+                    elif record.invocation.tool_id == "web.search" and slot.local_web_search_runtime is not None:
+                        service_ref, disclosure_ref = record.invocation.resource_refs
+                        service_record, disclosure_record = (
+                            slot.local_web_search_runtime.prerequisites.prepare_reserved(
+                                service_ref,
+                                disclosure_ref,
+                                slot.local_web_search_runtime.service_observation(service_ref),
+                            )
+                        )
+                        remaining = service_record.expires_at_epoch - time.time()
+                        requirement_records = (
+                            ("network.search", service_record),
+                            ("network.disclosure", disclosure_record),
+                        )
+                        prepared_message = (
+                            f"Prepared exact search-service and public-query disclosure evidence for {request_id}. "
+                            "Execute within 25 seconds or create a new request."
+                        )
+                    else:
+                        return "Tool preparation is unavailable for this request."
                     if remaining <= 1:
                         return "Tool preparation expired before it could be recorded; create a new request."
-                    slot.tool_broker.record_prerequisite(
-                        request_id,
-                        requirement_id="network.destination",
-                        resource_ref=destination_record.resource_ref,
-                        evidence_sha256=destination_record.evidence_sha256,
-                        lifetime_seconds=min(remaining, 25.0),
-                    )
-                    slot.tool_broker.record_prerequisite(
-                        request_id,
-                        requirement_id="network.disclosure",
-                        resource_ref=disclosure_record.resource_ref,
-                        evidence_sha256=disclosure_record.evidence_sha256,
-                        lifetime_seconds=min(remaining, 25.0),
-                    )
-                    return (
-                        f"Prepared exact public destination and URL-only disclosure evidence for {request_id}. "
-                        "Execute within 25 seconds or create a new request."
-                    )
+                    for requirement_id, evidence_record in requirement_records:
+                        slot.tool_broker.record_prerequisite(
+                            request_id,
+                            requirement_id=requirement_id,
+                            resource_ref=evidence_record.resource_ref,
+                            evidence_sha256=evidence_record.evidence_sha256,
+                            lifetime_seconds=min(remaining, 25.0),
+                        )
+                    return prepared_message
                 if action == "execute":
-                    if record.invocation.tool_id != "web.fetch" or slot.local_web_runtime is None:
+                    if (
+                        record.invocation.tool_id == "web.fetch"
+                        and slot.local_web_runtime is None
+                    ) or (
+                        record.invocation.tool_id == "web.search"
+                        and slot.local_web_search_runtime is None
+                    ) or record.invocation.tool_id not in {"web.fetch", "web.search"}:
                         return "Tool execution is unavailable for this request."
                     record = slot.tool_broker.dispatch(request_id, context=context)
                     result = record.result
                     if result is not None and result.artifact_refs:
+                        if record.invocation.tool_id == "web.search":
+                            return (
+                                f"Completed {request_id}; quarantined search artifact: {result.artifact_refs[0]}. "
+                                f"Use tool search artifact {result.artifact_refs[0]} to inspect untrusted links."
+                            )
                         return (
                             f"Completed {request_id}; quarantined artifact: {result.artifact_refs[0]}. "
                             f"Use tool artifact {result.artifact_refs[0]} to inspect untrusted text."
@@ -1235,16 +1352,33 @@ def create_assistant_application(
     provider: ChatProvider | None = None,
     provider_registry: ChatProviderRegistry | None = None,
     enable_native_web_tools: bool = False,
+    enable_brave_web_search: bool = False,
+    enable_tavily_web_search: bool = False,
     local_web_runtime_factory: Callable[[], object] | None = None,
+    local_web_search_runtime_factory: Callable[[], object] | None = None,
 ):
     """Create the standard Assistant Mode application for any presentation client."""
     if not isinstance(enable_native_web_tools, bool):
         raise TypeError("enable_native_web_tools must be a boolean")
+    if not isinstance(enable_brave_web_search, bool):
+        raise TypeError("enable_brave_web_search must be a boolean")
+    if not isinstance(enable_tavily_web_search, bool):
+        raise TypeError("enable_tavily_web_search must be a boolean")
+    if enable_brave_web_search and enable_tavily_web_search:
+        raise ValueError("select exactly one hosted web search provider")
     if local_web_runtime_factory is not None and not callable(local_web_runtime_factory):
         raise TypeError("local_web_runtime_factory must be callable or None")
+    if local_web_search_runtime_factory is not None and not callable(local_web_search_runtime_factory):
+        raise TypeError("local_web_search_runtime_factory must be callable or None")
     if enable_native_web_tools and local_web_runtime_factory is None:
         from pipeline.tool_web_native import build_native_web_tool_runtime
         local_web_runtime_factory = build_native_web_tool_runtime
+    if enable_brave_web_search and local_web_search_runtime_factory is None:
+        from pipeline.tool_web_search_brave_native import create_brave_web_search_runtime
+        local_web_search_runtime_factory = create_brave_web_search_runtime
+    if enable_tavily_web_search and local_web_search_runtime_factory is None:
+        from pipeline.tool_web_search_tavily_native import create_tavily_web_search_runtime
+        local_web_search_runtime_factory = create_tavily_web_search_runtime
     config = load_config(config_path) if config_path else load_config()
     registry = capability_registry or build_core_capability_registry()
     manifest = registry.build_manifest()
@@ -1306,6 +1440,7 @@ def create_assistant_application(
         sandbox_status_provider=sandbox_status_provider,
         persona_asset_resolver=PersonaAssetResolver(installed_asset_packages),
         local_web_runtime_factory=local_web_runtime_factory,
+        local_web_search_runtime_factory=local_web_search_runtime_factory,
     )
 
 

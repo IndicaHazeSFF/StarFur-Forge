@@ -312,6 +312,17 @@ def main():
         choices=("off", "summary", "verbose", "trace"),
         help="Retrieval debugging detail level",
     )
+    search_provider_group = assistant_parser.add_mutually_exclusive_group()
+    search_provider_group.add_argument(
+        "--enable-brave-search",
+        action="store_true",
+        help="Enable explicit trusted-local web.search using a user-supplied environment key",
+    )
+    search_provider_group.add_argument(
+        "--enable-tavily-search",
+        action="store_true",
+        help="Enable explicit trusted-local Tavily web.search using a user-supplied environment key",
+    )
 
     serve_parser = subparsers.add_parser(
         "serve",
@@ -528,7 +539,12 @@ def main():
         analyze(args.path)
 
     elif args.command == "assistant":
-        run_interactive(args.config, debug_level=args.debug) if args.config else run_interactive(debug_level=args.debug)
+        interactive_options = {
+            "debug_level": args.debug,
+            "enable_brave_web_search": args.enable_brave_search,
+            "enable_tavily_web_search": args.enable_tavily_search,
+        }
+        run_interactive(args.config, **interactive_options) if args.config else run_interactive(**interactive_options)
 
     elif args.command == "serve":
         from pipeline.api import serve

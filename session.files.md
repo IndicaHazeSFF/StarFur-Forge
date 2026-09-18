@@ -1,6 +1,6 @@
 # Pending copy manifest
 
-## Pipeline (39)
+## Pipeline (44)
 
 - `pipeline/assistant.py`
 - `pipeline/application.py`
@@ -39,6 +39,11 @@
 - `pipeline/tool_web_search.py`
 - `pipeline/tool_web_search_preflight.py`
 - `pipeline/tool_web_search_connector.py`
+- `pipeline/tool_web_search_runtime.py`
+- `pipeline/tool_web_search_brave.py`
+- `pipeline/tool_web_search_brave_native.py`
+- `pipeline/tool_web_search_tavily.py`
+- `pipeline/tool_web_search_tavily_native.py`
 - `pipeline/task_profiles.py`
 - `pipeline/task_routing.py`
 
@@ -51,7 +56,7 @@
 
 - `presentation/apartment.html`
 
-## Tests (37)
+## Tests (42)
 
 - `tests/test_api.py`
 - `tests/test_application.py`
@@ -88,6 +93,11 @@
 - `tests/test_tool_web_search.py`
 - `tests/test_tool_web_search_preflight.py`
 - `tests/test_tool_web_search_connector.py`
+- `tests/test_tool_web_search_runtime.py`
+- `tests/test_tool_web_search_brave.py`
+- `tests/test_tool_web_search_brave_native.py`
+- `tests/test_tool_web_search_tavily.py`
+- `tests/test_tool_web_search_tavily_native.py`
 - `tests/test_task_profiles.py`
 - `tests/test_task_routing.py`
 
@@ -98,6 +108,10 @@
 - `ROADMAP.v5.md`
 - `docs/COMMANDS.md`
 - `docs/SANDBOX_BACKENDS.md`
+
+## Root adapter (1)
+
+- `starfur.py`
 
 S9b exposes only aggregate session-local tool lifecycle counts. B12b documents
 the optional distribution boundary. B9a adds only a pure guest-image expectation
@@ -182,6 +196,19 @@ exact `web.fetch` path.
 S11aa adds only a bounded session-memory exact-reference store for those search
 artifacts. It has no list/query/persistence/application/broker path and creates
 no search execution authority.
+S11af/S11ag add the first concrete hosted-search backend behind that neutral
+boundary. A strict Brave reducer and fixed-endpoint native HTTPS transport use
+only a transient user-owned environment credential, reduce results to bounded
+untrusted URL/title candidates, and remain disabled unless the trusted local
+CLI is launched with `--enable-brave-search`. Normal startup performs no DNS or
+HTTP, shared chat/API cannot control the tool, and the WSL live-key path remains
+smoke-gated.
 S11ab adds a pure exact search preflight over broker commitments, a short-lived
 configured service record, and public-query disclosure metadata. It performs no
 I/O and creates no prerequisite, connector, provider, or answer authority.
+S11ah keeps Brave intact and adds Tavily as a second explicitly selected hosted
+search backend. The CLI flags are mutually exclusive, credentials stay in
+provider-specific process environment variables, and neither provider is a
+silent fallback for the other. Tavily returns only reduced untrusted URL/title
+candidates; its answer, snippets, scores, raw content, usage, and request
+metadata are discarded. Both live WSL credential paths remain smoke-gated.
