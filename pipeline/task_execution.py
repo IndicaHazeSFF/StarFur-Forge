@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from pipeline.provider_registry import ChatProviderRegistry
+from pipeline.providers import StructuredChatCompletionProvider
 from pipeline.task_routing import TaskRouteDecision, TaskRoutePlanner
 
 
@@ -119,6 +120,42 @@ class RoutedChatExecutor:
                 model=selected.profile.model,
                 options=dict(selected.profile.options) or None,
                 stream=stream,
+            )
+        except Exception as error:
+            raise RoutedTaskExecutionError("routed provider request failed", reason="provider_request_failed") from error
+        return RoutedChatExecution(decision, response)
+
+    def execute_structured_planned(
+        self,
+        decision: TaskRouteDecision,
+        messages,
+        *,
+        schema: Mapping[str, Any],
+    ) -> RoutedChatExecution:
+        """Submit one schema-constrained request without fallback or streaming."""
+        if not isinstance(decision, TaskRouteDecision):
+            raise TypeError("routed chat decision is invalid")
+        if not isinstance(schema, Mapping) or not schema:
+            raise TypeError("structured response schema is invalid")
+        selected = decision.selected
+        if selected is None:
+            raise RoutedTaskExecutionError("no configured provider route is available", reason="route_unavailable")
+        provider = self._providers.get(selected.provider_id)
+        if provider is None:
+            raise RoutedTaskExecutionError(
+                "selected provider adapter is unavailable", reason="provider_adapter_unavailable",
+            )
+        if not isinstance(provider, StructuredChatCompletionProvider):
+            raise RoutedTaskExecutionError(
+                "selected provider does not support structured output",
+                reason="provider_capability_unavailable",
+            )
+        try:
+            response = provider.complete_structured(
+                messages,
+                schema=dict(schema),
+                model=selected.profile.model,
+                options=dict(selected.profile.options) or None,
             )
         except Exception as error:
             raise RoutedTaskExecutionError("routed provider request failed", reason="provider_request_failed") from error

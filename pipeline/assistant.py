@@ -782,6 +782,34 @@ class AssistantSession:
             self.provider_lifecycle.fail(error)
             raise
 
+    def _provider_complete_structured(self, messages, *, schema, model=None, task_id):
+        """Call one exact route through its optional structured-output seam."""
+        executor, decision = self._task_route(task_id, model=model)
+        selected = decision.selected
+        self.provider_lifecycle.begin_generation(
+            stream=False, model=selected.profile.model, provider=selected.provider_id,
+        )
+        try:
+            execution = executor.execute_structured_planned(decision, messages, schema=schema)
+            self._current_task_routes.append(execution.public_dict())
+            self._set_latest_task_route_outcome("completed")
+            self.provider_lifecycle.finish()
+            return execution.response
+        except RoutedTaskExecutionError as error:
+            self._current_task_routes.append({
+                "requested_task_id": decision.requested_task_id,
+                "selected_task_id": selected.task_id,
+                "provider": selected.provider_id,
+                "model": selected.profile.model,
+                "fallback_used": decision.selected_index not in (None, 0),
+                "outcome": error.reason,
+            })
+            self.provider_lifecycle.fail(error)
+            raise RuntimeError(str(error)) from error
+        except Exception as error:
+            self.provider_lifecycle.fail(error)
+            raise
+
     def local_research_claim_provider(self):
         """Bind one exact local task route for explicit cited-claim review.
 
@@ -804,11 +832,12 @@ class AssistantSession:
             "local",
         )
 
-        def complete(messages, model):
+        def complete(messages, model, schema):
             if model != target.model:
                 raise ValueError("research model changed after route selection")
-            return self._provider_complete(
+            return self._provider_complete_structured(
                 messages,
+                schema=schema,
                 model=model,
                 task_id=TASK_RESEARCH_CLAIM_GENERATION,
             )

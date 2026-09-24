@@ -47,7 +47,8 @@ TOOL_RESULT_OUTCOMES = frozenset({
 })
 TOOL_RESULT_ERROR_CATEGORIES = frozenset({
     "validation_failed", "permission_denied", "confirmation_required", "backend_unavailable",
-    "execution_failed", "timed_out", "cancelled", "outcome_unknown",
+    "execution_failed", "transport_policy_rejected", "response_binding_rejected",
+    "content_preparation_rejected", "timed_out", "cancelled", "outcome_unknown",
 })
 CORRELATION_ID_RE = re.compile(r"^[A-Z][A-Z0-9]{1,7}-[A-Za-z0-9_-]{1,64}$")
 ARTIFACT_REF_RE = re.compile(r"^TF-[A-Za-z0-9_-]{1,64}$")

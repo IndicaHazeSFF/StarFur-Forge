@@ -1,8 +1,10 @@
 """Provider-free bounds for future public-text HTTP response ingestion.
 
 This module opens no connection and performs no decompression or content
-parsing.  A future trusted connector may feed already-decoded byte chunks plus
-the exact encoded-byte count consumed.  The collector fails closed on size,
+parsing. A future trusted connector may feed post-transfer-framing byte chunks
+plus the exact entity-body byte count consumed before content decoding. HTTP
+``chunked`` framing is not content encoding and is intentionally excluded from
+that body count. The collector fails closed on size,
 expansion, media-type, encoding, or UTF-8 violations.  A resulting text payload
 is still untrusted source material, never a prompt, memory, or tool authority.
 """

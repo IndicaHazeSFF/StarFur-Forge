@@ -33,6 +33,7 @@ from pipeline.tool_grants import (
     tool_proposal_digest,
 )
 from pipeline.tool_web_parser import QuarantinedWebText, prepare_quarantined_web_text
+from pipeline.tool_web_html_parser import prepare_quarantined_web_html
 from pipeline.tool_web_policy import WebDestination, evaluate_web_connection
 from pipeline.tool_web_preflight import (
     WebDestinationPrerequisite,
@@ -400,7 +401,7 @@ class WebFetchSupervisor:
             except WebTransportTimedOut:
                 return self._timed_out(request, invocation)
             except WebTransportPolicyError:
-                return self._failed(request, invocation, "execution_failed")
+                return self._failed(request, invocation, "transport_policy_rejected")
             except Exception:
                 return SupervisorCompletion.from_request(
                     request, outcome="outcome_unknown", stop_state="not_verified",
@@ -413,7 +414,7 @@ class WebFetchSupervisor:
             if self._clock() >= request.authorization_deadline:
                 return self._timed_out(request, invocation)
             if not isinstance(response, WebTransportResponse) or not response.matches(transport_request):
-                return self._failed(request, invocation, "execution_failed")
+                return self._failed(request, invocation, "response_binding_rejected")
             connected = evaluate_web_connection(
                 destination,
                 destination_evidence.resolution,
@@ -428,9 +429,18 @@ class WebFetchSupervisor:
                     collector.append(
                         chunk.data, encoded_bytes_consumed=chunk.encoded_bytes_consumed,
                     )
-                prepared = prepare_quarantined_web_text(collector.finalize())
+                payload = collector.finalize()
+                prepared = (
+                    prepare_quarantined_web_html(payload)
+                    if payload.media_type == "text/html"
+                    else prepare_quarantined_web_text(payload)
+                )
+            except (TypeError, ValueError):
+                return self._failed(request, invocation, "content_preparation_rejected")
             except Exception:
-                return self._failed(request, invocation, "execution_failed")
+                return SupervisorCompletion.from_request(
+                    request, outcome="outcome_unknown", stop_state="not_verified",
+                )
             try:
                 artifact_ref = self._quarantine.store(
                     WebFetchedArtifact(

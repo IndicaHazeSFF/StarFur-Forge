@@ -135,6 +135,26 @@ class ChatCompletionProvider(Protocol):
 
 
 @runtime_checkable
+class StructuredChatCompletionProvider(Protocol):
+    """Optional provider capability for one non-streaming JSON-schema request.
+
+    Core owns the schema and still validates the returned text itself. Merely
+    implementing this protocol does not grant a provider authority, select a
+    task route, permit fallback, or make the response trustworthy.
+    """
+
+    def complete_structured(
+        self,
+        messages: ChatMessages,
+        *,
+        schema: Mapping[str, Any],
+        model: str | None = None,
+        options: Mapping[str, Any] | None = None,
+    ) -> Any:
+        """Return one provider response constrained by a Core-owned schema."""
+
+
+@runtime_checkable
 class ChatProvider(ChatCompletionProvider, Protocol):
     """A chat adapter with optional model discovery and health probing."""
 
@@ -161,6 +181,12 @@ class OllamaChatProvider:
             kwargs["options"] = dict(options)
         if stream:
             kwargs["stream"] = True
+        return self._client.chat(**kwargs)
+
+    def complete_structured(self, messages, *, schema, model=None, options=None):
+        kwargs = {"model": model, "messages": messages, "format": dict(schema)}
+        if options:
+            kwargs["options"] = dict(options)
         return self._client.chat(**kwargs)
 
     def list_models(self):
@@ -222,6 +248,6 @@ class CallableChatProvider:
 __all__ = [
     "CallableChatProvider", "ChatCompletion", "ChatCompletionProvider", "ChatMessages", "ChatProvider",
     "ChatProviderResponseError", "ChatStreamChunk", "DisabledChatProvider",
-    "OllamaChatProvider", "normalize_chat_completion", "normalize_chat_stream_chunk",
+    "OllamaChatProvider", "StructuredChatCompletionProvider", "normalize_chat_completion", "normalize_chat_stream_chunk",
     "provider_health_snapshot", "provider_is_configured",
 ]

@@ -540,15 +540,24 @@ class ToolBroker:
                 return self._replace_terminal(
                     current, "outcome_unknown", "supervisor_outcome_unknown",
                 )
+            reason = {
+                "completed": "completed",
+                "cancelled": "cancelled",
+                "timed_out": "timed_out",
+                "failed": "supervisor_failed",
+            }[completion.outcome]
+            if completion.outcome == "failed" and result is not None and result.error_category in {
+                "validation_failed", "permission_denied", "backend_unavailable", "execution_failed",
+                "transport_policy_rejected", "response_binding_rejected",
+                "content_preparation_rejected",
+            }:
+                # Surface only the contract allowlist category.  Raw transport,
+                # parser, backend, and exception detail remains quarantined.
+                reason = result.error_category
             return self._replace_terminal(
                 current,
                 completion.outcome,
-                {
-                    "completed": "completed",
-                    "cancelled": "cancelled",
-                    "timed_out": "timed_out",
-                    "failed": "supervisor_failed",
-                }[completion.outcome],
+                reason,
                 result=result,
             )
 

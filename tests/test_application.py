@@ -75,8 +75,8 @@ class ResearchSession(FakeSession):
     def local_research_claim_provider(self):
         target = ResearchProviderTarget.create("ollama", "qwen3:8b", "local")
 
-        def complete(messages, model):
-            self.research_calls.append((messages, model))
+        def complete(messages, model, schema):
+            self.research_calls.append((messages, model, schema))
             if self.malformed:
                 return {"message": {"content": "not json"}}
             packet = json.loads(messages[1]["content"].split("\n", 1)[1])
@@ -277,7 +277,19 @@ class AssistantApplicationTests(unittest.TestCase):
         artifact_ref = re.search(r"TF-[A-Za-z0-9_-]+", completed).group(0)
         artifact = app.respond(f"tool artifact {artifact_ref}", trusted_local_control=True)
         self.assertIn("untrusted_external", artifact)
+        self.assertIn("Source media: text/plain", artifact)
+        self.assertIn("Prepared media: text/plain", artifact)
         self.assertIn("bounded public fixture", artifact)
+        self.assertEqual([], session.calls)
+
+        fast = app.respond(
+            "tool fetch https://example.com/fast", trusted_local_control=True,
+        )
+        fast_artifact = re.search(r"TF-[A-Za-z0-9_-]+", fast)
+        self.assertIsNotNone(fast_artifact, fast)
+        self.assertIn("Explicit local fast fetch confirmed for https://example.com/fast", fast)
+        self.assertIn("Inspect any returned artifact explicitly", fast)
+        self.assertEqual(2, len(resolver_calls))
         self.assertEqual([], session.calls)
 
     def test_trusted_local_web_search_requires_injected_runtime_and_exact_preparation(self):
@@ -349,6 +361,116 @@ class AssistantApplicationTests(unittest.TestCase):
         self.assertEqual(1, len(adapter_calls))
         self.assertEqual([], session.calls)
 
+        fast = app.respond(
+            "tool search Please research the current public price of an RTX 4070.",
+            trusted_local_control=True,
+        )
+        self.assertIn("Explicit local fast web search confirmed", fast)
+        self.assertIn("Inspect any returned discovery links explicitly", fast)
+        self.assertNotIn("RTX 4070", fast)
+        self.assertEqual(2, len(adapter_calls))
+
+    def test_trusted_local_search_selection_creates_inert_exact_fetch_proposal(self):
+        resolver_calls = []
+        adapter_calls = []
+
+        class FakeSearchAdapter:
+            available = True
+            service_id = "fixture.search"
+
+            def search(self, request, cancellation):
+                adapter_calls.append(request)
+                return WebSearchResponse(
+                    1, request.invocation_id, request.binding_fingerprint,
+                    request.worker_generation, request.service_id, request.query_sha256,
+                    (WebSearchCandidate(1, "https://example.com/result", "Fixture result"),),
+                )
+
+            def request_cancel(self, request):
+                return None
+
+        def fetch_runtime_factory():
+            resolver = NativeWebResolver(
+                getaddrinfo=lambda *args: resolver_calls.append(args) or [
+                    (2, 1, 6, "", ("93.184.216.34", 443)),
+                ],
+                clock=time.time,
+            )
+            prerequisites = SessionWebPrerequisiteStore(resolver)
+            quarantine = SessionWebQuarantineStore()
+            return NativeWebToolRuntime(
+                prerequisites,
+                quarantine,
+                WebFetchSupervisor(prerequisites, FakeWebTransport(), quarantine, clock=time.time),
+            )
+
+        def search_runtime_factory():
+            prerequisites = SessionWebSearchPrerequisiteStore(
+                service_id="fixture.search", deployment="local", maximum_results=4,
+            )
+            quarantine = SessionWebSearchArtifactStore(ref_factory=lambda: "TF-search_fixture")
+
+            def observation(service_ref):
+                now = time.time()
+                return WebSearchServicePrerequisite(
+                    1, service_ref, "fixture.search", "local", 4, True,
+                    now, now + 60.0, WEB_SEARCH_PREFLIGHT_POLICY_REVISION,
+                )
+
+            supervisor = WebSearchSupervisor(
+                prerequisites, FakeSearchAdapter(), quarantine, clock=time.time,
+            )
+            return LocalWebSearchRuntime(prerequisites, quarantine, supervisor, observation)
+
+        session = FakeSession()
+        app = AssistantApplication(
+            session,
+            local_web_runtime_factory=fetch_runtime_factory,
+            local_web_search_runtime_factory=search_runtime_factory,
+        )
+        search_created = app.respond(
+            'tool propose web.search {"query":"Please research the current price of an RTX 4070."}',
+            trusted_local_control=True,
+        )
+        search_id = re.search(r"TI-[A-Za-z0-9_-]+", search_created).group(0)
+        app.respond(f"tool grant {search_id}", trusted_local_control=True)
+        app.respond(f"tool approve {search_id}", trusted_local_control=True)
+        app.respond(f"tool prepare {search_id}", trusted_local_control=True)
+        search_completed = app.respond(f"tool execute {search_id}", trusted_local_control=True)
+        artifact_ref = re.search(r"TF-search_[A-Za-z0-9_-]+", search_completed).group(0)
+
+        selected = app.respond(
+            f"tool search select {artifact_ref} 1", trusted_local_control=True,
+        )
+        fetch_id = re.search(r"TI-[A-Za-z0-9_-]+", selected).group(0)
+        self.assertIn("Selected untrusted discovery link 1", selected)
+        self.assertIn("No DNS lookup or network request occurred", selected)
+        self.assertEqual([], resolver_calls)
+        self.assertEqual(1, len(adapter_calls))
+        preview = app.respond(f"tool preview {fetch_id}", trusted_local_control=True)
+        self.assertIn("https://example.com/result", preview)
+
+        app.respond(f"tool grant {fetch_id}", trusted_local_control=True)
+        app.respond(f"tool approve {fetch_id}", trusted_local_control=True)
+        prepared = app.respond(f"tool prepare {fetch_id}", trusted_local_control=True)
+        self.assertIn("URL-only disclosure evidence", prepared)
+        self.assertEqual(1, len(resolver_calls))
+        completed = app.respond(f"tool execute {fetch_id}", trusted_local_control=True)
+        self.assertIn("quarantined artifact", completed)
+
+        fast = app.respond(
+            f"tool search fetch {artifact_ref} 1", trusted_local_control=True,
+        )
+        self.assertIn("Explicit local fast fetch confirmed for selected discovery link 1", fast)
+        self.assertIn("quarantined artifact", fast)
+        self.assertIn("Inspect any returned artifact explicitly", fast)
+        self.assertEqual(2, len(resolver_calls))
+        self.assertIn(
+            "rank was not found",
+            app.respond(f"tool search select {artifact_ref} 2", trusted_local_control=True),
+        )
+        self.assertEqual([], session.calls)
+
     def test_trusted_local_research_proposes_cited_claims_without_publishing_state(self):
         def runtime_factory():
             resolver = NativeWebResolver(
@@ -386,6 +508,7 @@ class AssistantApplicationTests(unittest.TestCase):
         self.assertIn("RC-001 [confidence 0.90]", result)
         self.assertIn("Cites: RS-", result)
         self.assertIn("Citation diversity: single_source", result)
+        self.assertIn("(fetched ", result)
         self.assertIn("no final answer, memory, learning, adventure, or canonical state", result)
         self.assertEqual(1, len(session.research_calls))
         self.assertEqual([], session.calls)
@@ -393,15 +516,27 @@ class AssistantApplicationTests(unittest.TestCase):
         inspected = app.respond(f"tool research inspect {review_id}", trusted_local_control=True)
         brief = app.respond(f"tool research brief {review_id}", trusted_local_control=True)
         answer = app.respond(f"tool research answer {review_id}", trusted_local_control=True)
+        bound_answer = app.respond(
+            f"tool research answer {review_id}: What does the fixture contain?",
+            trusted_local_control=True,
+        )
+        mismatched_answer = app.respond(
+            f"tool research answer {review_id}: What is a different question?",
+            trusted_local_control=True,
+        )
         self.assertIn(review_id, listed)
         self.assertIn("Read-only review record", inspected)
         self.assertIn("RC-001 [confidence 0.90]", inspected)
         self.assertIn("Citation diversity: single_source", inspected)
+        self.assertIn("(fetched ", inspected)
         self.assertIn("Source-backed research brief", brief)
         self.assertIn("unverified; not a final answer", brief)
         self.assertIn("https://example.com/reference", brief)
         self.assertIn("Research answer (source-backed, unverified)", answer)
         self.assertIn("No model was called for this answer", answer)
+        self.assertIn("Question binding: exact reviewed question match", bound_answer)
+        self.assertIn("does not match this review", mismatched_answer)
+        self.assertNotIn("What does the fixture contain?", mismatched_answer)
 
     def test_local_research_missing_source_fails_before_provider_use(self):
         session = ResearchSession(malformed=True)

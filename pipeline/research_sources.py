@@ -17,6 +17,7 @@ import re
 from pipeline.tool_contracts import ARTIFACT_REF_RE
 from pipeline.tool_web_connector import WebFetchedArtifact
 from pipeline.tool_web_parser import WEB_EXTERNAL_TRUST_LABEL
+from pipeline.tool_web_response import ALLOWED_WEB_MEDIA_TYPES
 
 
 RESEARCH_SOURCE_SCHEMA_VERSION = 1
@@ -50,6 +51,21 @@ def _normalized_question(value: object) -> str:
     return normalized
 
 
+def research_question_metadata(question: object) -> tuple[str, str, int]:
+    """Return canonical question text plus bounded, non-content metadata.
+
+    Callers that retain only the digest and byte count can later prove that a
+    supplied question matches a research packet without retaining its text.
+    This is a binding helper, not disclosure consent or answer authority.
+    """
+    normalized = _normalized_question(question)
+    try:
+        encoded = normalized.encode("utf-8")
+    except UnicodeEncodeError as error:
+        raise ValueError("research question is not valid UTF-8") from error
+    return normalized, hashlib.sha256(encoded).hexdigest(), len(encoded)
+
+
 def _packet_digest(question: str, sources: tuple["ResearchSource", ...]) -> str:
     encoded = json.dumps(
         {
@@ -60,6 +76,7 @@ def _packet_digest(question: str, sources: tuple["ResearchSource", ...]) -> str:
                     "artifact_ref": item.artifact_ref,
                     "url": item.url,
                     "media_type": item.media_type,
+                    "source_media_type": item.source_media_type,
                     "fetched_at_epoch": item.fetched_at_epoch,
                     "content_sha256": item.content_sha256,
                     "text": item.text,
@@ -90,6 +107,7 @@ class ResearchSource:
     content_sha256: str
     text: str
     character_count: int
+    source_media_type: str | None = None
 
     def __post_init__(self) -> None:
         if isinstance(self.schema_version, bool) or self.schema_version != RESEARCH_SOURCE_SCHEMA_VERSION:
@@ -106,6 +124,9 @@ class ResearchSource:
             raise ValueError("research source URL is invalid")
         if self.media_type not in {"text/plain", "text/markdown"}:
             raise ValueError("research source media type is unsupported")
+        source_media_type = self.media_type if self.source_media_type is None else self.source_media_type
+        if source_media_type not in ALLOWED_WEB_MEDIA_TYPES:
+            raise ValueError("research source media provenance is unsupported")
         if (
             isinstance(self.fetched_at_epoch, bool)
             or not isinstance(self.fetched_at_epoch, (int, float))
@@ -126,6 +147,7 @@ class ResearchSource:
             raise ValueError("research source character count is invalid")
         if hashlib.sha256(self.text.encode("utf-8")).hexdigest() != self.content_sha256:
             raise ValueError("research source digest is inconsistent")
+        object.__setattr__(self, "source_media_type", source_media_type)
 
     def public_dict(self) -> dict[str, object]:
         """Return explicit source data; callers must authorize any disclosure."""
@@ -137,6 +159,7 @@ class ResearchSource:
             "handling": self.handling,
             "url": self.url,
             "media_type": self.media_type,
+            "source_media_type": self.source_media_type,
             "fetched_at_epoch": self.fetched_at_epoch,
             "content_sha256": self.content_sha256,
             "character_count": self.character_count,
@@ -232,6 +255,7 @@ def research_source_from_web_artifact(
         payload.prepared_sha256,
         payload.text,
         payload.character_count,
+        payload.source_media_type,
     )
 
 
@@ -240,7 +264,7 @@ def build_research_source_packet(
     sources: object,
 ) -> ResearchSourcePacket:
     """Build a deterministic packet without calling a provider or judging truth."""
-    normalized_question = _normalized_question(question)
+    normalized_question, _, _ = research_question_metadata(question)
     if not isinstance(sources, (tuple, list)):
         raise TypeError("research packet sources must be a sequence")
     records = tuple(sources)
@@ -272,5 +296,6 @@ __all__ = [
     "ResearchSource",
     "ResearchSourcePacket",
     "build_research_source_packet",
+    "research_question_metadata",
     "research_source_from_web_artifact",
 ]

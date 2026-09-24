@@ -25,6 +25,12 @@ class FakeChatProvider:
             raise self.error
         return self.response
 
+    def complete_structured(self, messages, *, schema, model=None, options=None):
+        self.calls.append((messages, model, options, False, schema))
+        if self.error is not None:
+            raise self.error
+        return self.response
+
     def list_models(self):
         return []
 
@@ -95,6 +101,31 @@ class TaskExecutionTests(unittest.TestCase):
             executor.execute("assistant_chat", (), default_model="fallback", default_provider_id="local")
         self.assertEqual("provider_request_failed", captured.exception.reason)
         self.assertEqual(1, len(provider.calls))
+
+    def test_structured_execution_uses_exact_route_schema_and_no_stream(self):
+        executor, provider = self._executor()
+        decision = executor.plan(
+            "assistant_chat", default_model="fallback", default_provider_id="local",
+        )
+        schema = {"type": "object", "required": ["answer"]}
+
+        result = executor.execute_structured_planned(decision, (), schema=schema)
+
+        self.assertEqual("local", result.provider_id)
+        self.assertEqual(((), "small", {"num_predict": 123}, False, schema), provider.calls[0])
+
+    def test_structured_execution_fails_closed_when_capability_is_absent(self):
+        class TextOnlyProvider:
+            def complete(self, messages, *, model=None, options=None, stream=False):
+                raise AssertionError("text completion must not be called")
+
+        executor, _ = self._executor(provider=TextOnlyProvider())
+        decision = executor.plan(
+            "assistant_chat", default_model="fallback", default_provider_id="local",
+        )
+        with self.assertRaises(RoutedTaskExecutionError) as caught:
+            executor.execute_structured_planned(decision, (), schema={"type": "object"})
+        self.assertEqual("provider_capability_unavailable", caught.exception.reason)
 
 
 if __name__ == "__main__":

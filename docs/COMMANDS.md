@@ -73,7 +73,9 @@ Inside Assistant Mode:
     tool list
     tool propose sandbox.run {"task_kind":"python_tests","objective":"Run a harmless fixture.","files":[{"path":"main.py","content":"print('safe')"}]}
     tool propose web.fetch {"url":"https://example.com/public.txt"}
+    tool fetch https://example.com/public.txt
     tool propose web.search {"query":"Please research the current public price of X."}
+    tool search <public query>
     tool preview <TI-id>
     tool grant <TI-id>
     tool approve <TI-id>
@@ -81,11 +83,13 @@ Inside Assistant Mode:
     tool execute <TI-id>
     tool artifact <TF-id>
     tool search artifact <TF-search_id>
+    tool search select <TF-search_id> <rank>
+    tool search fetch <TF-search_id> <rank>
     tool research <TF-id>[, TF-id...]: <question>
     tool research list
     tool research inspect <RR-id>
     tool research brief <RR-id>
-    tool research answer <RR-id>
+    tool research answer <RR-id>[: <exact question>]
     tool status <TI-id>
     tool deny <TI-id>
     tool revoke <TI-id>
@@ -99,7 +103,11 @@ an exact grant and approval, `tool prepare` resolves and records short-lived
 destination and URL-only public-disclosure evidence; `tool execute` consumes
 that evidence once and may perform one pinned, credential-free HTTPS GET for
 plain text or Markdown. The result contains only a quarantined artifact
-reference, and `tool artifact` is the bounded local inspection step.
+reference, and `tool artifact` is the bounded local inspection step. Artifact
+inspection distinguishes the response source media from the prepared text media;
+for example, an HTML source is displayed as `Source media: text/html` and
+`Prepared media: text/plain`. Prepared text remains untrusted external source
+data rather than a claim of HTML safety or factual truth.
 `web.search` uses the same explicit grant/approval/preparation lifecycle. It is
 disabled by default. Two opt-in hosted adapters are available, selected
 explicitly when the trusted local CLI starts. They are alternatives for that
@@ -115,6 +123,18 @@ or:
     read -rsp "Tavily API key: " STARFUR_TAVILY_API_KEY; export STARFUR_TAVILY_API_KEY; echo
     python3 starfur.py assistant --enable-tavily-search
 
+For the usual Tavily session, prefer the local launcher instead:
+
+    bash scripts/start_tavily_assistant.sh
+
+The launcher displays one `*` per entered or pasted key character without
+revealing the key itself. The key remains session-only and is unset when the
+Assistant process exits.
+
+It prompts when the key is absent, passes the key only to the Assistant process,
+and clears the launcher's environment when Assistant Mode exits. It does not
+save the key in StarFur configuration or a shell-history command.
+
 Do not place the key in `assistant.json`, a persona, a tool proposal, a shell
 history entry, or a committed file. Each flag is accepted only by the trusted
 local Assistant CLI, and the flags are mutually exclusive; shared chat/API
@@ -126,12 +146,28 @@ untrusted public links through `tool search artifact`. Search results are not
 factual support and do not fetch their links automatically. The provider-neutral
 runtime remains provider-neutral and injectable so another hosted or self-hosted
 adapter can be added later without changing Core authority or artifact contracts.
+When both the opt-in search runtime and native `web.fetch` runtime are enabled,
+`tool search select <TF-search_id> <rank>` may turn one exact session-local
+discovery link into a fresh inert `web.fetch` proposal. It performs no DNS or
+HTTP itself, carries no search-provider authority forward, and still requires
+its own preview, grant, approval, preparation, and execution. Selection is not
+factual support or a permission to fetch.
 `tool research` explicitly submits one to eight already-quarantined public-text
 artifacts to the configured local research task profile. It returns strict packet-local
 cited claim proposals for review, not a final answer, and cannot create memory,
 learning, adventure, or canonical state. It is unavailable through shared
 chat/API requests and does not add automatic research behavior. Selecting
 multiple sources does not itself establish corroboration or truth.
+`tool search <public query>` is the trusted-local fast path for a public query
+you typed. It uses the same one-use proposal, grant, approval, preparation, and
+execution chain as the expanded `web.search` controls, then stops at a
+quarantined untrusted discovery-link artifact. Inspect it with `tool search
+artifact <TF-search_id>`; results are not facts and links are never fetched
+automatically.
+`tool search fetch <TF-search_id> <rank>` is the equally explicit trusted-local
+fast path for one link you already selected by rank from that artifact. It
+creates a fresh exact `web.fetch` request through the same one-use lifecycle,
+then stops at the quarantined fetched artifact for separate inspection.
 Each generation also creates a bounded session-local `RR-...` review record.
 `tool research list` and `tool research inspect <RR-id>` reopen only the cited
 claim proposals and public source labels; reviews are not approvals and vanish
@@ -142,6 +178,10 @@ new model response or verified final answer.
 `tool research answer <RR-id>` is the explicit local answer gate: it either
 renders those same cited claims as source-backed but unverified, or says no
 supported claims exist. It does not call a model, infer truth, or create state.
+Adding `: <exact question>` checks a digest-and-length binding against the
+question used to create the session-local review before rendering. A mismatch
+fails closed without revealing the stored question, calling a model, or writing
+state.
 
 Tool requests and fetched artifacts disappear when their bounded application
 session is evicted or the process restarts. Changing the active persona,

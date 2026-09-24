@@ -429,6 +429,63 @@ This may begin after C4's reviewed adventure-import path and before broad routin
 - Later add voice, notifications, calendar/feed displays, and permissioned system monitoring.
 - Generated visuals are illustrations, never authoritative events.
 
+#### H4. Ambient Presence (LATER; relationship-neutral; dependency-gated)
+
+Ambient Presence is the optional, low-friction resident behavior that lets a
+configured character remain quietly present while the user works, reads, plays,
+or is otherwise occupied. It is not a romance or relationship mode: the same
+Core boundary must support a friend, roommate, mascot, assistant, companion, or
+user-created personality. Optional relationship or personality progression is a
+separate layer.
+
+The first control should be one prominent, reversible toggle with restrained
+defaults (long quiet periods, conservative interruption limits, and no automatic
+follow-up question). Advanced controls may expose interaction frequency, quiet
+hours, enabled context sources, idle autonomy, and notification/interruption
+behavior. Silence, a natural conversational ending, a short observation, or a
+single joke are all valid outcomes.
+
+Implement this as four small dependency-ordered phases:
+
+1. **Passive Presence:** natural conversation endings, silence/no-response,
+   reduced assistant-style prompting, and a deterministic idle presentation.
+2. **Autonomous Character Activity:** bounded idle tasks and apartment-object
+   interactions (reading, relaxing, looking outside, stretching, sleeping, or
+   checking something), driven by `ResidentAction` and a lightweight Core-owned
+   scheduler/state machine rather than a provider on every idle tick.
+3. **Contextual Awareness:** explicitly permissioned local signals such as the
+   active application/game, media, time, system events, or supported integrations;
+   filter and score them in Core before allowing an occasional reaction. Context
+   sources are disabled by default and never become implicit observation authority.
+4. **Mature Ambient Presence:** configurable frequency/quiet hours, stronger
+   persona-local memory and personality integration, and optional cross-device
+   surfaces only after their own permission and privacy gates pass.
+
+The behavior must remain consistent with personality and memory without turning
+ordinary conversation into a support session. It may disagree, tease, express a
+preference, decline a topic, be briefly distracted, or say nothing. It should
+not guilt the user for leaving, discourage human relationships, demand
+exclusivity, punish shutdown, pressure additional usage, or claim human
+consciousness or biological needs as fact. These are behavior-quality constraints,
+not intrusive warning dialogs. The character should not foreground its artificial
+nature in ordinary exchanges, but must answer accurately when asked directly.
+
+Ambient Presence consumes public persona/runtime state, apartment animation/state
+slots, deterministic scheduling, and permissioned event sources. Provider-backed
+commentary is optional; no-provider operation must still provide quiet authored
+activity and safe settings. It may never infer or mutate canonical memory,
+adventure state, permissions, or tools from presentation output. Context events,
+media/reading sessions, and future remote access remain separate bounded sources.
+
+**Acceptance and tests:** a single toggle enables/disables the feature; disabled
+or quiet modes produce no unsolicited interaction; seeded idle behavior is
+repeatable; context permissions and revocation are honored; interruptions are
+debounced; provider loss falls back to deterministic activity; shutdown and
+restart do not create hidden effects; no relationship pressure, private-context
+leak, or AI-identity deception appears in default behavior. This section does
+not make Ambient Presence a Steam gate or move it ahead of the adventure,
+permission, or zero-provider sequence.
+
 ### Cross-cutting later requirement — Zero-provider resident runtime (LATER; dependency-gated)
 
 StarFur must remain meaningfully functional with no configured inference providers. This is not an anti-AI branch: it is the architectural consequence of Core resident continuity being separate from optional inference capabilities.

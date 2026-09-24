@@ -207,10 +207,10 @@ class ToolWebNativeTests(unittest.TestCase):
     def test_transport_rejects_redirects_unsupported_media_and_duplicate_headers(self):
         for response in (
             type("Redirect", (), {"status": 302})(),
-            FakeResponse(headers=[("Content-Type", "text/html")]),
+            FakeResponse(headers=[("Content-Type", "application/json")]),
             FakeResponse(headers=[
                 ("Content-Type", "text/plain"),
-                ("Transfer-Encoding", "chunked"),
+                ("Transfer-Encoding", "gzip"),
             ]),
             FakeResponse(headers=[
                 ("Content-Type", "text/plain"),
@@ -226,6 +226,55 @@ class ToolWebNativeTests(unittest.TestCase):
                 with self.assertRaises(WebTransportPolicyError):
                     transport.fetch(transport_request(), SupervisorCancellation())
                 self.assertTrue(connection.closed)
+
+    def test_transport_accepts_identity_chunked_entity_bodies_but_rejects_ambiguous_length(self):
+        body = b"<p>bounded HTML source</p>"
+        accepted = FakeConnection(FakeResponse(
+            body=body,
+            headers=[
+                ("Content-Type", "text/html; charset=utf-8"),
+                ("Transfer-Encoding", "chunked"),
+            ],
+        ))
+        transport = NativeHTTPSWebTransport(
+            clock=lambda: 120.0,
+            connection_factory=lambda request, timeout: accepted,
+        )
+        response = transport.fetch(transport_request(), SupervisorCancellation())
+        self.assertEqual(body, response.chunks[0].data)
+        self.assertEqual("text/html", response.metadata.media_type)
+
+        ambiguous = FakeConnection(FakeResponse(
+            body=body,
+            headers=[
+                ("Content-Type", "text/html"),
+                ("Transfer-Encoding", "chunked"),
+                ("Content-Length", str(len(body))),
+            ],
+        ))
+        transport = NativeHTTPSWebTransport(
+            clock=lambda: 120.0,
+            connection_factory=lambda request, timeout: ambiguous,
+        )
+        with self.assertRaisesRegex(WebTransportPolicyError, "framing is ambiguous"):
+            transport.fetch(transport_request(), SupervisorCancellation())
+
+    def test_transport_accepts_html_as_inert_untrusted_source_input(self):
+        body = b"<main><h1>Public source</h1><script>ignored()</script></main>"
+        connection = FakeConnection(FakeResponse(
+            body=body,
+            headers=[
+                ("Content-Type", "text/html; charset=utf-8"),
+                ("Content-Length", str(len(body))),
+            ],
+        ))
+        transport = NativeHTTPSWebTransport(
+            clock=lambda: 120.0,
+            connection_factory=lambda request, timeout: connection,
+        )
+        response = transport.fetch(transport_request(), SupervisorCancellation())
+        self.assertEqual("text/html", response.metadata.media_type)
+        self.assertIn("text/html", repr(connection.calls))
 
     def test_quarantine_store_is_bounded_and_reference_only(self):
         refs = iter(("TF-first", "TF-second"))

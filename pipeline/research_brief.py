@@ -8,6 +8,7 @@ source prose. Clients must label it source-backed but unverified.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 import re
 
 from pipeline.research_review import ResearchReviewRecord
@@ -22,6 +23,7 @@ class ResearchBriefCitation:
     schema_version: int
     source_id: str
     url: str
+    fetched_at_epoch: float
 
     def __post_init__(self) -> None:
         if self.schema_version != RESEARCH_BRIEF_SCHEMA_VERSION:
@@ -30,6 +32,14 @@ class ResearchBriefCitation:
             raise ValueError("research brief citation source ID is invalid")
         if not isinstance(self.url, str) or not self.url.startswith("https://") or len(self.url) > 2_048:
             raise ValueError("research brief citation URL is invalid")
+        if (
+            isinstance(self.fetched_at_epoch, bool)
+            or not isinstance(self.fetched_at_epoch, (int, float))
+            or not math.isfinite(float(self.fetched_at_epoch))
+            or not 0 <= float(self.fetched_at_epoch) < 1e12
+        ):
+            raise ValueError("research brief citation timestamp is invalid")
+        object.__setattr__(self, "fetched_at_epoch", float(self.fetched_at_epoch))
 
 
 @dataclass(frozen=True)
@@ -85,7 +95,7 @@ def build_research_cited_brief(record: object) -> ResearchCitedBrief:
     """Project one existing review into a source-backed, unverified brief."""
     if not isinstance(record, ResearchReviewRecord):
         raise TypeError("research brief review record is invalid")
-    labels = dict(record.source_labels)
+    labels = {source_id: (url, fetched_at_epoch) for source_id, url, fetched_at_epoch in record.source_labels}
     claims = []
     for claim in record.result.claims.claims:
         evidence = record.evidence.for_claim(claim.claim_id)
@@ -93,10 +103,11 @@ def build_research_cited_brief(record: object) -> ResearchCitedBrief:
             raise ValueError("research brief evidence is missing")
         citations = []
         for source_id in claim.source_ids:
-            url = labels.get(source_id)
-            if url is None:
+            source_label = labels.get(source_id)
+            if source_label is None:
                 raise ValueError("research brief citation is outside the review")
-            citations.append(ResearchBriefCitation(1, source_id, url))
+            url, fetched_at_epoch = source_label
+            citations.append(ResearchBriefCitation(1, source_id, url, fetched_at_epoch))
         claims.append(ResearchBriefClaim(
             1, claim.claim_id, claim.statement, tuple(citations), evidence.citation_diversity,
         ))

@@ -52,7 +52,7 @@ NATIVE_WEB_READ_CHUNK_BYTES = 64 * 1024
 MAX_SESSION_WEB_PREREQUISITES = 64
 MAX_SESSION_WEB_ARTIFACTS = 64
 MAX_SESSION_WEB_ARTIFACT_BYTES = 16 * 1024 * 1024
-_SUPPORTED_NATIVE_MEDIA = frozenset({"text/plain", "text/markdown"})
+_SUPPORTED_NATIVE_MEDIA = frozenset({"text/html", "text/plain", "text/markdown"})
 
 
 class NativeWebResolver:
@@ -361,7 +361,7 @@ class NativeHTTPSWebTransport:
                 target += "?" + parsed.query
             connection.putrequest("GET", target, skip_host=True, skip_accept_encoding=True)
             connection.putheader("Host", request.http_host)
-            connection.putheader("Accept", "text/plain, text/markdown")
+            connection.putheader("Accept", "text/html, text/plain, text/markdown")
             connection.putheader("Accept-Encoding", "identity")
             connection.putheader("User-Agent", "StarFur-Forge/1 web.fetch")
             connection.putheader("Connection", "close")
@@ -382,11 +382,12 @@ class NativeHTTPSWebTransport:
                 raise WebTransportPolicyError("native web content encoding is unsupported")
             declared = self._content_length(self._single_header(response, "Content-Length"))
             transfer_encoding = self._single_header(response, "Transfer-Encoding")
-            if transfer_encoding is not None:
-                # ``http.client`` removes chunk framing before this adapter can
-                # count it. Rejecting transfer encodings preserves truthful,
-                # exact encoded-byte accounting at this boundary.
+            if transfer_encoding is not None and transfer_encoding.casefold() != "chunked":
                 raise WebTransportPolicyError("native web transfer encoding is unsupported")
+            if transfer_encoding is not None and declared is not None:
+                # A framing body and a declared entity length are ambiguous at
+                # this boundary; do not let a conflicting header weaken caps.
+                raise WebTransportPolicyError("native web response length framing is ambiguous")
             chunks: list[WebDecodedChunk] = []
             total = 0
             while True:
@@ -406,6 +407,9 @@ class NativeHTTPSWebTransport:
                 total += len(data)
                 if total > MAX_WEB_ENCODED_BYTES:
                     raise WebTransportPolicyError("web response body exceeds its limit")
+                # ``http.client`` has removed permitted HTTP chunk framing.
+                # With content encoding fixed to identity, this exact entity
+                # body count remains the bounded input to the response parser.
                 chunks.append(WebDecodedChunk(data, len(data)))
             if not chunks:
                 raise WebTransportPolicyError("web response body is empty")

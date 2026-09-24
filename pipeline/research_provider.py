@@ -19,7 +19,7 @@ class LocalResearchClaimProvider:
     def __init__(
         self,
         target: object,
-        completion: Callable[[tuple[dict[str, str], dict[str, str]], str], object],
+        completion: Callable[[tuple[dict[str, str], dict[str, str]], str, dict[str, object]], object],
         *,
         available: bool = True,
     ) -> None:
@@ -37,14 +37,16 @@ class LocalResearchClaimProvider:
     def available(self) -> bool:
         return self._available
 
-    def propose_claims(self, messages, *, model: str) -> str:
+    def propose_claims(self, messages, *, model: str, schema: dict[str, object]) -> str:
         if not self._available:
             raise RuntimeError("research provider is unavailable")
         if model != self.target.model:
             raise ValueError("research provider model does not match its exact target")
         if not isinstance(messages, tuple) or len(messages) != 2:
             raise TypeError("research messages are invalid")
-        response = self._completion(messages, model)
+        if not isinstance(schema, dict) or not schema:
+            raise TypeError("research response schema is invalid")
+        response = self._completion(messages, model, schema)
         return normalize_chat_completion(response).content
 
 

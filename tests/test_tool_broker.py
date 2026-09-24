@@ -441,6 +441,25 @@ class ToolBrokerTests(unittest.TestCase):
             unknown.state, unknown.reason,
         ))
 
+    def test_safe_failed_result_category_is_retained_without_backend_detail(self):
+        def failed(request, invocation):
+            return SupervisorCompletion.from_request(
+                request, outcome="failed", stop_state="verified_stopped",
+                result=ToolResult(
+                    1, invocation.invocation_id, invocation.tool_id,
+                    invocation.tool_version, "failed", None, "", "",
+                    "content_preparation_rejected",
+                ),
+            )
+
+        broker = self.make_broker(FakeSupervisor(completion_factory=failed))
+        self.submit(broker)
+        self.authorize(broker)
+        record = broker.dispatch("TI-request_1", context=self.context())
+
+        self.assertEqual(("failed", "content_preparation_rejected"), (record.state, record.reason))
+        self.assertNotIn("backend", record.reason)
+
     def test_worker_generation_reuse_denies_second_launch(self):
         supervisor = FakeSupervisor()
         broker = self.make_broker(

@@ -790,7 +790,7 @@ research remains disconnected, and self-hosted search stays a later adapter
 option. Native WSL/API-key behavior is not considered released until the
 focused live smoke passes.
 
-**COMPLETED S11AH OPTIONAL TAVILY SEARCH ADAPTER (LIVE SMOKE REQUIRED):** Brave
+**COMPLETED S11AH OPTIONAL TAVILY SEARCH ADAPTER (WSL LIVE SMOKE PASSED):** Brave
 remains available as an optional backend, and the trusted local CLI may instead
 select Tavily with `--enable-tavily-search`. Selection is explicit and mutually
 exclusive, so StarFur never silently crosses providers or spends fallback
@@ -800,7 +800,42 @@ results with answer/raw-content/image/automatic-parameter/usage output disabled,
 then reduces the response to bounded untrusted canonical URL/title candidates.
 Provider prose, snippets, scores, request metadata, and the credential never
 cross into Core artifacts. Shared chat/API and automatic normal-chat research
-remain disconnected. The WSL live-key lifecycle is still smoke-gated.
+remain disconnected. The WSL live-key lifecycle completed through the explicit
+one-use search path and produced only quarantined discovery links.
+
+**COMPLETED S11AI STRUCTURED REVIEW PROVENANCE/BINDING:** A session-local
+research review now retains only canonical-question digest/UTF-8 byte count and
+the cited public source's ID, URL, and observed fetch time. It still excludes
+question/source text, raw provider output, artifact/network authority data, and
+all durable state. A provider-free comparison can bind a supplied canonical
+question to that exact review without exposing stored question text. The
+optional trusted-local `tool research answer <RR-id>: <question>` form fails
+closed on mismatch, while the existing review-answer form remains explicit.
+Neither form calls a provider or network, treats sources as corroborated, or
+mutates memory, learning, adventure, or canonical state.
+
+**COMPLETED S11AJ FAST EXPLICIT PUBLIC-SEARCH ORCHESTRATION (WSL LIVE SMOKE
+PASSED):** The trusted-local `tool search <public query>` convenience command
+recursively drives the existing exact `web.search` proposal/grant/approval/
+preparation/execution chain for literal user-typed public input. Its final
+output withholds the query and stops at the ordinary quarantined untrusted
+discovery-link artifact; results are not facts and links are never fetched
+automatically. Shared chat/API, automatic normal-chat research, fallback,
+memory/learning/adventure writes, and all authority boundaries remain
+unchanged. Fake-runtime integration tests and the opt-in Tavily WSL smoke
+passed; the shortcut produced only its quarantined discovery-link artifact.
+
+**COMPLETED S11AK EXPLICIT SEARCH-LINK FETCH CONVENIENCE (LIVE SMOKE
+REQUIRED):** Trusted-local `tool search fetch <TF-search-id> <rank>` may now
+fast-forward exactly one user-selected rank from an already-quarantined
+session-local discovery artifact through a fresh ordinary `web.fetch`
+proposal/grant/approval/preparation/execution lifecycle. It does not add
+authority or automatic link following: missing/expired artifacts, invalid ranks,
+unavailable fetch runtime, and failed lifecycle steps stop safely. A success
+still ends at a separately inspected quarantine artifact. Search links never
+become factual support; shared chat/API, model calls, memory/learning/adventure
+writes, and automatic research remain unchanged. Focused fake-runtime tests
+pass; one opt-in WSL smoke is required before release.
 
 ## Stage G — Perception and media (LATER)
 
@@ -874,6 +909,50 @@ Use placeholder/human-authored assets and show identity, activity, provider stat
 
 Stable sprite/animation slots, accessibility fallbacks, TTS/STT, notifications, and an opt-in cached idle adventure scene display. “Murr is thinking” must come from lifecycle/activity state, not text parsing. An idle image is an illustration, never an event.
 
+### H4. Ambient Presence — LATER; relationship-neutral and dependency-gated
+
+Ambient Presence is the optional, low-friction resident behavior that allows a
+configured character to remain quietly present while the user works, reads,
+plays, or is otherwise occupied. It is not a romance or relationship mode. The
+same Core-owned infrastructure must support friend-like, roommate-like,
+mascot, assistant, companion, and user-created personalities; optional
+relationship progression remains a separate layer.
+
+Activation should be one prominent, reversible `Ambient Presence` toggle with
+restrained defaults: long quiet periods, conservative interruption limits, and
+no automatic follow-up question. Advanced settings may control frequency, quiet
+hours, context sources, idle autonomy, and notification/interruption behavior.
+Silence, a natural ending, a short observation, a joke, or no response are valid
+outcomes. The character may disagree, tease, express preferences, decline a
+topic, or be briefly distracted without turning ordinary interaction into a
+support session.
+
+Use four incremental phases: (A) passive presence (silence/no-response,
+natural endings, reduced assistant prompting); (B) autonomous activity (bounded
+idle tasks and apartment-object interactions through `ResidentAction` and a
+Core-owned scheduler/state machine); (C) contextual awareness (explicitly
+permissioned local app/game, media, time, system-event, and supported-integration
+signals filtered and scored before occasional reactions); and (D) mature
+presence (frequency/quiet-hour controls, stronger persona-local continuity, and
+optional cross-device behavior after separate privacy gates). Provider commentary
+is optional; no-provider mode must still supply safe authored activity.
+
+Ambient Presence must not guilt the user for leaving, discourage human
+relationships, demand exclusivity, punish shutdown, pressure more usage, or
+claim human consciousness/biological needs as fact. These are behavior-quality
+constraints rather than warning dialogs. Do not foreground “as an AI” in normal
+conversation, but answer accurately when asked. Context sources are opt-in and
+revocable; presentation output cannot create memories, mutate adventures, grant
+tools, or infer permissions. Media/reading sessions, system monitoring, and
+future remote access remain separate bounded integrations.
+
+**Acceptance:** one-toggle enable/disable; quiet mode emits no unsolicited
+interaction; deterministic seeded idle behavior; permission/revocation and
+quiet-hour tests; debounced reactions; provider-loss fallback; restart/shutdown
+without hidden effects; and privacy tests for relationship pressure, private
+context, and identity claims. Ambient Presence is a later cross-cutting H2/H3/J
+capability, not a new immediate dependency or Steam gate.
+
 ## Cross-cutting zero-provider resident runtime (LATER; release gate)
 
 With chat, embedding, vision, image, speech, and hosted providers disabled, Core must still boot the selected persona, restore allowed durable resident state, run deterministic activities/reactions, render human-authored assets, and expose inspection/settings. Open-ended reasoning and generated media are optional enhancements.
@@ -912,6 +991,12 @@ Permissioned idle work, verified persona learning, deterministic offline adventu
 10. Durable persona-local continuity and zero-provider `ResidentAction` runtime.
 11. Workshop/Steam packaging, migrations, accessibility, and release validation.
 12. Research autonomy, idle simulation, procedural content, and deeper game integrations.
+
+Ambient Presence phases A/B depend on the H0/H1 surface and the durable,
+zero-provider `ResidentAction` gate above; Phase C additionally depends on the
+permission/routing and one-shot context-source work; Phase D remains later
+autonomy/cross-device research. This dependency note does not reorder the
+current sequence.
 
 Every slice updates focused tests and user-facing documentation when its surface changes. A slice is marked complete only after its acceptance tests pass in the authoritative environment and its benchmark/reproducibility implications are recorded.
 

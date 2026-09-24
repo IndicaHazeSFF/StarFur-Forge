@@ -11,7 +11,9 @@ from __future__ import annotations
 from collections import OrderedDict
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
+from datetime import datetime, timezone
 import hashlib
+import json
 import re
 import secrets
 import threading
@@ -41,6 +43,7 @@ from pipeline.tool_contracts import build_core_tool_contract_registry, decode_to
 from pipeline.tool_grants import SessionToolGrantController, ToolInvocationIssuer
 from pipeline.tool_execution_router import ToolExecutionBinding, ToolExecutionRouter
 from pipeline.tool_prerequisites import SessionToolPrerequisiteController
+from pipeline.tool_web_policy import WebDestination
 from pipeline.persona_asset_resolver import InstalledPersonaAssetPackage, PersonaAssetResolver
 from pipeline.persona_assets import BUILTIN_MURR_ASSET_MANIFEST
 from pipeline.persona_registry import PersonaRegistry, load_persona_package
@@ -50,6 +53,7 @@ from pipeline.providers import ChatProvider, provider_health_snapshot, provider_
 from pipeline.research_coordinator import ResearchClaimCoordinator, ResearchCoordinatorError
 from pipeline.research_brief import build_research_cited_brief
 from pipeline.research_answer_policy import evaluate_research_answer_policy
+from pipeline.research_answer_binding import evaluate_research_answer_binding
 from pipeline.research_disclosure import ResearchDisclosureIntent, evaluate_research_disclosure
 from pipeline.research_review import SessionResearchReviewStore
 from pipeline.research_selection import select_research_sources
@@ -71,7 +75,8 @@ _CONVERSATION_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}\Z")
 _ROUTE_TRACE_ID_RE = re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")
 _ROUTE_TRACE_OUTCOMES = frozenset({
     "submitted", "completed", "route_unavailable", "provider_adapter_unavailable",
-    "provider_request_failed", "provider_stream_failed", "provider_stream_cancelled",
+    "provider_capability_unavailable", "provider_request_failed",
+    "provider_stream_failed", "provider_stream_cancelled",
 })
 
 
@@ -480,7 +485,9 @@ class AssistantApplication:
                 "Local tool controls (sandbox execution disabled):\n"
                 "tool propose sandbox.run <JSON arguments>\n"
                 "tool propose web.fetch {\"url\":\"https://...\"}\n"
+                "tool fetch <https://...>\n"
                 "tool propose web.search {\"query\":\"...\"}\n"
+                "tool search <public query>\n"
                 "tool list\n"
                 "tool status <TI-id>\n"
                 "tool preview <TI-id>\n"
@@ -490,6 +497,8 @@ class AssistantApplication:
                 "tool execute <TI-id>\n"
                 "tool artifact <TF-id>\n"
                 "tool search artifact <TF-search_id>\n"
+                "tool search select <TF-search_id> <rank>\n"
+                "tool search fetch <TF-search_id> <rank>\n"
                 "tool research <TF-id>: <question>\n"
                 "tool research list\n"
                 "tool research inspect <RR-id>\n"
@@ -506,6 +515,29 @@ class AssistantApplication:
             lines = ["Local tool requests:"]
             lines.extend(self._format_tool_record(item) for item in records[-20:])
             return "\n".join(lines)
+
+        fast_fetch_match = re.fullmatch(r"tool\s+fetch\s+(https://\S+)", command, flags=re.IGNORECASE)
+        if fast_fetch_match:
+            if slot.local_web_runtime is None:
+                return "Native web.fetch is unavailable in this application mode."
+            url = fast_fetch_match.group(1)
+            proposed = self._local_tool_control(
+                slot,
+                "tool propose web.fetch " + json.dumps({"url": url}, separators=(",", ":")),
+            )
+            match = re.search(r"\b(TI-[A-Za-z0-9_-]{1,64})\b", proposed)
+            if match is None:
+                return "Fast web fetch was rejected safely: " + proposed
+            request_id = match.group(1)
+            for action in ("grant", "approve", "prepare"):
+                result = self._local_tool_control(slot, f"tool {action} {request_id}")
+                if "rejected safely" in result or "unavailable" in result or "expired" in result:
+                    return f"Fast web fetch stopped before execution: {result}"
+            completed = self._local_tool_control(slot, f"tool execute {request_id}")
+            return (
+                f"Explicit local fast fetch confirmed for {url}.\n{completed}\n"
+                "Inspect any returned artifact explicitly with tool artifact <TF-id>."
+            )
 
         proposal_match = re.fullmatch(
             r"tool\s+propose\s+sandbox\.run\s+(.+)", command, flags=re.IGNORECASE | re.DOTALL,
@@ -549,7 +581,6 @@ class AssistantApplication:
             references = ()
             try:
                 proposal = decode_tool_proposal_json(envelope)
-                from pipeline.tool_web_policy import WebDestination
                 references = slot.local_web_runtime.prerequisites.reserve_public(
                     WebDestination(1, proposal.arguments["url"]),
                 )
@@ -628,7 +659,8 @@ class AssistantApplication:
             return (
                 f"Quarantined web artifact {artifact_ref}\n"
                 f"Source: {artifact.destination.url}\n"
-                f"Media: {artifact.payload.media_type}\n"
+                f"Source media: {artifact.payload.source_media_type}\n"
+                f"Prepared media: {artifact.payload.media_type}\n"
                 f"Trust: {artifact.payload.trust_label}\n"
                 f"Characters: {artifact.payload.character_count}\n"
                 f"Digest: {artifact.payload.prepared_sha256}\n\n{visible}{suffix}"
@@ -657,6 +689,107 @@ class AssistantApplication:
             lines.append("Discovery links are not factual support or permission to fetch them.")
             return "\n".join(lines)
 
+        search_select_match = re.fullmatch(
+            r"tool\s+search\s+select\s+(TF-search_[A-Za-z0-9_-]{1,64})\s+([1-8])",
+            command,
+            flags=re.IGNORECASE,
+        )
+        if search_select_match:
+            if slot.local_web_search_runtime is None:
+                return "Local web-search artifact storage is unavailable."
+            if slot.local_web_runtime is None:
+                return "Native web.fetch is unavailable in this application mode."
+            artifact_ref = "TF-search_" + search_select_match.group(1)[10:]
+            artifact = slot.local_web_search_runtime.quarantine.get(artifact_ref)
+            if artifact is None:
+                return "Search artifact was not found in this local session."
+            rank = int(search_select_match.group(2))
+            candidate = next((item for item in artifact.results if item.rank == rank), None)
+            if candidate is None:
+                return "Selected search-result rank was not found in this local artifact."
+            references = ()
+            try:
+                proposal = decode_tool_proposal_json(json.dumps({
+                    "schema_version": 1,
+                    "tool_id": "web.fetch",
+                    "tool_version": 1,
+                    "arguments": {"url": candidate.url},
+                }, separators=(",", ":"), ensure_ascii=False))
+                destination = WebDestination(1, proposal.arguments["url"])
+                references = slot.local_web_runtime.prerequisites.reserve_public(destination)
+                request_id = f"TI-{secrets.token_hex(16)}"
+                record = slot.tool_broker.submit(
+                    proposal,
+                    request_id=request_id,
+                    trusted_principal_id=context.principal_id,
+                    session_instance_id=context.session_instance_id,
+                    persona_id=context.persona_id,
+                    adventure_id=context.adventure_id,
+                    policy_revision=context.policy_revision,
+                    resource_refs=references,
+                )
+            except (TypeError, ValueError, RuntimeError) as error:
+                for reference in references:
+                    slot.local_web_runtime.prerequisites.revoke(reference)
+                return f"Search-link selection was rejected safely: {error}"
+            return (
+                f"Selected untrusted discovery link {rank} from {artifact_ref}; registered inert web.fetch "
+                f"proposal {record.invocation.invocation_id}. No DNS lookup or network request occurred. "
+                "Selection is not factual support; preview, grant, approve, prepare, and execute it separately."
+            )
+
+        fast_search_fetch_match = re.fullmatch(
+            r"tool\s+search\s+fetch\s+(TF-search_[A-Za-z0-9_-]{1,64})\s+([1-8])",
+            command,
+            flags=re.IGNORECASE,
+        )
+        if fast_search_fetch_match:
+            artifact_ref = "TF-search_" + fast_search_fetch_match.group(1)[10:]
+            rank = fast_search_fetch_match.group(2)
+            selected = self._local_tool_control(slot, f"tool search select {artifact_ref} {rank}")
+            match = re.search(r"\b(TI-[A-Za-z0-9_-]{1,64})\b", selected)
+            if match is None:
+                return "Fast search-link fetch was rejected safely: " + selected
+            request_id = match.group(1)
+            for action in ("grant", "approve", "prepare"):
+                result = self._local_tool_control(slot, f"tool {action} {request_id}")
+                if "rejected safely" in result or "unavailable" in result or "expired" in result:
+                    return f"Fast search-link fetch stopped before execution: {result}"
+            completed = self._local_tool_control(slot, f"tool execute {request_id}")
+            return (
+                f"Explicit local fast fetch confirmed for selected discovery link {rank}.\n"
+                + completed
+                + "\nInspect any returned artifact explicitly with tool artifact <TF-id>."
+            )
+
+        fast_search_match = re.fullmatch(
+            r"tool\s+search\s+(.+)", command, flags=re.IGNORECASE | re.DOTALL,
+        )
+        if fast_search_match:
+            if slot.local_web_search_runtime is None:
+                return "Public web.search is unavailable in this application mode."
+            query = fast_search_match.group(1).strip()
+            if query.casefold() in {"artifact", "select", "fetch"} or query.casefold().startswith(("artifact ", "select ", "fetch ")):
+                return "Unknown or malformed local tool command. Use tool help. Tool commands never fall through to model generation."
+            proposed = self._local_tool_control(
+                slot,
+                "tool propose web.search " + json.dumps({"query": query}, separators=(",", ":")),
+            )
+            match = re.search(r"\b(TI-[A-Za-z0-9_-]{1,64})\b", proposed)
+            if match is None:
+                return "Fast web search was rejected safely: " + proposed
+            request_id = match.group(1)
+            for action in ("grant", "approve", "prepare"):
+                result = self._local_tool_control(slot, f"tool {action} {request_id}")
+                if "rejected safely" in result or "unavailable" in result or "expired" in result:
+                    return f"Fast web search stopped before execution: {result}"
+            completed = self._local_tool_control(slot, f"tool execute {request_id}")
+            return (
+                "Explicit local fast web search confirmed.\n"
+                + completed
+                + "\nInspect any returned discovery links explicitly with tool search artifact <TF-search_id>."
+            )
+
         if lowered == "tool research list":
             summaries = slot.research_reviews.summaries()
             if not summaries:
@@ -684,7 +817,10 @@ class AssistantApplication:
                 f"Research claim review {review.review_id} [{review.status}]",
                 "Sources:",
             ]
-            lines.extend(f"- {source_id} {url}" for source_id, url in review.source_labels)
+            lines.extend(
+                f"- {source_id} {url} (fetched {datetime.fromtimestamp(fetched_at_epoch, timezone.utc).isoformat()})"
+                for source_id, url, fetched_at_epoch in review.source_labels
+            )
             if review.result.claims.claims:
                 lines.append("Untrusted cited claim proposals:")
                 for claim in review.result.claims.claims:
@@ -728,24 +864,43 @@ class AssistantApplication:
             ]
             for claim in brief.claims:
                 lines.append(f"- {claim.statement}")
-                lines.extend(f"  Source: {citation.url}" for citation in claim.citations)
+                lines.extend(
+                    f"  Source: {citation.url} (fetched {datetime.fromtimestamp(citation.fetched_at_epoch, timezone.utc).isoformat()})"
+                    for citation in claim.citations
+                )
                 lines.append(f"  Citation diversity: {claim.citation_diversity}; not verification.")
             lines.append(
                 "Deterministic presentation of reviewed claim proposals only; no memory, learning, adventure, or canonical state was created."
             )
             return "\n".join(lines)
 
+        answer_question_match = re.fullmatch(
+            r"tool\s+research\s+answer\s+(RR-[0-9a-f]{24})\s*:\s*(.+)",
+            command,
+            flags=re.IGNORECASE,
+        )
         answer_match = re.fullmatch(
             r"tool\s+research\s+answer\s+(RR-[0-9a-f]{24})",
             command,
             flags=re.IGNORECASE,
         )
-        if answer_match:
-            review_id = "RR-" + answer_match.group(1)[3:]
+        if answer_question_match or answer_match:
+            matched = answer_question_match or answer_match
+            review_id = "RR-" + matched.group(1)[3:]
             review = slot.research_reviews.get(review_id)
             if review is None:
                 return "Research claim review was not found in this local session."
             try:
+                if answer_question_match:
+                    binding = evaluate_research_answer_binding(
+                        review,
+                        answer_question_match.group(2),
+                    )
+                    if binding.status != "matches_review":
+                        return (
+                            "Research answer was rejected safely: the supplied question does not match "
+                            "this review's bounded question binding. No model was called and no state was created."
+                        )
                 decision = evaluate_research_answer_policy(review)
                 brief = build_research_cited_brief(review)
             except (TypeError, ValueError) as error:
@@ -759,9 +914,14 @@ class AssistantApplication:
                 "Research answer (source-backed, unverified)",
                 "This is a deterministic presentation of explicitly reviewed cited claims, not verified truth:",
             ]
+            if answer_question_match:
+                lines.append("Question binding: exact reviewed question match.")
             for claim in brief.claims:
                 lines.append(f"- {claim.statement}")
-                lines.extend(f"  Source: {citation.url}" for citation in claim.citations)
+                lines.extend(
+                    f"  Source: {citation.url} (fetched {datetime.fromtimestamp(citation.fetched_at_epoch, timezone.utc).isoformat()})"
+                    for citation in claim.citations
+                )
                 lines.append(f"  Citation diversity: {claim.citation_diversity}; not verification.")
             lines.append(
                 "No model was called for this answer. No memory, learning, adventure, or canonical state was created."
@@ -807,7 +967,11 @@ class AssistantApplication:
                 f"Review: {review.review_id} (session-local)",
                 "Sources:",
             ]
-            lines.extend(f"- {source.source_id} {source.url}" for source in sources)
+            lines.extend(
+                f"- {source.source_id} {source.url} "
+                f"(fetched {datetime.fromtimestamp(source.fetched_at_epoch, timezone.utc).isoformat()})"
+                for source in sources
+            )
             if result.claims.claims:
                 for claim in result.claims.claims:
                     lines.append(

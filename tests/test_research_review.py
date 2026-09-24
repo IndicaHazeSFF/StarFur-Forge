@@ -36,7 +36,7 @@ def packet_and_result():
     class Provider:
         available = True
 
-        def propose_claims(self, _messages, *, model):
+        def propose_claims(self, _messages, *, model, schema):
             return json.dumps({
                 "schema_version": 1,
                 "packet_sha256": packet.packet_sha256,
@@ -59,6 +59,7 @@ class ResearchReviewTests(unittest.TestCase):
 
         self.assertEqual("claims_proposed", record.status)
         self.assertEqual(packet.source_ids()[0], record.source_labels[0][0])
+        self.assertEqual(100.0, record.source_labels[0][2])
         self.assertNotIn("The public value is 42.", repr(record.source_labels))
         self.assertFalse(hasattr(record, "answer"))
         self.assertFalse(hasattr(record, "memory"))

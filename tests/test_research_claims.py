@@ -7,7 +7,7 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from pipeline.research_claims import parse_research_claims
+from pipeline.research_claims import parse_research_claims, research_claim_json_schema
 from pipeline.research_sources import build_research_source_packet, research_source_from_web_artifact
 from pipeline.tool_web_connector import WebFetchedArtifact
 from pipeline.tool_web_parser import QuarantinedWebText
@@ -42,11 +42,45 @@ def output(source_packet, **changes):
 
 
 class ResearchClaimTests(unittest.TestCase):
+    def test_provider_schema_is_exactly_bound_but_not_a_replacement_for_parsing(self):
+        source_packet = packet()
+        schema = research_claim_json_schema(source_packet)
+
+        self.assertFalse(schema["additionalProperties"])
+        self.assertEqual(
+            source_packet.packet_sha256,
+            schema["properties"]["packet_sha256"]["const"],
+        )
+        self.assertEqual(
+            list(source_packet.source_ids()),
+            schema["properties"]["claims"]["items"]["properties"]["source_ids"]["items"]["enum"],
+        )
+        self.assertEqual(16, schema["properties"]["claims"]["maxItems"])
+        # The strict parser remains authoritative even when provider-side
+        # schema guidance exists.
+        with self.assertRaises(ValueError):
+            parse_research_claims("{}", source_packet)
+
     def test_exact_packet_local_citation_is_accepted_as_untrusted_claim(self):
         source_packet = packet()
         result = parse_research_claims(output(source_packet), source_packet)
         self.assertEqual(source_packet.packet_sha256, result.packet_sha256)
         self.assertEqual((source_packet.source_ids()[0],), result.claims[0].source_ids)
+
+    def test_one_whole_response_json_fence_is_recovered_then_validated_strictly(self):
+        source_packet = packet()
+        fenced = "```json\n" + output(source_packet) + "\n```\n"
+        result = parse_research_claims(fenced, source_packet)
+        self.assertEqual(source_packet.packet_sha256, result.packet_sha256)
+
+        for malformed in (
+            "Here is the JSON:\n```json\n" + output(source_packet) + "\n```",
+            "```python\n" + output(source_packet) + "\n```",
+            "```json\n[]\n```",
+            "```json\n" + output(source_packet) + "\n```\nextra",
+        ):
+            with self.subTest(malformed=malformed[:24]), self.assertRaisesRegex(ValueError, "strict JSON|fence"):
+                parse_research_claims(malformed, source_packet)
 
     def test_stale_packet_and_unknown_citation_reject(self):
         source_packet = packet()

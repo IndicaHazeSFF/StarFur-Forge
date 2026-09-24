@@ -1,6 +1,6 @@
 # Pending copy manifest
 
-## Pipeline (44)
+## Pipeline (47)
 
 - `pipeline/assistant.py`
 - `pipeline/application.py`
@@ -34,6 +34,7 @@
 - `pipeline/research_evidence.py`
 - `pipeline/research_brief.py`
 - `pipeline/research_answer_policy.py`
+- `pipeline/research_answer_binding.py`
 - `pipeline/factual_research_policy.py`
 - `pipeline/research_discovery.py`
 - `pipeline/tool_web_search.py`
@@ -46,6 +47,8 @@
 - `pipeline/tool_web_search_tavily_native.py`
 - `pipeline/task_profiles.py`
 - `pipeline/task_routing.py`
+- `pipeline/task_execution.py`
+- `pipeline/providers.py`
 
 ## Configuration (2)
 
@@ -56,7 +59,7 @@
 
 - `presentation/apartment.html`
 
-## Tests (42)
+## Tests (45)
 
 - `tests/test_api.py`
 - `tests/test_application.py`
@@ -88,6 +91,7 @@
 - `tests/test_research_evidence.py`
 - `tests/test_research_brief.py`
 - `tests/test_research_answer_policy.py`
+- `tests/test_research_answer_binding.py`
 - `tests/test_factual_research_policy.py`
 - `tests/test_research_discovery.py`
 - `tests/test_tool_web_search.py`
@@ -100,6 +104,8 @@
 - `tests/test_tool_web_search_tavily_native.py`
 - `tests/test_task_profiles.py`
 - `tests/test_task_routing.py`
+- `tests/test_task_execution.py`
+- `tests/test_chat_provider.py`
 
 ## Documentation and policy (5)
 
@@ -212,3 +218,22 @@ provider-specific process environment variables, and neither provider is a
 silent fallback for the other. Tavily returns only reduced untrusted URL/title
 candidates; its answer, snippets, scores, raw content, usage, and request
 metadata are discarded. Both live WSL credential paths remain smoke-gated.
+The explicit local research route now requires a provider-native structured-
+output capability. Core supplies one exact packet-bound JSON Schema through
+Ollama's top-level `format` field, while the existing strict parser remains the
+final validation and citation gate. Text-only adapters fail closed; normal chat
+is unchanged; no fallback, retry, provider payload retention, answer
+publication, or state write was added. The WSL/Ollama research smoke is the
+remaining gate.
+Structured review provenance now carries only a question digest/byte count and
+public source URL/fetch-time labels. The optional exact-question answer form
+fails closed before a review can be reused for a different question; it adds no
+automatic research, model call, network effect, or state write.
+`tool search <public query>` is now the trusted-local fast path over the same
+existing one-use hosted-search lifecycle. Its focused Tavily WSL smoke passed:
+it returns only the usual quarantined untrusted discovery links and never
+automatically fetches them or treats them as facts.
+`tool search fetch <TF-search-id> <rank>` now fast-forwards one explicitly
+selected quarantined discovery link through a fresh ordinary `web.fetch`
+lifecycle, then still stops at a separately inspected artifact. Its focused
+WSL smoke remains required.

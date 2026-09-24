@@ -145,6 +145,8 @@ class WebSearchArtifact:
 class SessionWebSearchArtifactStore:
     """Bounded exact-reference quarantine for one application session."""
 
+    available = True
+
     def __init__(
         self,
         *,

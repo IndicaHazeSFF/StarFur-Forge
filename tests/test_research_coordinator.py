@@ -44,8 +44,8 @@ class _Provider:
         self.error = error
         self.calls = []
 
-    def propose_claims(self, messages, *, model):
-        self.calls.append((messages, model))
+    def propose_claims(self, messages, *, model, schema):
+        self.calls.append((messages, model, schema))
         if self.error:
             raise self.error
         return self.response
@@ -67,6 +67,8 @@ class ResearchCoordinatorTests(unittest.TestCase):
         result = ResearchClaimCoordinator(provider).propose(packet, target, decision)
         self.assertEqual("claims_proposed", result.status)
         self.assertEqual("qwen3:8b", provider.calls[0][1])
+        self.assertEqual(packet.packet_sha256, provider.calls[0][2]["properties"]["packet_sha256"]["const"])
+        self.assertEqual(list(packet.source_ids()), provider.calls[0][2]["properties"]["claims"]["items"]["properties"]["source_ids"]["items"]["enum"])
         self.assertFalse(hasattr(result, "answer"))
         self.assertFalse(hasattr(result, "memory"))
 

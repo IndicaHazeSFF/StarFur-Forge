@@ -31,7 +31,7 @@ def review_record(*, empty=False):
     class Provider:
         available = True
 
-        def propose_claims(self, _messages, *, model):
+        def propose_claims(self, _messages, *, model, schema):
             return json.dumps({
                 "schema_version": 1,
                 "packet_sha256": packet.packet_sha256,
@@ -51,6 +51,7 @@ class ResearchBriefTests(unittest.TestCase):
         self.assertEqual("claims_available", brief.status)
         self.assertEqual("Public fact.", brief.claims[0].statement)
         self.assertEqual("https://example.com/fact", brief.claims[0].citations[0].url)
+        self.assertEqual(100.0, brief.claims[0].citations[0].fetched_at_epoch)
         self.assertEqual("single_source", brief.claims[0].citation_diversity)
         self.assertFalse(hasattr(brief, "answer"))
         self.assertFalse(hasattr(brief, "verified"))

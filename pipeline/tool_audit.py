@@ -21,6 +21,8 @@ TOOL_AUDIT_REASONS = frozenset({
     "cancel_requested", "supervisor_outcome_unknown", "timed_out",
     "supervisor_unavailable", "supervisor_failed",
     "supervisor_binding_invalid",
+    "validation_failed", "backend_unavailable", "execution_failed",
+    "transport_policy_rejected", "response_binding_rejected", "content_preparation_rejected",
     "prerequisite_recorded", "resource_prerequisite_missing",
 })
 MAX_TOOL_AUDIT_EVENTS = 256

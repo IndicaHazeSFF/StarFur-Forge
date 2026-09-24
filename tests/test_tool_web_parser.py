@@ -28,6 +28,7 @@ class ToolWebParserTests(unittest.TestCase):
         result = prepare_quarantined_web_text(payload("Cafe\u0301\r\nSource text"))
         self.assertEqual("Caf\u00e9\nSource text", result.text)
         self.assertEqual(WEB_EXTERNAL_TRUST_LABEL, result.trust_label)
+        self.assertEqual("text/plain", result.source_media_type)
         self.assertEqual(len(result.text), result.character_count)
 
     def test_instruction_like_text_is_preserved_as_untrusted_source_data(self):

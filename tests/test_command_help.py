@@ -47,7 +47,11 @@ class CommandHelpTests(unittest.TestCase):
         self.assertIn("tool propose web.fetch", rendered)
         self.assertIn("tool approve <TI-id>", rendered)
         self.assertIn("tool prepare <TI-id>", rendered)
+        self.assertIn("tool search select <TF-search_id> <rank>", rendered)
+        self.assertIn("tool search fetch <TF-search_id> <rank>", rendered)
         self.assertIn("tool research <TF-id>: <question>", rendered)
+        self.assertIn("tool research answer <RR-id>[: <exact question>]", rendered)
+        self.assertIn("tool search <public query>", rendered)
         self.assertIn("sandbox.run execution remains disabled", rendered)
         self.assertIn("Shared chat/OpenWebUI/API requests cannot control tools", rendered)
 

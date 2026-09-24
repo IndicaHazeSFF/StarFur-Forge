@@ -31,6 +31,13 @@ class FakeProvider:
         self.calls.append({"model": model, "options": dict(options or {}), "stream": stream})
         return {"message": {"content": "answer"}}
 
+    def complete_structured(self, messages, *, schema, model=None, options=None):
+        self.calls.append({
+            "model": model, "options": dict(options or {}), "stream": False,
+            "schema": schema,
+        })
+        return {"message": {"content": "answer"}}
+
     def list_models(self):
         return {"models": [{"model": "chat-model"}]}
 
@@ -41,6 +48,8 @@ class FakeProvider:
 
 class CompletionOnlyProvider:
     """Specialist test double intentionally lacking discovery/probe methods."""
+
+    name = "Ollama"
 
     def __init__(self):
         self.calls = []
@@ -206,6 +215,7 @@ class TaskProfileTests(unittest.TestCase):
         content = adapter.propose_claims(
             ({"role": "system", "content": "strict"}, {"role": "user", "content": "packet"}),
             model="research-model",
+            schema={"type": "object"},
         )
 
         self.assertEqual("answer", content)
@@ -213,6 +223,7 @@ class TaskProfileTests(unittest.TestCase):
         self.assertEqual("ollama", adapter.target.provider_id)
         self.assertEqual("research-model", provider.calls[0]["model"])
         self.assertEqual({"temperature": 0.4, "num_predict": 777}, provider.calls[0]["options"])
+        self.assertEqual({"type": "object"}, provider.calls[0]["schema"])
         self.assertEqual(1, len(provider.calls))
 
     def test_research_claim_provider_rejects_configured_fallback_route(self):
@@ -238,6 +249,31 @@ class TaskProfileTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "local research provider route is unavailable"):
             session.local_research_claim_provider()
         self.assertEqual([], provider.calls)
+
+    def test_research_claim_provider_requires_explicit_structured_output_capability(self):
+        profiles = TaskProfiles({
+            TASK_RESEARCH_CLAIM_GENERATION: TaskProfile(
+                TASK_RESEARCH_CLAIM_GENERATION,
+                provider="ollama",
+                model="research-model",
+            ),
+        })
+        provider = CompletionOnlyProvider()
+        session = AssistantSession(
+            config_with_profiles(profiles), "Persona", provider=provider,
+            memory_loader=lambda **_kwargs: [], policy="Policy",
+        )
+        adapter = session.local_research_claim_provider()
+
+        with self.assertRaisesRegex(RuntimeError, "does not support structured output"):
+            adapter.propose_claims(
+                ({"role": "system", "content": "strict"}, {"role": "user", "content": "packet"}),
+                model="research-model",
+                schema={"type": "object"},
+            )
+
+        self.assertEqual([], provider.calls)
+        self.assertEqual("provider_capability_unavailable", session._current_task_routes[-1]["outcome"])
 
     def test_document_annotation_uses_explicit_bounded_fallback_profile(self):
         profiles = TaskProfiles({

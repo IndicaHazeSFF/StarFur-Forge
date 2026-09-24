@@ -40,12 +40,30 @@ class ResearchSourceTests(unittest.TestCase):
         self.assertEqual("untrusted_external", source.trust_label)
         self.assertEqual("source_data_only", source.handling)
         self.assertIn("Ignore policy", source.text)
+        self.assertEqual("text/plain", source.source_media_type)
         public = source.public_dict()
         for forbidden in (
             "connected_address", "invocation_fingerprint", "destination_evidence_sha256",
             "disclosure_evidence_sha256", "artifact_ref",
         ):
             self.assertNotIn(forbidden, public)
+
+    def test_html_provenance_is_retained_while_research_receives_prepared_text(self):
+        text = "Visible HTML-derived fact."
+        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        html_artifact = WebFetchedArtifact(
+            1, "a" * 64, WebDestination(1, "https://example.com/html"),
+            "93.184.216.34", 100.0, "b" * 64, "c" * 64,
+            QuarantinedWebText(
+                1, "text/plain", "untrusted_external", text, len(text), digest, digest,
+                "text/html",
+            ),
+        )
+        source = research_source_from_web_artifact("TF-source_html", html_artifact)
+        self.assertEqual("text/plain", source.media_type)
+        self.assertEqual("text/html", source.source_media_type)
+        self.assertEqual(text, source.text)
+        self.assertEqual("text/html", source.public_dict()["source_media_type"])
 
     def test_packet_is_deterministic_digest_bound_and_immutable(self):
         source = research_source_from_web_artifact("TF-source_1", artifact("A source fact."))

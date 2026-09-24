@@ -11,7 +11,11 @@ from dataclasses import dataclass
 import re
 from typing import Protocol, runtime_checkable
 
-from pipeline.research_claims import ResearchClaimSet, parse_research_claims
+from pipeline.research_claims import (
+    ResearchClaimSet,
+    parse_research_claims,
+    research_claim_json_schema,
+)
 from pipeline.research_disclosure import (
     ResearchDisclosureDecision,
     ResearchProviderTarget,
@@ -36,6 +40,7 @@ class ResearchClaimProvider(Protocol):
         messages: tuple[dict[str, str], dict[str, str]],
         *,
         model: str,
+        schema: dict[str, object],
     ) -> str: ...
 
 
@@ -110,7 +115,11 @@ class ResearchClaimCoordinator:
         if available is not True:
             raise ResearchCoordinatorError("provider_unavailable")
         try:
-            raw = self._provider.propose_claims(messages, model=target.model)
+            raw = self._provider.propose_claims(
+                messages,
+                model=target.model,
+                schema=research_claim_json_schema(packet),
+            )
         except Exception as error:
             raise ResearchCoordinatorError("provider_failed") from error
         try:

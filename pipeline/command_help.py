@@ -152,13 +152,19 @@ def detect_command_help(query: str) -> CommandHelp | None:
                 "tool help", "tool list", "tool status <TI-id>", "tool preview <TI-id>",
                 "tool propose sandbox.run <JSON arguments>", "tool grant <TI-id>",
                 'tool propose web.fetch {"url":"https://..."}', "tool approve <TI-id>",
+                "tool fetch <https://...>",
+                'tool propose web.search {"query":"..."}',
+                "tool search <public query>",
                 "tool prepare <TI-id>", "tool execute <TI-id>", "tool artifact <TF-id>",
+                "tool search artifact <TF-search_id>",
+                "tool search select <TF-search_id> <rank>",
+                "tool search fetch <TF-search_id> <rank>",
                 "tool research <TF-id>: <question>", "tool research brief <RR-id>",
-                "tool research answer <RR-id>",
+                "tool research answer <RR-id>[: <exact question>]",
                 "tool deny <TI-id>", "tool revoke <TI-id>", "tool cancel <TI-id>",
             ),
             notes=(
-                "sandbox.run execution remains disabled. web.fetch is explicit, one-use, and public-text only. tool research returns nonpublishing cited claim proposals from one quarantined source. Shared chat/OpenWebUI/API requests cannot control tools.",
+                "sandbox.run execution remains disabled. web.fetch and web.search are explicit, one-use, and public-only; web.search remains unavailable unless an explicit local runtime is injected. `tool fetch <https-url>`, `tool search <public query>`, and `tool search fetch <TF-search_id> <rank>` are trusted-local convenience macros for exact input you typed or explicitly selected: each creates the same session-only proposal, grant, approval, preparation, and one execution. Fetch still requires separate artifact inspection; search stops at untrusted discovery links, which neither establish facts nor fetch automatically. tool research returns nonpublishing cited claim proposals from one quarantined source. Adding an exact question to `tool research answer` checks that question against the review's bounded binding before rendering. Shared chat/OpenWebUI/API requests cannot control tools.",
             ),
         )
 

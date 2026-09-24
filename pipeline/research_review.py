@@ -16,6 +16,7 @@ import time
 from pipeline.research_coordinator import ResearchCoordinationResult
 from pipeline.research_evidence import ResearchEvidenceAssessment, assess_research_evidence
 from pipeline.research_sources import ResearchSourcePacket
+from pipeline.research_sources import research_question_metadata
 
 
 RESEARCH_REVIEW_SCHEMA_VERSION = 1
@@ -31,8 +32,10 @@ class ResearchReviewRecord:
     review_id: str
     created_at_epoch: float
     packet_sha256: str
+    question_sha256: str
+    question_byte_count: int
     status: str
-    source_labels: tuple[tuple[str, str], ...]
+    source_labels: tuple[tuple[str, str, float], ...]
     evidence: ResearchEvidenceAssessment
     result: ResearchCoordinationResult
 
@@ -50,6 +53,14 @@ class ResearchReviewRecord:
             raise ValueError("research review timestamp is invalid")
         if not isinstance(self.packet_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", self.packet_sha256):
             raise ValueError("research review packet digest is invalid")
+        if not isinstance(self.question_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", self.question_sha256):
+            raise ValueError("research review question digest is invalid")
+        if (
+            isinstance(self.question_byte_count, bool)
+            or not isinstance(self.question_byte_count, int)
+            or not 1 <= self.question_byte_count <= 8_000
+        ):
+            raise ValueError("research review question size is invalid")
         if self.status not in {"claims_proposed", "no_supported_claims"}:
             raise ValueError("research review status is invalid")
         if not isinstance(self.evidence, ResearchEvidenceAssessment):
@@ -64,15 +75,26 @@ class ResearchReviewRecord:
         if not labels or len(labels) > 8:
             raise ValueError("research review source labels are invalid")
         source_ids = set()
-        for source_id, url in labels:
+        for source_id, url, fetched_at_epoch in labels:
             if not isinstance(source_id, str) or not re.fullmatch(r"RS-[0-9a-f]{24}", source_id):
                 raise ValueError("research review source ID is invalid")
             if source_id in source_ids:
                 raise ValueError("research review source IDs must be unique")
             if not isinstance(url, str) or not url.startswith("https://") or len(url) > 2_048:
                 raise ValueError("research review source URL is invalid")
+            if (
+                isinstance(fetched_at_epoch, bool)
+                or not isinstance(fetched_at_epoch, (int, float))
+                or not math.isfinite(float(fetched_at_epoch))
+                or not 0 <= float(fetched_at_epoch) < 1e12
+            ):
+                raise ValueError("research review source timestamp is invalid")
             source_ids.add(source_id)
-        object.__setattr__(self, "source_labels", labels)
+        object.__setattr__(
+            self,
+            "source_labels",
+            tuple((source_id, url, float(fetched_at_epoch)) for source_id, url, fetched_at_epoch in labels),
+        )
 
     def summary_dict(self) -> dict[str, object]:
         return {
@@ -103,13 +125,16 @@ class SessionResearchReviewStore:
         if packet.packet_sha256 != result.packet_sha256:
             raise ValueError("research review packet binding is inconsistent")
         review_id = self._id_factory()
+        _, question_sha256, question_byte_count = research_question_metadata(packet.question)
         record = ResearchReviewRecord(
             RESEARCH_REVIEW_SCHEMA_VERSION,
             review_id,
             float(self._clock()),
             packet.packet_sha256,
+            question_sha256,
+            question_byte_count,
             result.status,
-            tuple((source.source_id, source.url) for source in packet.sources),
+            tuple((source.source_id, source.url, source.fetched_at_epoch) for source in packet.sources),
             assess_research_evidence(packet, result.claims),
             result,
         )

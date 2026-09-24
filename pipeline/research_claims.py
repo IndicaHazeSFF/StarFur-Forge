@@ -20,6 +20,10 @@ MAX_RESEARCH_CLAIMS = 16
 MAX_RESEARCH_CLAIM_CHARACTERS = 1_000
 MAX_RESEARCH_CLAIM_OUTPUT_BYTES = 32_000
 _SOURCE_ID_RE = re.compile(r"^RS-[0-9a-f]{24}$")
+_SINGLE_JSON_FENCE_RE = re.compile(
+    r"\A[ \t\r\n]*```json[ \t]*\r?\n(?P<body>.*)\r?\n```[ \t\r\n]*\Z",
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 def _reject_duplicate_keys(pairs):
@@ -29,6 +33,25 @@ def _reject_duplicate_keys(pairs):
             raise ValueError("research claim output contains duplicate JSON keys")
         result[key] = value
     return result
+
+
+def _strict_json_candidate(raw: str) -> str:
+    """Accept raw JSON or one whole-response JSON fence, never surrounding prose.
+
+    Some local instruction models wrap an otherwise valid structured response
+    in Markdown despite being told not to. This is presentation recovery only:
+    the recovered body still goes through the same duplicate-key, schema,
+    packet-binding, ordering, and citation checks as direct JSON.
+    """
+    if raw.lstrip().startswith("{"):
+        return raw
+    match = _SINGLE_JSON_FENCE_RE.fullmatch(raw)
+    if match is None:
+        raise ValueError("research claim output is not strict JSON")
+    body = match.group("body")
+    if not body.strip() or not body.lstrip().startswith("{"):
+        raise ValueError("research claim fence does not contain a JSON object")
+    return body
 
 
 @dataclass(frozen=True)
@@ -103,7 +126,7 @@ def parse_research_claims(raw: object, packet: object) -> ResearchClaimSet:
     if not encoded or len(encoded) > MAX_RESEARCH_CLAIM_OUTPUT_BYTES:
         raise ValueError("research claim output size is invalid")
     try:
-        value = json.loads(raw, object_pairs_hook=_reject_duplicate_keys)
+        value = json.loads(_strict_json_candidate(raw), object_pairs_hook=_reject_duplicate_keys)
     except (UnicodeError, json.JSONDecodeError) as error:
         raise ValueError("research claim output is not strict JSON") from error
     if not isinstance(value, dict) or set(value) != {"schema_version", "packet_sha256", "claims"}:
@@ -137,6 +160,51 @@ def parse_research_claims(raw: object, packet: object) -> ResearchClaimSet:
     return ResearchClaimSet(1, packet.packet_sha256, tuple(claims))
 
 
+def research_claim_json_schema(packet: object) -> dict[str, object]:
+    """Build the exact Core-owned provider schema for one source packet.
+
+    This schema improves provider conformance only. The returned text remains
+    untrusted and must still pass :func:`parse_research_claims` in full.
+    """
+    if not isinstance(packet, ResearchSourcePacket):
+        raise TypeError("research source packet is invalid")
+    source_ids = list(packet.source_ids())
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["schema_version", "packet_sha256", "claims"],
+        "properties": {
+            "schema_version": {"type": "integer", "const": RESEARCH_CLAIM_SCHEMA_VERSION},
+            "packet_sha256": {"type": "string", "const": packet.packet_sha256},
+            "claims": {
+                "type": "array",
+                "maxItems": MAX_RESEARCH_CLAIMS,
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["claim_id", "statement", "source_ids", "confidence"],
+                    "properties": {
+                        "claim_id": {"type": "string", "pattern": r"^RC-[0-9]{3}$"},
+                        "statement": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": MAX_RESEARCH_CLAIM_CHARACTERS,
+                        },
+                        "source_ids": {
+                            "type": "array",
+                            "minItems": 1,
+                            "maxItems": 4,
+                            "uniqueItems": True,
+                            "items": {"type": "string", "enum": source_ids},
+                        },
+                        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                    },
+                },
+            },
+        },
+    }
+
+
 __all__ = [
     "MAX_RESEARCH_CLAIMS",
     "MAX_RESEARCH_CLAIM_CHARACTERS",
@@ -145,4 +213,5 @@ __all__ = [
     "ResearchClaim",
     "ResearchClaimSet",
     "parse_research_claims",
+    "research_claim_json_schema",
 ]

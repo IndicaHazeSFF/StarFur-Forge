@@ -9,7 +9,7 @@ sys.modules.setdefault("ollama", types.ModuleType("ollama"))
 from pipeline.assistant import AssistantConfig, AssistantSession
 from pipeline.providers import (
     CallableChatProvider, ChatProviderResponseError, OllamaChatProvider,
-    normalize_chat_completion, normalize_chat_stream_chunk,
+    StructuredChatCompletionProvider, normalize_chat_completion, normalize_chat_stream_chunk,
 )
 
 
@@ -53,6 +53,28 @@ class ChatProviderTests(unittest.TestCase):
         self.assertEqual(response["message"]["content"], "answer")
         self.assertEqual(client.calls, [{"model": "qwen3:8b", "messages": [{"role": "user", "content": "hello"}], "options": {"seed": 420}}])
         self.assertEqual(provider.list_models()["models"][0]["model"], "qwen3:8b")
+
+    def test_ollama_structured_output_is_an_explicit_top_level_capability(self):
+        client = FakeOllama()
+        provider = OllamaChatProvider(client)
+        schema = {"type": "object", "additionalProperties": False}
+
+        response = provider.complete_structured(
+            [{"role": "user", "content": "return json"}],
+            schema=schema,
+            model="qwen3:8b",
+            options={"num_predict": 123},
+        )
+
+        self.assertEqual("answer", response["message"]["content"])
+        self.assertIsInstance(provider, StructuredChatCompletionProvider)
+        self.assertEqual({
+            "model": "qwen3:8b",
+            "messages": [{"role": "user", "content": "return json"}],
+            "format": schema,
+            "options": {"num_predict": 123},
+        }, client.calls[0])
+        self.assertNotIsInstance(CallableChatProvider(lambda **_kwargs: None), StructuredChatCompletionProvider)
 
     def test_session_routes_chat_and_diagnostics_through_injected_provider(self):
         provider = FakeProvider()

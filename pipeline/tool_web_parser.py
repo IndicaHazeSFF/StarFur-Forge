@@ -13,7 +13,7 @@ import hashlib
 import re
 import unicodedata
 
-from pipeline.tool_web_response import WebTextPayload
+from pipeline.tool_web_response import ALLOWED_WEB_MEDIA_TYPES, WebTextPayload
 
 
 WEB_PARSED_TEXT_SCHEMA_VERSION = 1
@@ -48,12 +48,16 @@ class QuarantinedWebText:
     character_count: int
     source_sha256: str
     prepared_sha256: str
+    source_media_type: str | None = None
 
     def __post_init__(self) -> None:
         if isinstance(self.schema_version, bool) or self.schema_version != WEB_PARSED_TEXT_SCHEMA_VERSION:
             raise ValueError("parsed web text schema version is unsupported")
         if self.media_type not in SUPPORTED_WEB_PARSE_MEDIA_TYPES:
             raise ValueError("parsed web text media type is unsupported")
+        source_media_type = self.media_type if self.source_media_type is None else self.source_media_type
+        if source_media_type not in ALLOWED_WEB_MEDIA_TYPES:
+            raise ValueError("parsed web source media type is unsupported")
         if self.trust_label != WEB_EXTERNAL_TRUST_LABEL:
             raise ValueError("parsed web text trust label is invalid")
         if not isinstance(self.text, str) or not self.text or not self.text.strip():
@@ -72,6 +76,7 @@ class QuarantinedWebText:
         prepared = _validate_digest(self.prepared_sha256, "parsed web prepared digest")
         if hashlib.sha256(self.text.encode("utf-8")).hexdigest() != prepared:
             raise ValueError("parsed web prepared digest is inconsistent")
+        object.__setattr__(self, "source_media_type", source_media_type)
 
 
 def prepare_quarantined_web_text(payload: WebTextPayload) -> QuarantinedWebText:
@@ -94,6 +99,7 @@ def prepare_quarantined_web_text(payload: WebTextPayload) -> QuarantinedWebText:
         character_count=len(normalized),
         source_sha256=payload.content_sha256,
         prepared_sha256=hashlib.sha256(normalized.encode("utf-8")).hexdigest(),
+        source_media_type=payload.media_type,
     )
 
 

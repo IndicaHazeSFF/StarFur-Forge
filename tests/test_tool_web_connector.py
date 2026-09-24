@@ -19,6 +19,7 @@ from pipeline.tool_web_connector import (
     DisabledWebFetchSupervisor,
     WebDecodedChunk,
     WebFetchSupervisor,
+    WebTransportPolicyError,
     WebTransportResponse,
 )
 from pipeline.tool_web_disclosure import WebDisclosureIntent
@@ -95,9 +96,10 @@ class FakePrerequisites:
 class FakeTransport:
     available = True
 
-    def __init__(self, *, connected_address="93.184.216.34", error=None):
+    def __init__(self, *, connected_address="93.184.216.34", error=None, media_type="text/plain"):
         self.connected_address = connected_address
         self.error = error
+        self.media_type = media_type
         self.calls = []
         self.cancelled = []
 
@@ -109,7 +111,7 @@ class FakeTransport:
         return WebTransportResponse(
             1, request.invocation_id, request.binding_fingerprint,
             request.worker_generation, self.connected_address,
-            WebResponseMetadata(1, 200, "text/plain", "identity", len(text)),
+            WebResponseMetadata(1, 200, self.media_type, "identity", len(text)),
             (WebDecodedChunk(text, len(text)),),
         )
 
@@ -174,6 +176,30 @@ class WebFetchConnectorTests(unittest.TestCase):
             request.use_environment_proxy, request.send_credentials,
         ))
 
+    def test_html_response_is_prepared_as_untrusted_plain_text_with_source_label(self):
+        class HtmlTransport(FakeTransport):
+            def fetch(self, request, cancellation):
+                self.calls.append(request)
+                text = b"<main><p>Public fact.</p><script>ignored()</script></main>"
+                return WebTransportResponse(
+                    1, request.invocation_id, request.binding_fingerprint,
+                    request.worker_generation, self.connected_address,
+                    WebResponseMetadata(1, 200, "text/html", "identity", len(text)),
+                    (WebDecodedChunk(text, len(text)),),
+                )
+
+        quarantine = FakeQuarantine()
+        worker, proposal, invocation, launch = supervisor(
+            transport=HtmlTransport(), quarantine=quarantine,
+        )
+        completion = worker.run(launch, invocation, proposal, SupervisorCancellation())
+        self.assertEqual("completed", completion.outcome)
+        prepared = quarantine.items[0].payload
+        self.assertEqual("text/html", prepared.source_media_type)
+        self.assertEqual("text/plain", prepared.media_type)
+        self.assertEqual("Public fact.", prepared.text)
+        self.assertNotIn("ignored", prepared.text)
+
     def test_unapproved_connect_address_never_reaches_quarantine(self):
         quarantine = FakeQuarantine()
         worker, proposal, invocation, launch = supervisor(
@@ -200,6 +226,28 @@ class WebFetchConnectorTests(unittest.TestCase):
         )
         completion = worker.run(launch, invocation, proposal, SupervisorCancellation())
         self.assertEqual("outcome_unknown", completion.outcome)
+
+    def test_transport_policy_and_content_rejections_have_safe_distinct_categories(self):
+        worker, proposal, invocation, launch = supervisor(
+            transport=FakeTransport(error=WebTransportPolicyError("internal detail")),
+        )
+        rejected = worker.run(launch, invocation, proposal, SupervisorCancellation())
+        self.assertEqual("transport_policy_rejected", rejected.result.error_category)
+
+        class InvalidHtmlTransport(FakeTransport):
+            def fetch(self, request, cancellation):
+                self.calls.append(request)
+                text = b"<p>safe\xe2\x80\x8bhidden</p>"
+                return WebTransportResponse(
+                    1, request.invocation_id, request.binding_fingerprint,
+                    request.worker_generation, self.connected_address,
+                    WebResponseMetadata(1, 200, "text/html", "identity", len(text)),
+                    (WebDecodedChunk(text, len(text)),),
+                )
+
+        worker, proposal, invocation, launch = supervisor(transport=InvalidHtmlTransport())
+        rejected = worker.run(launch, invocation, proposal, SupervisorCancellation())
+        self.assertEqual("content_preparation_rejected", rejected.result.error_category)
 
     def test_cancel_before_transport_is_verified_and_no_request_occurs(self):
         transport = FakeTransport()
