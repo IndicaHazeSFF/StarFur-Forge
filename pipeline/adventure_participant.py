@@ -12,6 +12,7 @@ from dataclasses import dataclass
 import re
 
 from pipeline.adventure_initiative import AdventureInitiativeError, AdventureParticipant
+from pipeline.adventure_initiative import AdventureParticipantRoster
 from pipeline.adventure_knowledge import AdventureKnowledgeFact
 from pipeline.adventure_relationship import AdventureRelationshipFact
 from pipeline.adventure_resource_state import AdventureResourceFact
@@ -22,6 +23,7 @@ MAX_PARTICIPANT_EVENTS = 16
 MAX_PARTICIPANT_RELATIONSHIPS = 16
 MAX_PARTICIPANT_RESOURCES = 16
 MAX_PARTICIPANT_VIEW_CHARACTERS = 12_000
+MAX_DECLARED_PARTICIPANT_CONTEXT_CHARACTERS = 4_000
 
 # Ordinary replay facts are not automatically public to every governed
 # participant.  Until an event schema gains explicit audience declarations,
@@ -58,6 +60,32 @@ def _participant_event_is_visible(participant: AdventureParticipant, event: obje
 def _safe_relationship_value(value: str) -> str:
     """Keep internal numeric meters out of a future participant prompt."""
     return "qualitative internal state" if _NUMERIC_RELATIONSHIP_VALUE.search(value) else value
+
+
+def render_declared_participant_prompt_context(roster: AdventureParticipantRoster) -> str:
+    """Render only explicit package-declared participant labels for a model.
+
+    This is intentionally not a participant perspective view: it excludes
+    namespaces, memory policy, event/state projections, relationships,
+    resources, initiative decisions, and any permission-shaped material. The
+    roster labels merely help an ordinary-event extractor recognize who is in
+    the declared adventure cast; they never authorize an action or establish a
+    fact beyond the package declaration.
+    """
+    if not isinstance(roster, AdventureParticipantRoster):
+        raise TypeError("participant prompt context requires an AdventureParticipantRoster")
+    lines = [
+        "DECLARED ADVENTURE PARTICIPANTS (Core-supplied labels only):",
+        "Do not infer omitted history, perspective, authority, or an autonomous action from these labels.",
+    ]
+    lines.extend(
+        f"- {participant.participant_id} ({participant.kind}): {participant.display_name}"
+        for participant in roster.participants
+    )
+    rendered = "\n".join(lines)
+    if len(rendered) > MAX_DECLARED_PARTICIPANT_CONTEXT_CHARACTERS:
+        raise AdventureInitiativeError("declared participant context exceeds its bounded character limit")
+    return rendered
 
 
 @dataclass(frozen=True)
@@ -160,4 +188,5 @@ class AdventureParticipantView:
 __all__ = [
     "AdventureParticipantView", "MAX_PARTICIPANT_EVENTS", "MAX_PARTICIPANT_RELATIONSHIPS",
     "MAX_PARTICIPANT_RESOURCES", "MAX_PARTICIPANT_VIEW_CHARACTERS",
+    "MAX_DECLARED_PARTICIPANT_CONTEXT_CHARACTERS", "render_declared_participant_prompt_context",
 ]

@@ -55,6 +55,13 @@ from pipeline.research_brief import build_research_cited_brief
 from pipeline.research_answer_policy import evaluate_research_answer_policy
 from pipeline.research_answer_binding import evaluate_research_answer_binding
 from pipeline.research_disclosure import ResearchDisclosureIntent, evaluate_research_disclosure
+from pipeline.research_relationship_coordinator import ResearchRelationshipCoordinator, ResearchRelationshipCoordinatorError
+from pipeline.research_relationship_brief import build_research_relationship_brief
+from pipeline.research_relationship_disclosure import (
+    ResearchRelationshipDisclosureIntent,
+    evaluate_research_relationship_disclosure,
+)
+from pipeline.research_relationship_review import SessionResearchRelationshipReviewStore
 from pipeline.research_review import SessionResearchReviewStore
 from pipeline.research_selection import select_research_sources
 from pipeline.research_sources import build_research_source_packet
@@ -89,6 +96,7 @@ class _SessionSlot:
     session_instance_id: str
     tool_broker: ToolBroker
     research_reviews: SessionResearchReviewStore
+    research_relationship_reviews: SessionResearchRelationshipReviewStore
     local_web_runtime: object | None = None
     local_web_search_runtime: object | None = None
     active_requests: int = 0
@@ -241,6 +249,7 @@ class AssistantApplication:
                 supervisor=supervisor,
             ),
             research_reviews=SessionResearchReviewStore(),
+            research_relationship_reviews=SessionResearchRelationshipReviewStore(),
             local_web_runtime=local_web_runtime,
             local_web_search_runtime=local_web_search_runtime,
         )
@@ -500,8 +509,14 @@ class AssistantApplication:
                 "tool search select <TF-search_id> <rank>\n"
                 "tool search fetch <TF-search_id> <rank>\n"
                 "tool research <TF-id>: <question>\n"
+                "tool research selected <TF-search_id> <rank>: <question>\n"
+                "tool research search <public query> <rank>: <question>\n"
                 "tool research list\n"
                 "tool research inspect <RR-id>\n"
+                "tool research relationships <RR-id>\n"
+                "tool research relationships list\n"
+                "tool research relationships inspect <RX-id>\n"
+                "tool research relationships brief <RX-id>\n"
                 "tool research brief <RR-id>\n"
                 "tool research answer <RR-id>\n"
                 "tool deny <TI-id>\n"
@@ -618,8 +633,8 @@ class AssistantApplication:
             references = ()
             try:
                 proposal = decode_tool_proposal_json(envelope)
-                from pipeline.factual_research_policy import classify_factual_research_request
-                factual = classify_factual_research_request(proposal.arguments["query"])
+                from pipeline.factual_research_policy import explicit_local_research_tool_decision
+                factual = explicit_local_research_tool_decision()
                 references = slot.local_web_search_runtime.prerequisites.reserve_public(
                     proposal.arguments["query"], factual,
                 )
@@ -789,6 +804,178 @@ class AssistantApplication:
                 + completed
                 + "\nInspect any returned discovery links explicitly with tool search artifact <TF-search_id>."
             )
+
+        selected_research_match = re.fullmatch(
+            r"tool\s+research\s+selected\s+(TF-search_[A-Za-z0-9_-]{1,64})\s+([1-8])\s*:\s*(.+)",
+            command,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        if selected_research_match:
+            artifact_ref = "TF-search_" + selected_research_match.group(1)[10:]
+            rank = selected_research_match.group(2)
+            question = selected_research_match.group(3)
+            fetched = self._local_tool_control(slot, f"tool search fetch {artifact_ref} {rank}")
+            match = re.search(r"\b(TF-[A-Za-z0-9_-]{1,64})\b", fetched)
+            if match is None:
+                return "Selected-link research stopped before source review: " + fetched
+            source_ref = match.group(1)
+            reviewed = self._local_tool_control(slot, f"tool research {source_ref}: {question}")
+            return (
+                "Explicit local selected-link research confirmed.\n"
+                + fetched
+                + "\n"
+                + reviewed
+            )
+
+        searched_research_match = re.fullmatch(
+            r"tool\s+research\s+search\s+(.+?)\s+([1-8])\s*:\s*(.+)",
+            command,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        if searched_research_match:
+            query = searched_research_match.group(1).strip()
+            rank = searched_research_match.group(2)
+            question = searched_research_match.group(3)
+            if not query or not question.strip():
+                return "Unknown or malformed local tool command. Use tool help. Tool commands never fall through to model generation."
+            searched = self._local_tool_control(slot, f"tool search {query}")
+            match = re.search(r"\b(TF-search_[A-Za-z0-9_-]{1,64})\b", searched)
+            if match is None:
+                return "Fast search-to-research stopped before source selection: " + searched
+            artifact_ref = match.group(1)
+            reviewed = self._local_tool_control(
+                slot,
+                f"tool research selected {artifact_ref} {rank}: {question}",
+            )
+            return (
+                f"Explicit local fast search-to-research confirmed for selected discovery link {rank}.\n"
+                + searched
+                + "\n"
+                + reviewed
+            )
+
+        if lowered == "tool research relationships list":
+            summaries = slot.research_relationship_reviews.summaries()
+            if not summaries:
+                return "No session-local research relationship reviews are available."
+            lines = ["Session-local research relationship reviews:"]
+            for item in summaries:
+                lines.append(
+                    f"{item['relationship_review_id']} [{item['status']}] "
+                    f"from {item['claim_review_id']}; {item['relationship_count']} relationship(s)"
+                )
+            lines.append("Relationship reviews are untrusted, noncanonical, and disappear when this session is evicted or restarted.")
+            return "\n".join(lines)
+
+        relationship_inspect_match = re.fullmatch(
+            r"tool\s+research\s+relationships\s+inspect\s+(RX-[0-9a-f]{24})",
+            command,
+            flags=re.IGNORECASE,
+        )
+        if relationship_inspect_match:
+            relationship_review_id = "RX-" + relationship_inspect_match.group(1)[3:]
+            relationship_review = slot.research_relationship_reviews.get(relationship_review_id)
+            if relationship_review is None:
+                return "Research relationship review was not found in this local session."
+            lines = [
+                f"Research relationship review {relationship_review.relationship_review_id} [{relationship_review.status}]",
+                f"Claim review: {relationship_review.claim_review_id}",
+            ]
+            relationships = relationship_review.result.relationships.relationships
+            if relationships:
+                lines.append("Untrusted claim-relationship proposals:")
+                lines.extend(
+                    f"{item.relationship_id} [confidence {item.confidence:.2f}] "
+                    f"{item.left_claim_id} {item.relation} {item.right_claim_id}"
+                    for item in relationships
+                )
+            else:
+                lines.append("No claim relationships were proposed.")
+            lines.append(
+                "Read-only relationship review; it is not verification, a final answer, or writable state."
+            )
+            return "\n".join(lines)
+
+        relationship_brief_match = re.fullmatch(
+            r"tool\s+research\s+relationships\s+brief\s+(RX-[0-9a-f]{24})",
+            command,
+            flags=re.IGNORECASE,
+        )
+        if relationship_brief_match:
+            relationship_review_id = "RX-" + relationship_brief_match.group(1)[3:]
+            relationship_review = slot.research_relationship_reviews.get(relationship_review_id)
+            if relationship_review is None:
+                return "Research relationship review was not found in this local session."
+            review = slot.research_reviews.get(relationship_review.claim_review_id)
+            if review is None:
+                return "The source claim review is no longer available in this local session."
+            try:
+                brief = build_research_relationship_brief(review, relationship_review)
+            except (TypeError, ValueError) as error:
+                return f"Research relationship brief was rejected safely: {error}"
+            if not brief.items:
+                return (
+                    f"Relationship brief for {brief.relationship_review_id}: no claim relationships were proposed. "
+                    "No model was called and no state was created."
+                )
+            lines = [
+                f"Claim-relationship brief for {brief.relationship_review_id} (untrusted; not verification)",
+            ]
+            for item in brief.items:
+                lines.extend((
+                    f"- {item.left_claim_id}: {item.left_statement}",
+                    f"  {item.relation} ({item.confidence:.2f})",
+                    f"  {item.right_claim_id}: {item.right_statement}",
+                ))
+            lines.append(
+                "Deterministic presentation of existing relationship proposals only; no model was called and no corroboration, answer, memory, learning, adventure, or canonical state was created."
+            )
+            return "\n".join(lines)
+
+        relationship_match = re.fullmatch(
+            r"tool\s+research\s+relationships\s+(RR-[0-9a-f]{24})",
+            command,
+            flags=re.IGNORECASE,
+        )
+        if relationship_match:
+            review_id = "RR-" + relationship_match.group(1)[3:]
+            review = slot.research_reviews.get(review_id)
+            if review is None:
+                return "Research claim review was not found in this local session."
+            try:
+                provider = slot.session.local_research_relationship_provider()
+                target = provider.target
+                intent = ResearchRelationshipDisclosureIntent.from_review(review, target)
+                decision = evaluate_research_relationship_disclosure(intent, review)
+                result = ResearchRelationshipCoordinator(provider).propose(review, target, decision)
+                relationship_review = slot.research_relationship_reviews.create(review, result)
+            except ResearchRelationshipCoordinatorError as error:
+                return (
+                    f"Research relationship generation failed safely ({error.reason}); "
+                    "no verification, answer, memory, learning record, or canonical state was published."
+                )
+            except (TypeError, ValueError, RuntimeError) as error:
+                return f"Research relationship request was rejected safely: {error}"
+            lines = [
+                "Research claim-relationship proposals (untrusted; not verification)",
+                f"Review: {relationship_review.relationship_review_id} (session-local; claim review {review.review_id})",
+            ]
+            relationships = result.relationships.relationships
+            if relationships:
+                lines.extend(
+                    f"{item.relationship_id} [confidence {item.confidence:.2f}] "
+                    f"{item.left_claim_id} {item.relation} {item.right_claim_id}"
+                    for item in relationships
+                )
+            else:
+                lines.append("No claim relationships were proposed.")
+            lines.append(
+                "Review output only; it cannot establish corroboration, truth, a final answer, memory, learning, adventure, or canonical state."
+            )
+            lines.append(
+                f"Use tool research relationships inspect {relationship_review.relationship_review_id} to reopen this relationship review."
+            )
+            return "\n".join(lines)
 
         if lowered == "tool research list":
             summaries = slot.research_reviews.summaries()

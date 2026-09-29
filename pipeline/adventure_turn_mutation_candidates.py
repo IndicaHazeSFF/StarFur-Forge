@@ -14,6 +14,10 @@ from dataclasses import dataclass
 from typing import Mapping
 
 from pipeline.adventure_mutation import AdventureMutation, AdventureMutationError
+from pipeline.adventure_turn_resource_policy import (
+    AdventureTurnResourcePolicyError,
+    AdventureTurnResourcePolicyView,
+)
 
 
 TURN_MUTATION_CANDIDATE_SCHEMA_VERSION = 1
@@ -30,6 +34,50 @@ _MUTATION_FIELDS_BY_KIND = {
     "knowledge_set": frozenset({"kind", "subject", "status", "fact"}),
     "resource_change": frozenset({"kind", "id", "operation", "value"}),
 }
+
+
+def adventure_turn_mutation_candidate_json_schema() -> dict[str, object]:
+    """Return Core's bounded guidance schema for canonical typed mutations.
+
+    The parser remains the authority and still accepts its narrow legacy flat
+    compatibility form.  Structured providers are guided to the canonical
+    wrapped form so a model is less likely to emit an invalid envelope.
+    """
+    # Keep the provider grammar deliberately portable.  One rich ``oneOf``
+    # schema failed to compile in Ollama, while an unconstrained ``value``
+    # caused Qwen to emit a schema-shaped object rather than a state value.
+    # This current route therefore guides text-valued state/relationship/
+    # knowledge mutations only. Generic numeric/boolean/inventory resource
+    # mutations remain explicit Core/manual work until a separately tested
+    # portable resource-value contract exists.
+    return {
+        "type": "object",
+        "required": ["schema_version", "candidates"],
+        "properties": {
+            "schema_version": {"type": "integer"},
+            "candidates": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "required": ["mutation", "confidence"],
+                    "properties": {
+                        "mutation": {
+                            "type": "object",
+                            "required": ["kind"],
+                            "properties": {
+                                "kind": {"type": "string"},
+                                "key": {"type": "string"}, "value": {"type": "string"},
+                                "subject": {"type": "string"}, "dimension": {"type": "string"},
+                                "status": {"type": "string"}, "fact": {"type": "string"},
+                                "id": {"type": "string"}, "operation": {"type": "string"},
+                            },
+                        },
+                        "confidence": {"type": "number"},
+                    },
+                },
+            },
+        },
+    }
 
 
 def _strict_mutation(value: object) -> AdventureMutation:
@@ -134,6 +182,28 @@ def parse_untrusted_adventure_turn_mutation_candidates(
     return AdventureTurnMutationCandidateBatch(tuple(candidates))
 
 
+def parse_untrusted_portable_enum_resource_candidates(
+    value: object, policy: AdventureTurnResourcePolicyView,
+) -> AdventureTurnMutationCandidateBatch:
+    """Parse only public enum resource candidates for the portable live route.
+
+    Generic typed-mutation parsing remains available for injected/manual review
+    seams. This narrower parser is for the future structured provider route:
+    every candidate must be a public declared enum ``set`` operation after the
+    normal closed-envelope parser has run. It does not stage, apply, or persist
+    any candidate.
+    """
+    if not isinstance(policy, AdventureTurnResourcePolicyView):
+        raise TypeError("portable resource candidate policy is invalid")
+    batch = parse_untrusted_adventure_turn_mutation_candidates(value)
+    try:
+        for candidate in batch.candidates:
+            policy.validate_portable_enum_candidate(candidate.mutation)
+    except AdventureTurnResourcePolicyError as error:
+        raise AdventureTurnMutationCandidateError("portable resource candidate is invalid") from error
+    return batch
+
+
 def render_adventure_turn_mutation_candidate_batch(
     batch: AdventureTurnMutationCandidateBatch, *, generation_id: str | None = None,
     hidden_resource_ids: frozenset[str] = frozenset(),
@@ -169,5 +239,7 @@ __all__ = [
     "AdventureTurnMutationCandidate", "AdventureTurnMutationCandidateBatch",
     "AdventureTurnMutationCandidateError", "MAX_ADVENTURE_TURN_MUTATION_CANDIDATES",
     "TURN_MUTATION_CANDIDATE_SCHEMA_VERSION",
-    "parse_untrusted_adventure_turn_mutation_candidates", "render_adventure_turn_mutation_candidate_batch",
+    "adventure_turn_mutation_candidate_json_schema",
+    "parse_untrusted_adventure_turn_mutation_candidates", "parse_untrusted_portable_enum_resource_candidates",
+    "render_adventure_turn_mutation_candidate_batch",
 ]

@@ -269,7 +269,7 @@ class ResidentSnapshot:
                 "context_event_count", "state_fact_count", "context_state_fact_count",
                 "relationship_fact_count", "context_relationship_fact_count",
                 "knowledge_fact_count", "context_knowledge_fact_count",
-                "resource_fact_count", "context_resource_fact_count", "storage",
+                "resource_fact_count", "context_resource_fact_count", "participant_count", "storage",
             })),
             "roleplay": _bounded_mapping(self.roleplay, allowed=frozenset({
                 "active", "title", "storage",

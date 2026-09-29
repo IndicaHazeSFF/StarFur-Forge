@@ -6,7 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from pipeline.providers import ChatCompletion
 from pipeline.research_disclosure import ResearchProviderTarget
-from pipeline.research_provider import LocalResearchClaimProvider
+from pipeline.research_provider import LocalResearchClaimProvider, LocalResearchRelationshipProvider
 
 
 class ResearchProviderTests(unittest.TestCase):
@@ -36,6 +36,14 @@ class ResearchProviderTests(unittest.TestCase):
         target = ResearchProviderTarget.create("hosted", "remote", "hosted")
         with self.assertRaisesRegex(ValueError, "must be local"):
             LocalResearchClaimProvider(target, lambda *_args: "{}")
+
+    def test_relationship_adapter_has_the_same_exact_local_target_boundary(self):
+        target = ResearchProviderTarget.create("ollama", "qwen3:8b", "local")
+        provider = LocalResearchRelationshipProvider(target, lambda *_args: ChatCompletion("{}"))
+        self.assertEqual(
+            "{}",
+            provider.propose_relationships(({}, {}), model="qwen3:8b", schema={"type": "object"}),
+        )
 
 
 if __name__ == "__main__":

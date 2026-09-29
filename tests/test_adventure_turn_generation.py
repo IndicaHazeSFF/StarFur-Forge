@@ -29,9 +29,30 @@ class AdventureTurnGenerationRequestTests(unittest.TestCase):
             self.assertIn("Return JSON only", system["content"])
             self.assertIn("untrusted proposal", system["content"])
             self.assertIn("AUTHORITATIVE CORE CONTEXT", source["content"])
+            self.assertNotIn("DECLARED ADVENTURE PARTICIPANTS", source["content"])
             self.assertIn("USER TURN TEXT (untrusted source)", source["content"])
             self.assertIn("NARRATOR TURN TEXT (untrusted source)", source["content"])
             self.assertRegex(request.generation_id, r"^TG-[0-9a-f]{32}$")
+
+    def test_request_keeps_declared_participant_labels_separate_from_authoritative_context(self):
+        with tempfile.TemporaryDirectory() as directory:
+            record = AdventureRegistry(directory, now=lambda: datetime(2026, 8, 26, tzinfo=UTC)).create("Quiet Ember")
+            request = AdventureTurnGenerationRequest(
+                record=record,
+                event_count=0,
+                authoritative_context="Current location: chart room.",
+                user_text="I open the brass hatch.",
+                participant_context=(
+                    "DECLARED ADVENTURE PARTICIPANTS (Core-supplied labels only):\n"
+                    "- murr (persona): Murr"
+                ),
+            )
+
+            source = request.messages()[1]["content"]
+
+            self.assertIn("DECLARED ADVENTURE PARTICIPANTS", source)
+            self.assertIn("murr (persona): Murr", source)
+            self.assertNotIn("participant:murr", source)
 
     def test_request_retains_only_validated_explicit_transcript_record_references(self):
         with tempfile.TemporaryDirectory() as directory:

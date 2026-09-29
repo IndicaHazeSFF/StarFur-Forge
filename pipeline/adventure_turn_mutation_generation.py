@@ -121,8 +121,9 @@ class AdventureTurnMutationGenerationRequest:
             '{"schema_version":1,"candidates":[]}. '
             "For a location change, use exactly "
             '{"mutation":{"kind":"state_set","key":"current_location","value":"..."},"confidence":0.0}. '
-            "Allowed mutation kinds are state_set, relationship_set, knowledge_set, and "
-            "resource_change. Do not return ordinary events, narrative prose, permissions, "
+            "Allowed mutation kinds are state_set, relationship_set, and knowledge_set. "
+            "Do not propose resource_change in this portable text-value schema; resource changes "
+            "remain explicit Core-reviewed operations. Do not return ordinary events, narrative prose, permissions, "
             "commands, explanations, or hidden reasoning. The output is only an untrusted "
             "proposal; Core decides whether anything is staged."
         )

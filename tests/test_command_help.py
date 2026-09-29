@@ -50,6 +50,7 @@ class CommandHelpTests(unittest.TestCase):
         self.assertIn("tool search select <TF-search_id> <rank>", rendered)
         self.assertIn("tool search fetch <TF-search_id> <rank>", rendered)
         self.assertIn("tool research <TF-id>: <question>", rendered)
+        self.assertIn("tool research selected <TF-search_id> <rank>: <question>", rendered)
         self.assertIn("tool research answer <RR-id>[: <exact question>]", rendered)
         self.assertIn("tool search <public query>", rendered)
         self.assertIn("sandbox.run execution remains disabled", rendered)
@@ -62,6 +63,14 @@ class CommandHelpTests(unittest.TestCase):
         self.assertIn("adventure state", rendered)
         self.assertIn("adventure state set <key>: <value>", rendered)
         self.assertIn("current_location", rendered)
+
+    def test_participant_action_help_returns_only_review_controls(self):
+        payload = detect_command_help("How do I make Murr suggest an adventure action?")
+        self.assertEqual(payload.intent, "adventure_participant_actions")
+        rendered = payload.render()
+        self.assertIn("adventure participant action generate <participant-id> <trigger>: <completed user-turn text>", rendered)
+        self.assertIn("adventure participant actions", rendered)
+        self.assertIn("cannot perform an action", rendered)
 
     def test_adventure_retraction_help_returns_exact_core_command(self):
         payload = detect_command_help("How do I retract an adventure event?")

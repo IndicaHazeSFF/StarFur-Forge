@@ -15,6 +15,7 @@ from pathlib import Path
 import re
 from typing import Callable
 
+from pipeline.adventure_initiative import AdventureInitiativeError, AdventureParticipantRoster
 from pipeline.adventure_resources import AdventureResourceCatalog, AdventureResourceError
 
 
@@ -23,6 +24,7 @@ ADVENTURE_SCHEMA_VERSION = 1
 REGISTRY_FILENAME = "registry.json"
 MANIFEST_FILENAME = "manifest.json"
 RESOURCE_CATALOG_MANIFEST_KEY = "resource_catalog"
+PARTICIPANT_ROSTER_MANIFEST_KEY = "participant_roster"
 BRANCH_ORIGIN_MANIFEST_KEY = "branch_origin"
 _MAX_TITLE_LENGTH = 120
 _ID_PATTERN = re.compile(r"^[a-z][a-z0-9-]{0,95}$")
@@ -225,6 +227,47 @@ class AdventureRegistry:
         manifest[RESOURCE_CATALOG_MANIFEST_KEY] = catalog.to_dict()
         self._write_json(workspace / MANIFEST_FILENAME, manifest)
         return catalog
+
+    def participant_roster(self, record: AdventureRecord) -> AdventureParticipantRoster:
+        """Read one validated declared roster; legacy workspaces have none."""
+        manifest = self._read_workspace_manifest(record)
+        value = manifest.get(PARTICIPANT_ROSTER_MANIFEST_KEY)
+        if value is None:
+            return AdventureParticipantRoster(record.adventure_id, ())
+        try:
+            return AdventureParticipantRoster.from_dict(record.adventure_id, value)
+        except AdventureInitiativeError as error:
+            raise AdventureRegistryError("adventure participant roster is invalid") from error
+
+    def configure_participant_roster(
+        self, record: AdventureRecord, roster: AdventureParticipantRoster,
+    ) -> AdventureParticipantRoster:
+        """Persist one immutable scenario roster before an event log exists.
+
+        This is a package/Core setup boundary, not a chat command. Participant
+        identities are context labels only; the roster neither grants
+        permissions nor creates persona/NPC actions or memory writes.
+        """
+        if not isinstance(roster, AdventureParticipantRoster):
+            raise TypeError("adventure participant roster must be an AdventureParticipantRoster")
+        if roster.adventure_id != record.adventure_id:
+            raise AdventureRegistryError("adventure participant roster belongs to another workspace")
+        manifest = self._read_workspace_manifest(record)
+        workspace = self.workspace_path(record.adventure_id)
+        if (workspace / "events.jsonl").exists():
+            raise AdventureRegistryError("participant roster cannot change after the event log exists")
+        existing = manifest.get(PARTICIPANT_ROSTER_MANIFEST_KEY)
+        if existing is not None:
+            try:
+                loaded = AdventureParticipantRoster.from_dict(record.adventure_id, existing)
+            except AdventureInitiativeError as error:
+                raise AdventureRegistryError("adventure participant roster is invalid") from error
+            if loaded != roster:
+                raise AdventureRegistryError("adventure participant roster is already configured")
+            return loaded
+        manifest[PARTICIPANT_ROSTER_MANIFEST_KEY] = roster.to_dict()
+        self._write_json(workspace / MANIFEST_FILENAME, manifest)
+        return roster
 
     def configure_branch_origin(
         self, record: AdventureRecord, *, parent_adventure_id: object,

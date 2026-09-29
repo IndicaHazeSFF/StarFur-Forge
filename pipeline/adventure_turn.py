@@ -14,6 +14,7 @@ from pipeline.adventure_turn_candidates import (
     normalize_turn_generation_id,
 )
 from pipeline.adventure_turn_mutation_candidate_inbox import AdventureTurnMutationCandidateSelection
+from pipeline.adventure_turn_resource_candidate_inbox import AdventureTurnResourceCandidateSelection
 
 
 MAX_STAGED_ADVENTURE_EVENTS = 16
@@ -204,8 +205,8 @@ class AdventureTurnTransaction:
         operation supplied by Core; this method deliberately cannot validate a
         resource declaration from provider output alone.
         """
-        if not isinstance(selection, AdventureTurnMutationCandidateSelection):
-            raise TypeError("staged mutation candidate must be an AdventureTurnMutationCandidateSelection")
+        if not isinstance(selection, (AdventureTurnMutationCandidateSelection, AdventureTurnResourceCandidateSelection)):
+            raise TypeError("staged mutation candidate selection is invalid")
         if not self.active:
             raise ValueError("no adventure turn is active")
         candidate = selection.candidate

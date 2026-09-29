@@ -116,6 +116,108 @@ Existing primitives:
 - the session-local candidate inbox supports exact inspection, stale-count checking, and explicit staging;
 - the transaction commits only through the existing explicit all-or-nothing path.
 
+**COMPLETED C3 STRUCTURED-OUTPUT CONFORMANCE SLICE (WSL/OLLAMA SMOKE PASSED):**
+Ordinary and typed generated-turn tasks now supply separate Core-owned portable
+structural JSON Schemas to an exact route only when its adapter explicitly
+implements the non-streaming structured-output capability. Strict candidate
+parsers remain authoritative for closed fields, bounds, vocabulary, and version;
+schemas grant no event authority, and a structured request that fails never
+silently retries through an unconstrained text path. Legacy or
+injected text-only adapters preserve the existing strict-JSON route for tests
+and compatibility. Focused fake-provider tests cover both distinct schemas.
+The WSL/Ollama smoke passed for ordinary discovery/inventory candidates and a
+text-valued typed `state_set` candidate; neither path auto-staged or persisted
+provider output.
+
+**COMPLETED C3 DUPLICATE-JSON REJECTION SLICE:** Both ordinary and typed
+generated-turn adapters now reject duplicate JSON object keys at every nesting
+level before candidate parsing. Python's last-key-wins decoder behavior can no
+longer alter an untrusted candidate envelope silently; malformed output still
+creates no inbox, staged event, or write.
+
+**COMPLETED C3 COMBINED-REVIEW SLICE:** Exact `adventure turn review` renders
+the separate ordinary and typed candidate inboxes together for human review.
+It is presentation-only: it calls no provider and cannot select, stage, commit,
+or couple the two candidate channels.
+
+**COMPLETED C3 PORTABLE-RESOURCE GUARD SLICE:** The live portable structured
+typed-generation route now fails closed if a provider proposes `resource_change`.
+Generic resource values require a catalog-shaped schema and their own smoke gate;
+the existing injected/text compatibility path remains review-only and catalog
+validated at explicit staging.
+
+**COMPLETED C3 PUBLIC-RESOURCE POLICY VIEW SLICE:** A provider-free,
+presentation-neutral read model now projects at most eight declared public
+resource IDs, kinds, permitted operations, and enum choices for a future
+resource-specific candidate contract. It never exposes hidden definitions or
+current values and cannot parse, validate, stage, or write a resource operation.
+
+**COMPLETED C3 PAIRED-GENERATION ORCHESTRATION SLICE (WSL/OLLAMA SMOKE PASSED):**
+Exact `adventure turn generate all <text>|transcript` runs the already separate
+ordinary and typed candidate tasks against one bounded source, then renders
+their separate inboxes through read-only `adventure turn review`. If either
+replacement generation fails, both noncanonical inboxes clear together while
+manual staged drafts remain untouched. It still never auto-selects, stages, or
+commits provider output.
+
+**COMPLETED C3 RESERVED-PREFIX FAIL-CLOSED SLICE:** A pasted leading `/` or
+`\\` before the reserved `adventure` command namespace is now rejected as a
+malformed Core command. It is deliberately not corrected into a potentially
+mutating command and cannot reach model generation, memory proposal extraction,
+or a story write.
+
+**COMPLETED C3 DURABLE-ORIGIN RECHECK SLICE:** Ordinary and typed candidate
+generation now compare the mounted event count with the validated durable event
+log before provider submission and again before candidate presentation. A
+cross-session append during provider latency leaves no review inbox; Core asks
+the user to refresh rather than presenting candidates against an obsolete
+projection. The check is read-only and never refreshes or discards manual
+staging implicitly.
+
+**COMPLETED C3 RESOURCE-CANDIDATE ELIGIBILITY SLICE:** The public resource
+policy view can now evaluate one already-parsed `resource_change` candidate
+against only its bounded public declarations. Hidden or omitted IDs, disallowed
+operations, and invalid enum values deny before a future resource-specific
+provider review route; the full catalog remains the separate authoritative
+staging/value-validation boundary. This helper has no live provider wiring,
+state lookup, staging, or write authority.
+
+**COMPLETED C3 PORTABLE-ENUM RESOURCE CONTRACT SLICE:** The first candidate
+contract for a future live resource route is deliberately limited to public
+enum `set` operations. Its Core-owned structured schema contains only declared
+public enum IDs and their finite allowed values; its strict parser then rejects
+every non-resource mutation, hidden/omitted resource, non-enum resource,
+non-`set` operation, or invalid enum value. Numeric, flag, inventory,
+equipment, objective, location, and clock operations remain explicit/manual
+until each has its own value contract and smoke evidence. No new provider task,
+inbox, command, staging, or write path exists yet.
+
+**COMPLETED C3 PUBLIC-ENUM RESOURCE ROUTE (WSL/OLLAMA SMOKE PASSED):** A third,
+separate generated-candidate channel now carries only public enum `set`
+operations. Its Core-owned `TR-###` inbox, structured schema, generation task,
+review/status commands, provenance, durable-origin recheck, and explicit
+staging path are distinct from ordinary `TC-###` and typed `TM-###` channels.
+The provider receives no current or hidden resource values; Core revalidates a
+selected candidate against the full immutable catalog and current/staged state
+before the existing transaction may commit it. The remaining gate is one real
+WSL/Ollama round trip with a scenario that declares a public enum resource;
+numeric, inventory, hidden, and automatic resource mutation remain deferred.
+
+**COMPLETED C3 RESOURCE-ROUTE REGRESSION EVALUATION:** The provider-free
+`adventure-turn-resource-v1` fixture suite now covers public-enum candidate
+generation through explicit staging and append-only commit, explicit no-change,
+hidden-resource rejection, and stale-origin rejection. `python starfur.py
+adventure-resource-eval` runs only temporary-workspace fixtures and may record
+bounded result metadata through the existing explicit experiment-ledger path;
+it invokes no provider or runtime adventure workspace.
+
+**COMPLETED C3 RESOURCE-TRANSCRIPT PARITY SLICE:** Exact `adventure turn
+resources generate transcript` now accepts only the latest explicitly recorded
+adjacent user/narrator pair, preserves its `AT-...` provenance in the bounded
+resource-generation status and any later selected-event provenance, and fails
+closed for an incomplete/non-adjacent pair. It remains an untrusted source path:
+it cannot establish story truth, stage, or persist a resource change by itself.
+
 Before model-backed smoke, complete these gates:
 
 1. Export one shared immutable ordinary-event whitelist for prompt, parser, help, fixtures, and telemetry. Do not let `DRAFT_EVENT_TYPES` silently widen it.
@@ -661,11 +763,13 @@ claims, call a provider, retain source prose/questions, or mutate any state. A
 separate answer-eligibility policy and explicit research-answer workflow remain
 required before normal assistant chat can rely on research.
 
-**COMPLETED S11U EXPLICIT UNVERIFIED RESEARCH-ANSWER GATE:** A pure decision
+**COMPLETED S11U EXPLICIT UNVERIFIED RESEARCH-ANSWER GATE (WSL SMOKE PASSED):** A pure decision
 allows only an explicit trusted-local review containing cited claims to render a
 source-backed but unverified answer. An empty review reports insufficient
 support rather than inventing prose. Citation diversity and model confidence
-remain non-proof; this provider-free answer presentation writes no state. Normal
+remain non-proof; this provider-free answer presentation writes no state. The
+WSL smoke rendered only the IANA-cited example-domain claims from an explicit
+session-local review and confirmed that no model or writable state was used. Normal
 chat is still outside the boundary: any future automatic factual-research path
 needs a separate Core-owned classification and consent policy that fails closed.
 
@@ -679,15 +783,17 @@ grants no consent, tool/network authority, provider route, answer publication,
 or state mutation and does not yet change normal chat; application enforcement
 is a separate smoke-gated slice.
 
-**COMPLETED S11W FAIL-CLOSED NORMAL-CHAT RESEARCH GATE (SMOKE-GATED):** After
+**COMPLETED S11W FAIL-CLOSED NORMAL-CHAT RESEARCH GATE (WSL SMOKE PASSED):** After
 Core command/help/introspection handling and before retrieval or generation,
 normal chat now applies the S11V decision. Mandatory-research requests receive a
 deterministic notice that verified sources are required and automatic research
 is not connected; retrieval, providers, proposal extraction, and tools are not
 called. Fictional sessions retain story generation unless verification is
-explicitly requested. This closes confident improvisation for the narrow
-covered categories while source discovery, consent, brokered fetch orchestration,
-and source-backed answer publication remain separate gates.
+explicitly requested. The WSL smoke covered a current-price question and an
+explicit in-story verification request, both of which refused to invent an
+answer. This closes confident improvisation for the narrow covered categories
+while source discovery, consent, brokered fetch orchestration, and source-backed
+answer publication remain separate gates.
 
 **COMPLETED S11X RESEARCH-DISCOVERY ELIGIBILITY/CONSENT BOUNDARY:** A pure
 policy now binds required research to a normalized query digest, byte count,
@@ -825,8 +931,8 @@ memory/learning/adventure writes, and all authority boundaries remain
 unchanged. Fake-runtime integration tests and the opt-in Tavily WSL smoke
 passed; the shortcut produced only its quarantined discovery-link artifact.
 
-**COMPLETED S11AK EXPLICIT SEARCH-LINK FETCH CONVENIENCE (LIVE SMOKE
-REQUIRED):** Trusted-local `tool search fetch <TF-search-id> <rank>` may now
+**COMPLETED S11AK EXPLICIT SEARCH-LINK FETCH CONVENIENCE (WSL LIVE SMOKE
+PASSED):** Trusted-local `tool search fetch <TF-search-id> <rank>` may now
 fast-forward exactly one user-selected rank from an already-quarantined
 session-local discovery artifact through a fresh ordinary `web.fetch`
 proposal/grant/approval/preparation/execution lifecycle. It does not add
@@ -834,8 +940,89 @@ authority or automatic link following: missing/expired artifacts, invalid ranks,
 unavailable fetch runtime, and failed lifecycle steps stop safely. A success
 still ends at a separately inspected quarantine artifact. Search links never
 become factual support; shared chat/API, model calls, memory/learning/adventure
-writes, and automatic research remain unchanged. Focused fake-runtime tests
-pass; one opt-in WSL smoke is required before release.
+writes, and automatic research remain unchanged. Focused fake-runtime tests and
+the WSL smoke passed: an explicit `example.com` rank became a fresh fetch and a
+separately inspected quarantined text artifact.
+
+**COMPLETED S11AL EXPLICIT SELECTED-LINK CLAIM REVIEW (WSL/OLLAMA SMOKE PASSED):**
+Trusted-local `tool research selected <TF-search-id> <rank>: <question>` now
+combines only an explicit session-local discovery rank, its fresh ordinary fetch
+lifecycle, and the existing exact local research-claim review. It never accepts
+a raw URL, implicitly chooses a rank, turns a source into trusted evidence,
+composes an answer, uses hosted disclosure/fallback, or writes memory, learning,
+adventure, or canonical state. Success remains the same untrusted session-local
+`RR-...` cited-claim review; fetch or research failures stop safely. Focused
+fake-runtime tests and the combined WSL/Ollama smoke passed: the explicit
+`example.com` source stayed quarantined, produced one cited claim review, and
+created no memory proposal.
+
+**COMPLETED S11AM STRICT CLAIM-RELATIONSHIP PROPOSAL CONTRACT:** Added a
+provider-free versioned envelope for pairwise relationships among claims in one
+exact session-local review. Only bounded `possibly_supports_same_proposition`,
+`possibly_conflicts`, `related_only`, and `insufficient_basis` proposals are
+representable. Stale review bindings, unknown claims, reversed or duplicate
+pairs, unordered IDs, duplicate/unknown JSON fields, non-finite confidence, and
+authority-shaped output fail closed. Even a valid result remains untrusted and
+cannot establish corroboration, verified conflict, source independence, truth,
+answer eligibility, memory, learning, or canonical state. No prompt, provider,
+coordinator, command, persistence, or smoke gate was added.
+
+**COMPLETED S11AN LOCAL-ONLY RELATIONSHIP DISCLOSURE/PROMPT BOUNDARY:** Added an
+exact policy binding one session-local review's bounded claim statements/source
+labels to one explicit local provider target and fixed revision. Hosted targets,
+stale/tampered review bindings, fewer than two claims, and mismatched counts
+deny. A provider-neutral prompt may expose only claim IDs/statements/citations
+and public source ID/URL labels as untrusted metadata; it excludes source
+bodies, fetch times, artifact/network/authority records, provider confidence,
+the stored question, final-answer instructions, memory, and tools. No provider
+is selected or called.
+
+**COMPLETED S11AO NONPUBLISHING RELATIONSHIP COORDINATOR:** Added one fake-
+provider-tested coordinator joining the exact review/target/disclosure decision,
+untrusted prompt envelope, Core-owned structured schema, and strict pairwise
+parser. Denied disclosure, provider unavailability/failure, and invalid output
+become bounded failures with no retry, fallback, or raw-output retention. A
+successful result is only `relationships_proposed` or `no_relationships`; it
+cannot establish corroboration, verified conflict, truth, source independence,
+answer eligibility, or writable state. The next runtime-adapter/application
+slice crosses the live-model boundary and requires a focused WSL/Ollama smoke.
+
+**COMPLETED S11AP LOCAL RELATIONSHIP ROUTE AND SESSION REVIEW (WSL/OLLAMA SMOKE
+PASSED):** Added a distinct `research_relationship_generation` task profile,
+exact primary local-Ollama route binding, no-fallback structured adapter, and a
+bounded session-local `RX-...` relationship-review store. Trusted-local `tool
+research relationships <RR-id>` accepts only an existing claim review, sends
+only its separately permitted bounded metadata to the local route, and retains
+parsed pairwise proposals only as inspectable `RX-...` records. Proposal output
+remains explicitly untrusted—not corroboration, verification, truth, source
+independence, answer eligibility, or writable state—and shared chat/API remains
+denied. The WSL/Ollama smoke produced two `RL-...` proposals from a three-claim
+Python-ignore review and confirmed no assistant proposal was created.
+
+**COMPLETED S11AQ DETERMINISTIC RELATIONSHIP BRIEF:** Added `tool research
+relationships brief <RX-id>`, a trusted-local read-only projection that joins
+an existing relationship review to its still-live exact claim review and shows
+the referenced claim statements side by side. It calls no model, cannot recover
+an evicted review, retains no new source data, and cannot elevate labels into
+corroboration, verification, truth, an answer, memory, learning, adventure, or
+canonical state. Focused provider-free tests cover exact binding and application
+presentation; no smoke is required.
+
+**COMPLETED S11AR EXPLICIT SEARCH-TO-RESEARCH CONVENIENCE PATH (TAVILY/WSL/
+OLLAMA SMOKE PASSED):** Added trusted-local `tool research search <public query> <rank>:
+<question>`. It chains only the public query and discovery rank the user
+explicitly typed through the pre-existing fast search, exact selected-link fetch,
+and nonpublishing claim-review controls. The explicit trusted-local tool
+control—not magic wording inside the query—now supplies the narrow
+`explicit_research_request` policy signal; it still grants no disclosure/network
+authority and preserves the full broker lifecycle. The path never silently
+chooses a result, bypasses the broker, treats discovery links as factual support,
+exposes the query in completed output, produces a final answer, or writes state.
+Focused fake-runtime tests and a Tavily/WSL/Ollama smoke passed: the IANA
+example-domain result produced only a quarantined source and an unverified
+`RR-...` claim review. An unrelated Google result ended `outcome_unknown`
+without an artifact or state change, demonstrating safe containment of an
+unsuitable discovery source.
 
 ## Stage G — Perception and media (LATER)
 
@@ -964,6 +1151,32 @@ With chat, embedding, vision, image, speech, and hosted providers disabled, Core
 An active persona becomes an adventure participant only through an explicit adventure-local roster binding. Persona runtime supplies identity/presentation; adventure state supplies role, knowledge, relationships, resources, inventory, initiative, and cooldowns. NPCs do not receive full assistant-memory databases: important facts are event-backed character knowledge/relationship records, with optional bounded rebuildable salience caches.
 
 Add a typed `AdventureParticipantView` keyed by exact adventure and participant IDs. It contains only bounded perspective-appropriate facts. Initiative is disabled or explicitly trigger/action/cooldown limited by default; a provider may propose an action, but Core validates and commits it. Fictional relationships never alter real-world persona relationships.
+
+**Completed declared-roster foundation:** an adventure manifest can retain one validated immutable pre-event participant roster; exact `adventure participants` and `adventure participant inspect <participant-id>` expose only the mounted roster and bounded participant view. Established-checkpoint children copy declarations but re-derive child-local namespaces. This remains read-only: no autonomy, provider call, memory write, scheduling, or authority was added.
+
+**Completed presentation boundary:** resident clients may receive only aggregate mounted `participant_count`. Individual identities, namespaces, perspectives, knowledge, and relationships stay outside the snapshot.
+
+**Completed generated-turn context boundary:** ordinary candidate extraction may receive only declared participant labels (ID, kind, display name) to recognize cast members. It receives no participant perspective, namespace, policy, initiative, hidden resource, or authority; an explicit later action-proposal contract is still required for any participant initiative.
+
+**Completed action-envelope groundwork:** strict `TP-###` untrusted participant-action candidates can now be parsed and rendered only. They remain inert until a later coordinator binds each one to the exact roster and a separately evaluated initiative policy; no provider invocation, scheduling, event/transcript/memory write, or performed action exists here.
+
+**Completed declared-policy groundwork:** roster schema v2 may declare a bounded initiative policy per participant; v1 remains readable with a disabled default. Declarations contain no runtime action history and do not themselves make a participant eligible, invoke a provider, or perform an action.
+
+**Completed policy-binding groundwork:** Core can bind `TP-###` to one exact declared participant and independently evaluated caller-supplied trigger/cooldown/limit counters. A passing bind permits only a later review surface; it is not authority, confirmation, scheduling, history, a provider call, or a performed action.
+
+**Completed participant-action request groundwork:** Core can build one bounded `TPG-...` request from one safe participant view, exact trigger label, and untrusted turn text only after policy preflight. No provider adapter, session inbox, history, execution, or durable result exists yet; ineligible policy fails before a model request.
+
+**Completed participant-action coordinator groundwork:** an injected coordinator can resolve one exact mounted roster member, build the bounded request, parse `TP-###`, and recheck policy binding before returning review-only output. Runtime routing, a session inbox, action history, staged-event policy, and execution remain absent.
+
+**Completed participant-action review control (WSL/Ollama smoke passed):** an exact staged-turn command now routes the separate participant-action task and retains session-local `TP-###` review output only. The enabled-policy smoke returned Murr's one review-only suggestion and created no authoritative event. No selection/performance path exists, so it cannot create an event, transcript, memory, schedule, or autonomous action.
+
+**Completed participant-action stale-origin hardening:** generation now confirms the mounted authoritative event count both before and after the provider call, and review rendering confirms it again. A cross-session write clears the noncanonical proposal rather than exposing an action based on stale story state; no action-selection or performance path was introduced.
+
+**Completed participant-action status slice:** trusted-local status exposes only completed/failed/stale state, route labels, generation identity, and candidate count. It invokes no provider, reveals no provider output, and adds neither action selection nor performance.
+
+**Completed participant-action transcript-presentation slice:** an explicit current `TP-###` can be copied once to optional bounded narrator transcript presentation after an origin recheck. It is not an adventure event, projection mutation, memory, initiative-history record, scheduler instruction, or game-world action. The next focused smoke must verify exact selected text, transcript-only persistence, duplicate refusal, and an empty authoritative event log.
+
+**Completed session-local participant pacing slice:** only explicit transcript recording consumes a declared cooldown/max-per-turn allowance; proposal generation and review alone do not. Counters are bounded, reset on remount/restart, and are not canonical state, memory, durable initiative history, or scheduling. The focused smoke must also show a same-turn retry denied before provider work and a later eligible turn when the policy permits it.
 
 ## Stage I — Workshop and Steam productization (LATER)
 

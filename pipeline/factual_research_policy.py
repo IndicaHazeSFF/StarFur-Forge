@@ -149,10 +149,28 @@ def classify_factual_research_request(
     )
 
 
+def explicit_local_research_tool_decision() -> FactualResearchDecision:
+    """Describe the trusted local tool action, not the wording of its query.
+
+    A user has already explicitly selected the trusted-local public-search
+    control by the time Core reaches this helper.  That explicit control is a
+    stronger and less surprising research signal than requiring phrases such
+    as ``please research`` inside the public query itself.  It grants neither
+    disclosure nor network authority; the ordinary proposal/grant/approval/
+    prerequisite lifecycle still governs every request.
+    """
+    return FactualResearchDecision(
+        FACTUAL_RESEARCH_POLICY_SCHEMA_VERSION,
+        "research_required",
+        "explicit_research_request",
+    )
+
+
 __all__ = [
     "FACTUAL_RESEARCH_POLICY_SCHEMA_VERSION",
     "MAX_FACTUAL_REQUEST_CHARACTERS",
     "FactualResearchContext",
     "FactualResearchDecision",
     "classify_factual_research_request",
+    "explicit_local_research_tool_decision",
 ]

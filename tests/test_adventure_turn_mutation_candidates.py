@@ -8,8 +8,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pipeline.adventure_turn_mutation_candidates import (
     AdventureTurnMutationCandidateError,
     parse_untrusted_adventure_turn_mutation_candidates,
+    parse_untrusted_portable_enum_resource_candidates,
     render_adventure_turn_mutation_candidate_batch,
 )
+from pipeline.adventure_resources import AdventureResourceCatalog, AdventureResourceDefinition
+from pipeline.adventure_turn_resource_policy import AdventureTurnResourcePolicyView
 from pipeline.adventure_turn_provenance import AdventureTurnGenerationProvenance
 
 
@@ -109,6 +112,32 @@ class AdventureTurnMutationCandidateTests(unittest.TestCase):
             "Ollama", "qwen3:8b", 2, (), "TM-001",
         )
         self.assertEqual("TM-001", provenance.candidate_id)
+
+    def test_portable_resource_parser_permits_only_public_enum_set_candidates(self):
+        policy = AdventureTurnResourcePolicyView.from_catalog(AdventureResourceCatalog((
+            AdventureResourceDefinition("airlock", "Airlock", "enum", allowed_values=("sealed", "open")),
+            AdventureResourceDefinition("fuel", "Fuel", "integer", minimum=0, maximum=100),
+            AdventureResourceDefinition("secret_mode", "Secret", "enum", visibility="hidden", allowed_values=("a", "b")),
+        )))
+        accepted = parse_untrusted_portable_enum_resource_candidates({
+            "schema_version": 1,
+            "candidates": [{
+                "mutation": {"kind": "resource_change", "id": "airlock", "operation": "set", "value": "open"},
+                "confidence": 0.9,
+            }],
+        }, policy)
+        self.assertEqual("airlock", accepted.candidates[0].mutation.resource_id)
+
+        for mutation in (
+            {"kind": "resource_change", "id": "fuel", "operation": "set", "value": 50},
+            {"kind": "resource_change", "id": "secret_mode", "operation": "set", "value": "a"},
+            {"kind": "state_set", "key": "current_location", "value": "engine room"},
+        ):
+            with self.assertRaisesRegex(AdventureTurnMutationCandidateError, "portable resource candidate"):
+                parse_untrusted_portable_enum_resource_candidates({
+                    "schema_version": 1,
+                    "candidates": [{"mutation": mutation, "confidence": 0.9}],
+                }, policy)
 
 
 if __name__ == "__main__":

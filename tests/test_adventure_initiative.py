@@ -49,6 +49,49 @@ class AdventureInitiativeTests(unittest.TestCase):
                 AdventureParticipant("murr", "Murr", "persona", "adventure:other:participant:murr"),
             ))
 
+    def test_roster_manifest_round_trip_derives_namespaces_instead_of_accepting_them(self):
+        roster = AdventureParticipantRoster("quiet-ember", (
+            AdventureParticipant("Murr", "Murr", "persona", "adventure:quiet-ember:participant:murr"),
+            AdventureParticipant("rook", "Rook", "npc", "adventure:quiet-ember:participant:rook"),
+        ))
+        serialized = roster.to_dict()
+        self.assertNotIn("memory_namespace", serialized["participants"][0])
+        self.assertEqual(roster, AdventureParticipantRoster.from_dict("QUIET-EMBER", serialized))
+        serialized["participants"][0]["memory_namespace"] = "persona:murr"
+        with self.assertRaisesRegex(AdventureInitiativeError, "entry is invalid"):
+            AdventureParticipantRoster.from_dict("quiet-ember", serialized)
+
+    def test_roster_v2_round_trips_policy_while_v1_loads_disabled_default(self):
+        enabled = PersonaInitiativePolicy(
+            enabled=True, allowed_triggers=("player_turn",), allowed_actions=("speak", "suggest"),
+            cooldown_turns=2, max_actions_per_turn=1, requires_confirmation=True,
+        )
+        roster = AdventureParticipantRoster("quiet-ember", (
+            AdventureParticipant(
+                "murr", "Murr", "persona", "adventure:quiet-ember:participant:murr",
+                initiative_policy=enabled,
+            ),
+        ))
+
+        serialized = roster.to_dict()
+        self.assertEqual(2, serialized["schema_version"])
+        self.assertEqual(enabled, AdventureParticipantRoster.from_dict("quiet-ember", serialized).participants[0].initiative_policy)
+
+        legacy = {
+            "schema_version": 1,
+            "participants": [{
+                "id": "murr", "display_name": "Murr", "kind": "persona",
+                "memory_policy": AdventureParticipantMemoryPolicy().to_dict(),
+            }],
+        }
+        self.assertFalse(AdventureParticipantRoster.from_dict("quiet-ember", legacy).participants[0].initiative_policy.enabled)
+
+    def test_policy_rejects_runtime_or_unknown_manifest_fields(self):
+        payload = PersonaInitiativePolicy().to_dict()
+        payload["turns_since_last_action"] = 0
+        with self.assertRaisesRegex(AdventureInitiativeError, "initiative policy is invalid"):
+            PersonaInitiativePolicy.from_dict(payload)
+
 
 if __name__ == "__main__":
     unittest.main()

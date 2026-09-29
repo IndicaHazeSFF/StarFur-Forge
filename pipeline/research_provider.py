@@ -1,4 +1,4 @@
-"""Local routed-provider adapter for nonpublishing research claims.
+"""Local routed-provider adapters for nonpublishing research review.
 
 The adapter is deliberately narrow: Core supplies one exact local target and
 one completion callable.  It does not select a provider, retry, fall back,
@@ -50,4 +50,16 @@ class LocalResearchClaimProvider:
         return normalize_chat_completion(response).content
 
 
-__all__ = ["LocalResearchClaimProvider"]
+class LocalResearchRelationshipProvider(LocalResearchClaimProvider):
+    """Adapt one exact Core-owned local route to claim-relationship review.
+
+    This deliberately shares only the local-target and normalized-text seam
+    with cited-claim review.  It does not turn relationship proposals into
+    verification, a final answer, or a state-changing action.
+    """
+
+    def propose_relationships(self, messages, *, model: str, schema: dict[str, object]) -> str:
+        return self.propose_claims(messages, model=model, schema=schema)
+
+
+__all__ = ["LocalResearchClaimProvider", "LocalResearchRelationshipProvider"]

@@ -15,10 +15,10 @@ import re
 _GENERATION_ID_PATTERN = re.compile(r"^TG-[0-9a-f]{32}$")
 _TASK_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _TRANSCRIPT_RECORD_ID_PATTERN = re.compile(r"^AT-[0-9]{6}$")
-# ``TC`` identifies ordinary narrative candidates; ``TM`` identifies the
-# deliberately separate typed-mutation candidate channel.  Both are opaque
+# ``TC`` identifies ordinary narrative candidates, ``TM`` typed mutations,
+# and ``TR`` resource-only mutations. All are opaque
 # Core-assigned review handles, never model-authored authority.
-_CANDIDATE_ID_PATTERN = re.compile(r"^T[CM]-[0-9]{3}$")
+_CANDIDATE_ID_PATTERN = re.compile(r"^T[CMR]-[0-9]{3}$")
 _MAX_LABEL_LENGTH = 160
 
 

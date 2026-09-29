@@ -8,9 +8,9 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from pipeline.adventure_events import AdventureEvent
-from pipeline.adventure_initiative import AdventureInitiativeError, AdventureParticipant, AdventureParticipantMemoryPolicy
+from pipeline.adventure_initiative import AdventureInitiativeError, AdventureParticipant, AdventureParticipantMemoryPolicy, AdventureParticipantRoster
 from pipeline.adventure_knowledge import AdventureKnowledgeFact
-from pipeline.adventure_participant import AdventureParticipantView
+from pipeline.adventure_participant import AdventureParticipantView, render_declared_participant_prompt_context
 from pipeline.adventure_registry import AdventureRegistry
 from pipeline.adventure_relationship import AdventureRelationshipFact
 from pipeline.adventure_resource_state import AdventureResourceFact
@@ -122,6 +122,22 @@ class AdventureParticipantViewTests(unittest.TestCase):
             AdventureSessionState(record=record, event_count=1, context_events=(event,)), participant,
         )
         self.assertEqual((), view.events)
+
+    def test_declared_prompt_context_exposes_labels_without_namespace_or_perspective(self):
+        record = self._record()
+        roster = AdventureParticipantRoster(record.adventure_id, (
+            AdventureParticipant(
+                "murr", "Murr", "persona",
+                f"adventure:{record.adventure_id}:participant:murr",
+            ),
+        ))
+
+        rendered = render_declared_participant_prompt_context(roster)
+
+        self.assertIn("murr (persona): Murr", rendered)
+        self.assertIn("autonomous action", rendered)
+        self.assertNotIn("memory_namespace", rendered)
+        self.assertNotIn(f"adventure:{record.adventure_id}", rendered)
 
 
 if __name__ == "__main__":

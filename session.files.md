@@ -1,6 +1,6 @@
 # Pending copy manifest
 
-## Pipeline (47)
+## Pipeline (53)
 
 - `pipeline/assistant.py`
 - `pipeline/application.py`
@@ -32,6 +32,12 @@
 - `pipeline/research_review.py`
 - `pipeline/research_selection.py`
 - `pipeline/research_evidence.py`
+- `pipeline/research_relationships.py`
+- `pipeline/research_relationship_disclosure.py`
+- `pipeline/research_relationship_prompt.py`
+- `pipeline/research_relationship_coordinator.py`
+- `pipeline/research_relationship_review.py`
+- `pipeline/research_relationship_brief.py`
 - `pipeline/research_brief.py`
 - `pipeline/research_answer_policy.py`
 - `pipeline/research_answer_binding.py`
@@ -59,7 +65,7 @@
 
 - `presentation/apartment.html`
 
-## Tests (45)
+## Tests (50)
 
 - `tests/test_api.py`
 - `tests/test_application.py`
@@ -89,6 +95,11 @@
 - `tests/test_research_review.py`
 - `tests/test_research_selection.py`
 - `tests/test_research_evidence.py`
+- `tests/test_research_relationships.py`
+- `tests/test_research_relationship_prompt.py`
+- `tests/test_research_relationship_coordinator.py`
+- `tests/test_research_relationship_review.py`
+- `tests/test_research_relationship_brief.py`
 - `tests/test_research_brief.py`
 - `tests/test_research_answer_policy.py`
 - `tests/test_research_answer_binding.py`
@@ -235,5 +246,15 @@ it returns only the usual quarantined untrusted discovery links and never
 automatically fetches them or treats them as facts.
 `tool search fetch <TF-search-id> <rank>` now fast-forwards one explicitly
 selected quarantined discovery link through a fresh ordinary `web.fetch`
-lifecycle, then still stops at a separately inspected artifact. Its focused
-WSL smoke remains required.
+lifecycle, then still stops at a separately inspected artifact. Its focused WSL
+smoke passed with an explicit `example.com` rank.
+`tool research selected <TF-search-id> <rank>: <question>` now explicitly
+chains one selected discovery rank through a fresh fetch and the existing local
+nonpublishing cited-claim review. Its combined WSL/Ollama smoke passed with the
+explicit `example.com` source, one cited review, and no memory proposal.
+S11am adds only a strict provider-free relationship-proposal contract bound to
+one exact review. Its support/conflict labels remain untrusted proposals and
+cannot become verification or answer authority; no live integration exists.
+S11an/S11ao add exact local-only disclosure/prompt binding and one fake-provider
+coordinator for that relationship contract. No runtime adapter or command is
+wired; the next application integration is the live-model smoke boundary.

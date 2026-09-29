@@ -1459,3 +1459,90 @@
 - Output: backend streams have a UTF-8 byte-bounded collector whose truncation marker fits within the cap, while direct result envelopes reject invalid or oversized multibyte text.
 - Constraints: this adds no broker dispatch, native process, VM, host export, guest mount, provider call, or execution enablement.
 - Verification: focused sandbox, tool-contract, backend, supervisor, application, and API tests pass on Windows; WSL smoke is pending.
+## 2026-09-29 - Complete the first safe generated adventure-resource route
+
+- Behavior: Added a separate model-backed `adventure turn resources generate <text>|transcript` path for declared public enum resources only. It produces distinct `TR-###` review handles, uses a Core-owned structured schema, records bounded provider/transcript provenance, requires explicit staging, revalidates against the full immutable catalog and current/staged state, then uses the existing atomic commit.
+- Safety: current values and hidden resource definitions never enter the provider context; hidden/non-enum/numeric/inventory operations and automatic staging remain unavailable. The route rejects stale authoritative origins, clears its session-local candidate/status state on every workspace transition, and cannot establish story truth from transcript or model output alone.
+- Verification: WSL/Ollama smoke passed for an explicit `hatch: open` public enum update while a hidden resource remained absent. `adventure-turn-resource-v1` permanently covers public commit, no-change, hidden-resource rejection, and stale-origin rejection through temporary-workspace fixtures.
+## 2026-09-29 - Add immutable declared adventure participant rosters
+
+- Behavior: registered adventures may retain one validated pre-event participant roster; mounted sessions report its count and exact `adventure participants` / `adventure participant inspect <participant-id>` expose only bounded adventure-local participant views. Established-checkpoint children copy roster declarations while re-deriving their child-local namespaces.
+- Constraints: participant namespaces are re-derived from the exact workspace, never accepted from manifest data. The read-only controls cannot call a provider, schedule initiative, write events or memories, or make persona/adventure labels into authority.
+- Verification: focused registry, participant, initiative, and command tests cover manifest round-trip, namespace rejection, event-log configuration guard, mounted perspectives, and provider-free behavior.
+
+## 2026-09-29 - Expose aggregate adventure party readiness to resident clients
+
+- Behavior: the read-only resident snapshot now allows a mounted adventure's bounded `participant_count`, so apartment/dashboard clients can show party presence without learning who is present.
+- Constraints: participant IDs, display names, namespaces, knowledge, relationships, and perspective content remain excluded. Snapshot reads still cannot create state, call a provider, or mutate an adventure.
+- Verification: focused application snapshot tests assert count-only allowlisting and reject injected participant identity data.
+
+## 2026-09-29 - Add declared cast labels to ordinary adventure-turn extraction
+
+- Behavior: an explicitly declared mounted roster may provide only participant ID, kind, and display name to the existing ordinary-event candidate request. This lets a generated-turn extractor recognize the configured cast without creating an independent persona/NPC turn.
+- Constraints: no namespace, policy, perspective facts, relationships, resources, hidden state, permission, initiative, or action authority crosses this prompt boundary. Provider output remains an untrusted ordinary-event candidate and still requires explicit review, staging, and commit.
+- Verification: focused participant, request, and coordinator tests cover bounded label rendering, omission with no roster, namespace exclusion, and unchanged noncanonical candidate flow.
+
+## 2026-09-29 - Add inert governed participant-action candidate contracts
+
+- Behavior: Core now recognizes a strict, bounded `TP-###` untrusted candidate envelope for a declared participant's possible `observe`, `speak`, `suggest`, `move`, `investigate`, `assist`, or `decline` action.
+- Constraints: this is parser/rendering groundwork only. It cannot select a participant, evaluate eligibility, call a model, stage an event, create a transcript, write memory, schedule an action, or perform one.
+- Verification: focused contract tests cover closed fields, bounded text, supported actions, empty output, deterministic IDs, and explicit noncanonical rendering.
+
+## 2026-09-29 - Add declared participant initiative-policy manifest support
+
+- Behavior: participant-roster schema v2 may declare a bounded per-participant initiative policy: enabled state, allowed triggers/actions, cooldown, per-turn limit, and whether a later action would need confirmation.
+- Constraints: v1 rosters still load with disabled defaults; manifests carry no action history. A declared enabled policy neither calls a provider nor allows an action—Core still needs a later eligibility, review, and commit boundary.
+- Verification: focused initiative and registry tests cover v2 round-trip, v1 compatibility, unknown runtime-field rejection, and existing manifest immutability guards.
+
+## 2026-09-29 - Bind participant-action proposals to exact roster policy
+
+- Behavior: a pure Core gate can now bind parsed `TP-###` candidates to one exact declared participant and independently evaluate its trigger, allowed action, cooldown, and per-turn limit from caller-supplied counters.
+- Constraints: a passing bind proves only proposal-review eligibility. It stores no action history and never grants authority, confirms, schedules, invokes a provider, or performs an action/write.
+- Verification: focused tests cover eligible exact binding, disabled/incorrect-trigger rejection, policy-action rejection, and cross-participant candidate rejection.
+
+## 2026-09-29 - Add bounded participant-action generation request contract
+
+- Behavior: Core can now build one provider-neutral `TPG-...` action-proposal request from a single bounded participant view, an exact Core trigger label, and untrusted user turn text—but only after the declared initiative policy is eligible.
+- Constraints: no provider adapter or runtime wiring exists. The request contains no namespace, full history, hidden resource, shared memory, action history, inbox, event/transcript/memory write, or execution path; ineligible policies fail before any request is made.
+- Verification: focused request tests cover allowed bounded view rendering, closed action vocabulary, stable generation IDs, namespace exclusion, and disabled/wrong-trigger preflight failure.
+
+## 2026-09-29 - Add noncanonical participant-action proposal coordinator
+
+- Behavior: an injected provider seam can now produce a `TPG-...` request for one exact mounted participant, return strict `TP-###` candidates, and have Core recheck the same roster/policy binding before exposing a review-only proposal object.
+- Constraints: this is not wired to a runtime provider, command, inbox, task route, or action history. Ineligible policy fails before the injected provider is called; cross-participant or malformed output never reaches review.
+- Verification: focused coordinator tests cover exact bounded-view flow, no event ID/write path, disabled preflight without a provider call, and cross-participant output rejection.
+
+## 2026-09-29 - Add explicit reviewed participant-action generation control
+
+- Behavior: while an adventure turn is explicitly staged, `adventure participant action generate <participant-id> <trigger>: <text>` routes the separate participant-action task and retains only its session-local untrusted review output for `adventure participant actions`.
+- Constraints: eligible policy is still required; no candidate can stage an event, write a transcript/memory, schedule, execute, or otherwise perform an action. The command fails closed on provider, policy, or candidate-envelope failure.
+- Verification: focused command/routing tests cover exact enabled roster generation, `TP-###` review, no staged drafts/events, one task call, and closed routing capability.
+
+## 2026-09-29 - Smoke reviewed participant-action generation
+
+- Verification: the WSL/Ollama enabled-policy smoke generated one Murr `TP-###` suggestion during an explicitly staged turn; repeated review inspection and an empty event log confirmed that no action, transcript, memory, or authoritative adventure event was created.
+
+## 2026-09-29 - Harden participant-action review freshness
+
+- Behavior: participant-action generation now checks the mounted event-log origin both before and after its provider call; reopening a review also rechecks the durable origin.
+- Constraints: a cross-session authoritative write invalidates the session-local proposal rather than presenting an action inferred from stale story state. This remains review-only and does not add action selection or performance.
+
+## 2026-09-29 - Add bounded participant-action generation status
+
+- Behavior: trusted local adventure controls now expose completed, failed, and stale participant-action generation status with only route labels, generation ID, and validated candidate count.
+- Constraints: status never exposes provider output or candidate contents, performs no provider call, and does not create an action/staging path.
+
+## 2026-09-29 - Add Core help for participant-action review
+
+- Behavior: direct natural-language questions about Murr or other participant suggestions now return exact Core-owned staged-turn generation, review, and status controls.
+- Constraints: help describes only the review boundary and never lets persona/model prose invent an action-performance capability.
+
+## 2026-09-29 - Allow explicit participant suggestion transcript recording
+
+- Behavior: a user may explicitly record one current `TP-###` candidate once as bounded noncanonical narrator transcript text, such as `Murr suggests: ...`.
+- Constraints: recording rechecks the durable story origin and remains presentation-only: it cannot append an adventure event, change a projection, write memory, establish initiative history, schedule work, or perform a game-world action.
+
+## 2026-09-29 - Enforce session-local participant action pacing
+
+- Behavior: only an explicitly recorded participant transcript consumes the declared cooldown and per-turn action allowance. A second same-turn generation is denied before any provider call; a later session turn becomes eligible again when the declared cooldown permits it.
+- Constraints: pacing history is bounded, session-local, and reset on adventure remount/restart. It is not canonical adventure state, durable persona memory, or autonomous scheduling.

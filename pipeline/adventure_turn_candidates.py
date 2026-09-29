@@ -25,6 +25,39 @@ ORDINARY_GENERATED_EVENT_TYPES = ORDINARY_ADVENTURE_EVENT_TYPES
 TURN_GENERATION_ID_PATTERN = re.compile(r"^TG-[0-9a-f]{32}$")
 
 
+def adventure_turn_candidate_json_schema() -> dict[str, object]:
+    """Return Core's bounded guidance schema for ordinary candidate output.
+
+    This is provider conformance guidance only.  The strict parser below stays
+    authoritative, so a provider honoring this schema gains no staging or
+    event-writing authority.
+    """
+    # Ollama's grammar compiler accepts this portable structural subset across
+    # the local models we support.  Bounds, closed fields, version, and event
+    # vocabulary deliberately remain enforced by the strict Core parser below;
+    # schema guidance is not an authorization or validation replacement.
+    return {
+        "type": "object",
+        "required": ["schema_version", "candidates"],
+        "properties": {
+            "schema_version": {"type": "integer"},
+            "candidates": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "required": ["event_type", "summary", "confidence"],
+                    "properties": {
+                        "event_type": {"type": "string"},
+                        "summary": {"type": "string"},
+                        "details": {"type": "string"},
+                        "confidence": {"type": "number"},
+                    },
+                },
+            },
+        },
+    }
+
+
 def normalize_turn_generation_id(value: object) -> str:
     """Validate a Core-generated opaque candidate-batch identity."""
     if not isinstance(value, str) or not TURN_GENERATION_ID_PATTERN.fullmatch(value):
@@ -177,6 +210,6 @@ __all__ = [
     "AdventureTurnCandidate", "AdventureTurnCandidateBatch", "AdventureTurnCandidateError",
     "AdventureTurnCandidateSelection",
     "MAX_ADVENTURE_TURN_CANDIDATES", "ORDINARY_GENERATED_EVENT_TYPES",
-    "TURN_CANDIDATE_SCHEMA_VERSION", "normalize_turn_generation_id",
+    "TURN_CANDIDATE_SCHEMA_VERSION", "adventure_turn_candidate_json_schema", "normalize_turn_generation_id",
     "parse_untrusted_adventure_turn_candidates", "render_adventure_turn_candidate_batch",
 ]

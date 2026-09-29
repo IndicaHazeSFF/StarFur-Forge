@@ -25,6 +25,7 @@ from pipeline.adventure_state import (
     select_adventure_state_context,
 )
 from pipeline.adventure_registry import AdventureRecord
+from pipeline.adventure_initiative import AdventureParticipantRoster
 from pipeline.adventure_resources import AdventureResourceCatalog
 from pipeline.adventure_resource_state import (
     AdventureResourceFact,
@@ -51,6 +52,7 @@ class AdventureSessionState:
     knowledge_facts: tuple[AdventureKnowledgeFact, ...] = ()
     context_knowledge_facts: tuple[AdventureKnowledgeFact, ...] = ()
     resource_catalog: AdventureResourceCatalog = AdventureResourceCatalog(())
+    participant_roster: AdventureParticipantRoster | None = None
     resource_facts: tuple[AdventureResourceFact, ...] = ()
     context_resource_facts: tuple[AdventureResourceFact, ...] = ()
 
@@ -75,6 +77,11 @@ class AdventureSessionState:
             raise TypeError("mounted adventure context knowledge facts must be AdventureKnowledgeFacts")
         if not isinstance(self.resource_catalog, AdventureResourceCatalog):
             raise TypeError("mounted adventure resource catalog must be an AdventureResourceCatalog")
+        if self.participant_roster is not None:
+            if not isinstance(self.participant_roster, AdventureParticipantRoster):
+                raise TypeError("mounted adventure participant roster must be an AdventureParticipantRoster or None")
+            if self.record is None or self.participant_roster.adventure_id != self.record.adventure_id:
+                raise ValueError("mounted adventure participant roster does not match workspace")
         if not isinstance(self.resource_facts, tuple) or not all(isinstance(fact, AdventureResourceFact) for fact in self.resource_facts):
             raise TypeError("mounted adventure resource facts must be AdventureResourceFacts")
         if not isinstance(self.context_resource_facts, tuple) or not all(isinstance(fact, AdventureResourceFact) for fact in self.context_resource_facts):
@@ -93,7 +100,7 @@ class AdventureSessionState:
             self.event_count or self.context_events or self.state_facts or self.context_state_facts
             or self.relationship_facts or self.context_relationship_facts or self.knowledge_facts
             or self.context_knowledge_facts or self.resource_catalog.definitions
-            or self.resource_facts or self.context_resource_facts
+            or self.resource_facts or self.context_resource_facts or self.participant_roster is not None
         ):
             raise ValueError("unmounted adventure state cannot contain events")
         if self.event_count < len(self.context_events):
@@ -110,6 +117,7 @@ class AdventureSessionState:
     def mount(
         self, record: AdventureRecord, events: list[AdventureEvent] | tuple[AdventureEvent, ...] = (),
         *, resource_catalog: AdventureResourceCatalog | None = None,
+        participant_roster: AdventureParticipantRoster | None = None,
     ) -> "AdventureSessionState":
         """Mount only a bounded selection of validated events; never write them."""
         if not isinstance(events, (list, tuple)) or not all(isinstance(event, AdventureEvent) for event in events):
@@ -119,6 +127,16 @@ class AdventureSessionState:
             resource_catalog = self.resource_catalog if self.record == record else AdventureResourceCatalog(())
         if not isinstance(resource_catalog, AdventureResourceCatalog):
             raise TypeError("mounted adventure resource catalog must be an AdventureResourceCatalog")
+        if participant_roster is None:
+            participant_roster = (
+                self.participant_roster
+                if self.record == record and self.participant_roster is not None
+                else AdventureParticipantRoster(record.adventure_id, ())
+            )
+        if not isinstance(participant_roster, AdventureParticipantRoster):
+            raise TypeError("mounted adventure participant roster must be an AdventureParticipantRoster")
+        if participant_roster.adventure_id != record.adventure_id:
+            raise ValueError("mounted adventure participant roster does not match workspace")
         state_facts = derive_adventure_state(events)
         relationship_facts = derive_adventure_relationships(events)
         knowledge_facts = derive_adventure_knowledge(events)
@@ -141,6 +159,7 @@ class AdventureSessionState:
             resource_catalog=resource_catalog,
             resource_facts=resource_facts,
             context_resource_facts=select_adventure_resource_context(resource_facts),
+            participant_roster=participant_roster,
         )
 
     def unmount(self) -> "AdventureSessionState":
@@ -164,6 +183,7 @@ class AdventureSessionState:
             "context_knowledge_fact_count": len(self.context_knowledge_facts),
             "resource_fact_count": len(self.resource_facts),
             "context_resource_fact_count": len(self.context_resource_facts),
+            "participant_count": len(self.participant_roster.participants) if self.participant_roster else 0,
             "storage": "session_ephemeral",
         }
 

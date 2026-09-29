@@ -22,6 +22,7 @@ from pipeline.adventure_turn_mutation_candidates import (
     parse_untrusted_adventure_turn_mutation_candidates,
 )
 from pipeline.adventure_turn_mutation_generation import AdventureTurnMutationGenerationRequest
+from pipeline.adventure_turn_resource_generation import AdventureTurnResourceGenerationRequest
 from pipeline.providers import ChatCompletionProvider, ChatProviderResponseError, normalize_chat_completion
 
 
@@ -52,6 +53,14 @@ class AdventureTurnMutationCandidateProvider(Protocol):
         """Return one decoded, untrusted typed mutation candidate envelope."""
 
 
+@runtime_checkable
+class AdventureTurnResourceCandidateProvider(Protocol):
+    """Task-specific provider interface for portable resource proposals."""
+
+    def propose(self, request: AdventureTurnResourceGenerationRequest) -> object:
+        """Return one decoded, untrusted resource candidate envelope."""
+
+
 class CallableAdventureTurnCandidateProvider:
     """Adapt one Core-owned completion callback to the candidate protocol.
 
@@ -74,7 +83,7 @@ class CallableAdventureTurnCandidateProvider:
             return _parse_json_content(content)
         except AdventureTurnProviderError:
             raise
-        except (TypeError, json.JSONDecodeError) as error:
+        except (TypeError, ValueError, json.JSONDecodeError) as error:
             raise AdventureTurnProviderError(
                 "adventure-turn provider response was not strict JSON", reason="response_not_json",
             ) from error
@@ -98,13 +107,38 @@ class CallableAdventureTurnMutationCandidateProvider:
             return _parse_json_content(_response_content(response))
         except AdventureTurnProviderError:
             raise
-        except (TypeError, json.JSONDecodeError) as error:
+        except (TypeError, ValueError, json.JSONDecodeError) as error:
             raise AdventureTurnProviderError(
                 "adventure-turn mutation provider response was not strict JSON", reason="response_not_json",
             ) from error
         except Exception as error:
             raise AdventureTurnProviderError(
                 "adventure-turn mutation provider request failed", reason="provider_request_failed",
+            ) from error
+
+
+class CallableAdventureTurnResourceCandidateProvider:
+    """Adapt a Core completion callback to the resource-only proposal protocol."""
+
+    def __init__(self, complete: Callable[[tuple[dict[str, str], dict[str, str]]], object]) -> None:
+        if not callable(complete):
+            raise TypeError("adventure-turn resource completion callback must be callable")
+        self._complete = complete
+
+    def propose(self, request: AdventureTurnResourceGenerationRequest) -> object:
+        if not isinstance(request, AdventureTurnResourceGenerationRequest):
+            raise TypeError("adventure-turn resource request is invalid")
+        try:
+            return _parse_json_content(_response_content(self._complete(request.messages())))
+        except AdventureTurnProviderError:
+            raise
+        except (TypeError, ValueError, json.JSONDecodeError) as error:
+            raise AdventureTurnProviderError(
+                "adventure-turn resource provider response was not strict JSON", reason="response_not_json",
+            ) from error
+        except Exception as error:
+            raise AdventureTurnProviderError(
+                "adventure-turn resource provider request failed", reason="provider_request_failed",
             ) from error
 
 
@@ -158,7 +192,7 @@ class ChatAdventureTurnCandidateProvider:
         content = _response_content(response)
         try:
             return _parse_json_content(content)
-        except (TypeError, json.JSONDecodeError) as error:
+        except (TypeError, ValueError, json.JSONDecodeError) as error:
             raise AdventureTurnProviderError(
                 "adventure-turn provider response was not strict JSON", reason="response_not_json",
             ) from error
@@ -194,7 +228,7 @@ class ChatAdventureTurnMutationCandidateProvider:
             ) from error
         try:
             return _parse_json_content(_response_content(response))
-        except (TypeError, json.JSONDecodeError) as error:
+        except (TypeError, ValueError, json.JSONDecodeError) as error:
             raise AdventureTurnProviderError(
                 "adventure-turn mutation provider response was not strict JSON", reason="response_not_json",
             ) from error
@@ -222,12 +256,29 @@ def _parse_json_content(content: str) -> object:
     text = content.strip()
     if not text:
         raise json.JSONDecodeError("empty provider response", text, 0)
-    return json.loads(text)
+    return json.loads(text, object_pairs_hook=_reject_duplicate_object)
+
+
+def _reject_duplicate_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    """Decode one JSON object without silently accepting duplicate fields.
+
+    ``json.loads`` normally retains the last occurrence of a duplicate key.
+    That is unsuitable at this untrusted proposal boundary because it can make
+    the rendered/provider-visible object differ from the object Core validates.
+    Reject duplicates at every nesting level before either ordinary or typed
+    candidate validation sees the decoded structure.
+    """
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("adventure-turn provider response contains duplicate JSON keys")
+        result[key] = value
+    return result
 
 
 __all__ = [
-    "AdventureTurnCandidateProvider", "AdventureTurnMutationCandidateProvider", "AdventureTurnProviderError",
-    "CallableAdventureTurnCandidateProvider", "CallableAdventureTurnMutationCandidateProvider",
+    "AdventureTurnCandidateProvider", "AdventureTurnMutationCandidateProvider", "AdventureTurnResourceCandidateProvider", "AdventureTurnProviderError",
+    "CallableAdventureTurnCandidateProvider", "CallableAdventureTurnMutationCandidateProvider", "CallableAdventureTurnResourceCandidateProvider",
     "ChatAdventureTurnCandidateProvider", "ChatAdventureTurnMutationCandidateProvider",
     "MAX_ADVENTURE_TURN_PROVIDER_RESPONSE_CHARACTERS",
     "validate_adventure_turn_provider_result", "validate_adventure_turn_mutation_provider_result",

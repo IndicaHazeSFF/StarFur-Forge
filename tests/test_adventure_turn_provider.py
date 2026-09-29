@@ -119,6 +119,20 @@ class AdventureTurnProviderTests(unittest.TestCase):
         with self.assertRaisesRegex(AdventureTurnProviderError, "strict JSON"):
             adapter.propose(self._request())
 
+    def test_adapters_reject_duplicate_json_keys_before_candidate_validation(self):
+        ordinary = ChatAdventureTurnCandidateProvider(_FakeChatProvider({"message": {"content": (
+            '{"schema_version":1,"schema_version":1,"candidates":[]}'
+        )}}))
+        typed = ChatAdventureTurnMutationCandidateProvider(_FakeChatProvider({"message": {"content": (
+            '{"schema_version":1,"candidates":[{"mutation":{"kind":"state_set",'
+            '"key":"current_location","key":"other","value":"engine room"},"confidence":0.8}]}'
+        )}}))
+
+        with self.assertRaisesRegex(AdventureTurnProviderError, "strict JSON"):
+            ordinary.propose(self._request())
+        with self.assertRaisesRegex(AdventureTurnProviderError, "strict JSON"):
+            typed.propose(self._mutation_request())
+
     def test_empty_or_oversized_provider_text_fails_before_json_decoding(self):
         for content, expected in (
             ("   ", "empty"),

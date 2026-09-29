@@ -16,7 +16,7 @@ from pipeline.document_intake import DocumentAnnotationExecution, prepare_docume
 from pipeline.persona_registry import PersonaRegistry, load_persona_package
 from pipeline.provider_registry import ChatProviderRegistration, ChatProviderRegistry
 from pipeline.research_disclosure import ResearchProviderTarget
-from pipeline.research_provider import LocalResearchClaimProvider
+from pipeline.research_provider import LocalResearchClaimProvider, LocalResearchRelationshipProvider
 from pipeline.sandbox_execution_status import SandboxExecutionStatus
 from pipeline.system_metrics import SystemMetricsSnapshot
 from pipeline.task_profiles import TaskProfile, TaskProfiles
@@ -67,10 +67,12 @@ class FakeSession:
 
 
 class ResearchSession(FakeSession):
-    def __init__(self, *, malformed=False):
+    def __init__(self, *, malformed=False, two_claims=False):
         super().__init__()
         self.research_calls = []
+        self.relationship_calls = []
         self.malformed = malformed
+        self.two_claims = two_claims
 
     def local_research_claim_provider(self):
         target = ResearchProviderTarget.create("ollama", "qwen3:8b", "local")
@@ -80,18 +82,47 @@ class ResearchSession(FakeSession):
             if self.malformed:
                 return {"message": {"content": "not json"}}
             packet = json.loads(messages[1]["content"].split("\n", 1)[1])
+            claims = [{
+                "claim_id": "RC-001",
+                "statement": "The fixture is bounded public text.",
+                "source_ids": [packet["sources"][0]["source_id"]],
+                "confidence": 0.9,
+            }]
+            if self.two_claims:
+                claims.append({
+                    "claim_id": "RC-002",
+                    "statement": "The fixture has an exact digest binding.",
+                    "source_ids": [packet["sources"][0]["source_id"]],
+                    "confidence": 0.8,
+                })
             return {"message": {"content": json.dumps({
                 "schema_version": 1,
                 "packet_sha256": packet["packet_sha256"],
-                "claims": [{
-                    "claim_id": "RC-001",
-                    "statement": "The fixture is bounded public text.",
-                    "source_ids": [packet["sources"][0]["source_id"]],
-                    "confidence": 0.9,
-                }],
+                "claims": claims,
             })}}
 
         return LocalResearchClaimProvider(target, complete)
+
+    def local_research_relationship_provider(self):
+        target = ResearchProviderTarget.create("ollama", "qwen3:8b", "local")
+
+        def complete(messages, model, schema):
+            self.relationship_calls.append((messages, model, schema))
+            review = json.loads(messages[1]["content"].split("\n", 1)[1])
+            return {"message": {"content": json.dumps({
+                "schema_version": 1,
+                "review_id": review["review_id"],
+                "packet_sha256": review["packet_sha256"],
+                "relationships": [{
+                    "relationship_id": "RL-001",
+                    "left_claim_id": "RC-001",
+                    "right_claim_id": "RC-002",
+                    "relation": "related_only",
+                    "confidence": 0.8,
+                }],
+            })}}
+
+        return LocalResearchRelationshipProvider(target, complete)
 
 
 class FailingSession(FakeSession):
@@ -172,7 +203,7 @@ class FakeWebTransport:
 
 class AssistantApplicationTests(unittest.TestCase):
     def test_tool_namespace_is_reserved_and_shared_chat_cannot_control_it(self):
-        session = FakeSession()
+        session = ResearchSession()
         app = AssistantApplication(session)
 
         result = app.respond("tool approve TI-forged")
@@ -373,6 +404,7 @@ class AssistantApplicationTests(unittest.TestCase):
     def test_trusted_local_search_selection_creates_inert_exact_fetch_proposal(self):
         resolver_calls = []
         adapter_calls = []
+        search_artifact_serial = [0]
 
         class FakeSearchAdapter:
             available = True
@@ -408,7 +440,11 @@ class AssistantApplicationTests(unittest.TestCase):
             prerequisites = SessionWebSearchPrerequisiteStore(
                 service_id="fixture.search", deployment="local", maximum_results=4,
             )
-            quarantine = SessionWebSearchArtifactStore(ref_factory=lambda: "TF-search_fixture")
+            def artifact_ref():
+                search_artifact_serial[0] += 1
+                return f"TF-search_fixture{search_artifact_serial[0]}"
+
+            quarantine = SessionWebSearchArtifactStore(ref_factory=artifact_ref)
 
             def observation(service_ref):
                 now = time.time()
@@ -422,7 +458,7 @@ class AssistantApplicationTests(unittest.TestCase):
             )
             return LocalWebSearchRuntime(prerequisites, quarantine, supervisor, observation)
 
-        session = FakeSession()
+        session = ResearchSession()
         app = AssistantApplication(
             session,
             local_web_runtime_factory=fetch_runtime_factory,
@@ -465,11 +501,74 @@ class AssistantApplicationTests(unittest.TestCase):
         self.assertIn("quarantined artifact", fast)
         self.assertIn("Inspect any returned artifact explicitly", fast)
         self.assertEqual(2, len(resolver_calls))
+
+        selected_research = app.respond(
+            f"tool research selected {artifact_ref} 1: What does the fixture contain?",
+            trusted_local_control=True,
+        )
+        self.assertIn("Explicit local selected-link research confirmed", selected_research)
+        self.assertIn("quarantined artifact", selected_research)
+        self.assertIn("Research claim proposals (untrusted; not a final answer)", selected_research)
+        self.assertEqual(3, len(resolver_calls))
+        self.assertEqual(1, len(session.research_calls))
+        searched_research = app.respond(
+            "tool research search Please research the current fixture fact 1: What does the fixture contain?",
+            trusted_local_control=True,
+        )
+        self.assertIn("Explicit local fast search-to-research confirmed for selected discovery link 1", searched_research)
+        self.assertIn("Research claim proposals (untrusted; not a final answer)", searched_research)
+        self.assertNotIn("current fixture fact", searched_research)
+        self.assertEqual(2, len(adapter_calls))
+        self.assertEqual(4, len(resolver_calls))
+        self.assertEqual(2, len(session.research_calls))
         self.assertIn(
             "rank was not found",
             app.respond(f"tool search select {artifact_ref} 2", trusted_local_control=True),
         )
         self.assertEqual([], session.calls)
+
+    def test_explicit_local_search_does_not_require_research_magic_words(self):
+        adapter_calls = []
+
+        class FakeSearchAdapter:
+            available = True
+            service_id = "fixture.search"
+
+            def search(self, request, cancellation):
+                adapter_calls.append(request)
+                return WebSearchResponse(
+                    1, request.invocation_id, request.binding_fingerprint,
+                    request.worker_generation, request.service_id, request.query_sha256,
+                    (WebSearchCandidate(1, "https://example.com/result", "Fixture result"),),
+                )
+
+            def request_cancel(self, request):
+                return None
+
+        def search_runtime_factory():
+            prerequisites = SessionWebSearchPrerequisiteStore(
+                service_id="fixture.search", deployment="local", maximum_results=4,
+            )
+            quarantine = SessionWebSearchArtifactStore(ref_factory=lambda: "TF-search_wording")
+
+            def observation(service_ref):
+                now = time.time()
+                return WebSearchServicePrerequisite(
+                    1, service_ref, "fixture.search", "local", 4, True,
+                    now, now + 60.0, WEB_SEARCH_PREFLIGHT_POLICY_REVISION,
+                )
+
+            supervisor = WebSearchSupervisor(
+                prerequisites, FakeSearchAdapter(), quarantine, clock=time.time,
+            )
+            return LocalWebSearchRuntime(prerequisites, quarantine, supervisor, observation)
+
+        app = AssistantApplication(
+            FakeSession(), local_web_search_runtime_factory=search_runtime_factory,
+        )
+        result = app.respond("tool search Example Domain", trusted_local_control=True)
+        self.assertIn("Explicit local fast web search confirmed", result)
+        self.assertEqual(1, len(adapter_calls))
 
     def test_trusted_local_research_proposes_cited_claims_without_publishing_state(self):
         def runtime_factory():
@@ -537,6 +636,64 @@ class AssistantApplicationTests(unittest.TestCase):
         self.assertIn("Question binding: exact reviewed question match", bound_answer)
         self.assertIn("does not match this review", mismatched_answer)
         self.assertNotIn("What does the fixture contain?", mismatched_answer)
+
+    def test_trusted_local_relationship_review_is_session_local_and_nonpublishing(self):
+        def runtime_factory():
+            resolver = NativeWebResolver(
+                getaddrinfo=lambda *_args: [(2, 1, 6, "", ("93.184.216.34", 443))],
+                clock=time.time,
+            )
+            prerequisites = SessionWebPrerequisiteStore(resolver)
+            quarantine = SessionWebQuarantineStore()
+            return NativeWebToolRuntime(
+                prerequisites,
+                quarantine,
+                WebFetchSupervisor(prerequisites, FakeWebTransport(), quarantine, clock=time.time),
+            )
+
+        session = ResearchSession(two_claims=True)
+        app = AssistantApplication(session, local_web_runtime_factory=runtime_factory)
+        created = app.respond(
+            'tool propose web.fetch {"url":"https://example.com/reference"}',
+            trusted_local_control=True,
+        )
+        request_id = re.search(r"TI-[A-Za-z0-9_-]+", created).group(0)
+        for action in ("grant", "approve", "prepare", "execute"):
+            completed = app.respond(f"tool {action} {request_id}", trusted_local_control=True)
+        artifact_ref = re.search(r"TF-[A-Za-z0-9_-]+", completed).group(0)
+        claims = app.respond(
+            f"tool research {artifact_ref}: What does the fixture contain?",
+            trusted_local_control=True,
+        )
+        review_id = re.search(r"RR-[0-9a-f]{24}", claims).group(0)
+
+        proposed = app.respond(
+            f"tool research relationships {review_id}", trusted_local_control=True,
+        )
+        relationship_review_id = re.search(r"RX-[0-9a-f]{24}", proposed).group(0)
+        listed = app.respond("tool research relationships list", trusted_local_control=True)
+        inspected = app.respond(
+            f"tool research relationships inspect {relationship_review_id}",
+            trusted_local_control=True,
+        )
+        brief = app.respond(
+            f"tool research relationships brief {relationship_review_id}",
+            trusted_local_control=True,
+        )
+
+        self.assertIn("Research claim-relationship proposals (untrusted; not verification)", proposed)
+        self.assertIn("RL-001 [confidence 0.80] RC-001 related_only RC-002", proposed)
+        self.assertIn("cannot establish corroboration, truth, a final answer", proposed)
+        self.assertIn(relationship_review_id, listed)
+        self.assertIn("Read-only relationship review", inspected)
+        self.assertIn("Claim-relationship brief", brief)
+        self.assertIn("The fixture is bounded public text.", brief)
+        self.assertIn("no model was called", brief)
+        self.assertEqual(1, len(session.relationship_calls))
+        self.assertEqual([], session.calls)
+        self.assertIn("unavailable through shared chat/API", AssistantApplication(session).respond(
+            f"tool research relationships {review_id}"
+        ))
 
     def test_local_research_missing_source_fails_before_provider_use(self):
         session = ResearchSession(malformed=True)
@@ -667,7 +824,10 @@ class AssistantApplicationTests(unittest.TestCase):
 
         class Adventure:
             def public_dict(self):
-                return {"mounted": True, "title": "Quiet Ember", "hidden_resource": "ammo"}
+                return {
+                    "mounted": True, "title": "Quiet Ember", "participant_count": 2,
+                    "hidden_resource": "ammo", "participant_identity": "Murr",
+                }
 
         class Roleplay:
             def public_dict(self):
@@ -724,6 +884,8 @@ class AssistantApplicationTests(unittest.TestCase):
         self.assertNotIn("static_identity", result["persona"])
         self.assertNotIn("error", result["lifecycle"])
         self.assertNotIn("hidden_resource", result["adventure"])
+        self.assertEqual(2, result["adventure"]["participant_count"])
+        self.assertNotIn("participant_identity", result["adventure"])
         self.assertEqual(session.calls, [])
 
     def test_resident_snapshot_exposes_aggregate_tool_status_for_exact_session(self):

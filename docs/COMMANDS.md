@@ -86,8 +86,14 @@ Inside Assistant Mode:
     tool search select <TF-search_id> <rank>
     tool search fetch <TF-search_id> <rank>
     tool research <TF-id>[, TF-id...]: <question>
+    tool research selected <TF-search_id> <rank>: <question>
+    tool research search <public query> <rank>: <question>
     tool research list
     tool research inspect <RR-id>
+    tool research relationships <RR-id>
+    tool research relationships list
+    tool research relationships inspect <RX-id>
+    tool research relationships brief <RX-id>
     tool research brief <RR-id>
     tool research answer <RR-id>[: <exact question>]
     tool status <TI-id>
@@ -163,15 +169,35 @@ you typed. It uses the same one-use proposal, grant, approval, preparation, and
 execution chain as the expanded `web.search` controls, then stops at a
 quarantined untrusted discovery-link artifact. Inspect it with `tool search
 artifact <TF-search_id>`; results are not facts and links are never fetched
-automatically.
+automatically. Selecting this trusted-local command is itself the explicit
+research intent; the query does not need special wording such as “please
+research.” It still has no effect through shared chat/API input.
 `tool search fetch <TF-search_id> <rank>` is the equally explicit trusted-local
 fast path for one link you already selected by rank from that artifact. It
 creates a fresh exact `web.fetch` request through the same one-use lifecycle,
 then stops at the quarantined fetched artifact for separate inspection.
+`tool research selected <TF-search_id> <rank>: <question>` explicitly chains
+that one selected-link fetch into the existing local, nonpublishing cited-claim
+review. It still produces only an untrusted `RR-...` review; it never returns a
+final answer or creates memory, learning, adventure, or canonical state.
+`tool research search <public query> <rank>: <question>` is the equivalent
+trusted-local convenience path when the user explicitly types both the query
+and discovery rank. It runs the same public search, exact selected-link fetch,
+and nonpublishing claim-review steps. It never automatically selects a result;
+the returned review remains untrusted and noncanonical.
 Each generation also creates a bounded session-local `RR-...` review record.
 `tool research list` and `tool research inspect <RR-id>` reopen only the cited
 claim proposals and public source labels; reviews are not approvals and vanish
 on session eviction or restart.
+`tool research relationships <RR-id>` may explicitly send only that existing
+claim review's bounded metadata to the separate local relationship route. It
+creates an untrusted session-local `RX-...` record; `tool research relationships
+list` and `tool research relationships inspect <RX-id>` reopen it. Relationship
+labels are neither corroboration nor verification and cannot create an answer,
+memory, learning record, adventure event, or canonical state.
+`tool research relationships brief <RX-id>` is a deterministic convenience
+presentation that joins that record back to its still-live claim review. It
+calls no model and cannot recover an evicted `RR-...` review.
 `tool research brief <RR-id>` deterministically presents reviewed claims with
 their public citations, still labeled source-backed but unverified. It is not a
 new model response or verified final answer.
@@ -622,6 +648,12 @@ Prepare or inspect isolated CYOA workspace metadata with exact Core commands:
     adventure knowledge
     adventure knowledge set <character> <knows|believes|uncertain>: <fact>
     adventure correct knowledge <AE-######> <character> <knows|believes|uncertain>: <fact>
+    adventure participants
+    adventure participant inspect <participant-id>
+    adventure participant action generate <participant-id> <trigger>: <completed user-turn text>
+    adventure participant actions
+    adventure participant action generation status
+    adventure participant action record <TP-###>
     adventure resources
     adventure resource <resource-id> <operation>[: <value>]
     adventure correct resource <AE-######> <resource-id> <operation>[: <value>]
@@ -629,16 +661,24 @@ Prepare or inspect isolated CYOA workspace metadata with exact Core commands:
     adventure turn status
     adventure turn generate <completed user-turn text>
     adventure turn generate transcript
+    adventure turn generate all <completed user-turn text>
+    adventure turn generate all transcript
     adventure turn generation status
     adventure turn candidates
+    adventure turn review
     adventure turn mutations generate <completed user-turn text>
     adventure turn mutations generate transcript
     adventure turn mutation generation status
     adventure turn mutations
+    adventure turn resources generate <completed user-turn text>
+    adventure turn resources generate transcript
+    adventure turn resource generation status
+    adventure turn resources
     adventure turn inspect
     adventure turn remove <staged-event-number>
     adventure turn stage candidate <TC-###>
     adventure turn stage mutation candidate <TM-###>
+    adventure turn stage resource candidate <TR-###>
     adventure turn stage <event-type>: <summary>
     adventure turn stage state <key>: <value>
     adventure turn stage relationship <character> <dimension>: <value>
@@ -724,6 +764,14 @@ stage a candidate, or write an event. Any incomplete or non-adjacent pair fails
 closed. `adventure turn generate <completed user-turn text>` remains the direct
 manual source path; `adventure turn generation status` reports bounded task outcome
 and transcript record references when that explicit source path was used.
+`adventure turn generate all` is the explicit paired convenience path: it runs the
+ordinary and typed candidate tasks separately against the same bounded completed
+turn, then displays their separate inboxes through `adventure turn review`. It
+never merges their authority. If either request fails, both replacement inboxes
+are cleared while unrelated manual staged drafts remain untouched. Before and
+after each provider-latent generation, Core compares the mounted snapshot with
+the durable event-log count; a cross-session story write rejects the candidates
+until the user explicitly refreshes the adventure.
 `adventure checkpoint <label>` creates a named immutable reference to the current
 authoritative event-log prefix; `adventure checkpoints` lists those references; and
 `adventure checkpoint inspect <checkpoint-id|label>` recomputes the verified prefix's
@@ -755,6 +803,29 @@ and uncertainty; prompt context uses a separate deterministic bounded selection.
 `adventure knowledge set Vespera believes: the hatch is trapped`. A belief or
 uncertainty is not automatically objective world truth; Core never derives it
 from narration or a provider response.
+`adventure participants` lists the workspace's declared adventure-local roster.
+`adventure participant inspect <participant-id>` renders only that participant's
+bounded event-backed perspective from the mounted adventure projections. A
+participant is not an autonomous agent or a full assistant-memory instance:
+persona and participant IDs are context labels, never permissions, and these
+read-only controls cannot call a provider, schedule action, or create memories.
+`adventure participant action generate <participant-id> <trigger>: <completed
+user-turn text>` is an explicit, model-backed request for untrusted `TP-###`
+action candidates for one roster participant. It requires an active staged
+adventure turn plus that participant's declared, eligible policy. `adventure
+participant actions` reopens only the session-local review output, while
+`adventure participant action generation status` reports bounded completed,
+failed, or stale status without provider output. A candidate is not an action:
+it cannot stage an event, create a transcript/memory, or run autonomously, and
+there is no action-performance command in this slice. `adventure participant
+action record <TP-###>` is the one explicit presentation exception: it copies a
+currently reviewed candidate once into the optional adventure transcript as
+noncanonical narrator text. It does not create an adventure event, change
+state, write memory, establish initiative history, or perform a game-world
+action. For the current loaded session only, a recorded participant transcript
+counts toward that participant's declared cooldown and per-turn maximum; merely
+generating or reviewing a candidate does not. These pacing counters reset after
+an adventure remount or application restart.
 `adventure turn` provides an explicit staged-event transaction for future
 generated adventure turns. `adventure turn stage` keeps one ordinary validated
 event draft in session memory only; the `state`, `relationship`, `knowledge`, and `resource`
@@ -769,6 +840,23 @@ candidate batch for the loaded workspace. Candidates become stale after any auth
 story write. `adventure turn stage candidate <TC-###>` requires an active transaction and
 explicitly stages just that validated ordinary candidate; repeating the same candidate is a
 no-op. Neither command creates candidates, calls a model, or writes an event.
+`adventure turn review` is a read-only convenience view that renders the ordinary
+`TC-###` and typed `TM-###` inboxes together after their separate explicit generation
+requests. It does not generate, select, stage, commit, or make the channels share authority;
+each remains independently stale-checked and must be staged explicitly.
+`adventure turn resources generate` is a third, separate model task for the
+first deliberately narrow generated-resource route. It can propose only `set`
+operations on declared **public enum** resources and only one of each resource's
+finite catalog values. It creates a distinct `TR-###` review inbox; inspect it
+with `adventure turn resources` (or the combined read-only `adventure turn
+review`) and explicitly stage one with `adventure turn stage resource candidate
+<TR-###>`. The full immutable catalog plus current and staged state are still
+revalidated at staging. Hidden IDs/current values, non-enum resources, numeric
+or inventory operations, and automatic staging remain unavailable.
+Like the ordinary and typed routes, `adventure turn resources generate transcript`
+accepts only the latest explicitly recorded adjacent `user` then `narrator`
+pair as bounded untrusted source input; it does not make that transcript
+authoritative.
 `adventure turn mutations generate` runs a separate, explicit model task that may
 propose only typed `state_set`, `relationship_set`, `knowledge_set`, or
 `resource_change` mutations. Its `TM-###` inbox is distinct from ordinary `TC-###`
@@ -777,6 +865,14 @@ candidate <TM-###>` still requires an active staged turn. A selected resource pr
 must additionally validate against the loaded adventure's immutable resource catalog
 and current/staged resource state. No generated candidate is automatically staged or
 persisted.
+When the selected local route implements Core-owned structured output, ordinary
+and typed generation receive their separate portable structural JSON Schemas as
+conformance guidance. Core still independently validates every candidate's
+closed fields, bounds, vocabulary, and version, and a failed structured request
+never falls back to an unconstrained second model call. The current portable
+typed schema admits only text-valued state, relationship, and knowledge changes;
+it rejects generated `resource_change` candidates until a catalog-shaped resource
+schema has its own validation and smoke-test gate.
 `adventure turn remove <staged-event-number>` discards exactly one inspected
 draft while retaining the rest of the session-local batch. It is not a canonical
 event deletion; no stored history exists until the remaining batch is committed.
@@ -784,7 +880,8 @@ event deletion; no stored history exists until the remaining batch is committed.
 The direct state, relationship, knowledge, and resource commands remain documented
 immediate-write alternatives.
 `adventure` is a reserved Core command namespace. Exact documented forms run as
-shown; malformed or unknown `adventure ...` input returns deterministic Core
+shown; malformed or unknown `adventure ...` input, including a pasted leading
+`/` or `\\`, returns deterministic Core
 guidance and never falls through to model generation, memory proposals, chat
 history changes, or adventure writes.
 `python starfur.py adventure-eval` runs only checked-in, deterministic adventure

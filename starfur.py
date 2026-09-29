@@ -369,6 +369,13 @@ def main():
     orchestration_eval_parser.add_argument("--run-id", help="Optional reproducible benchmark run identifier")
     orchestration_eval_parser.add_argument("--git-commit", help="Optional source commit recorded with this benchmark run")
     orchestration_eval_parser.add_argument("--hardware-profile", help="Optional non-sensitive hardware profile label")
+    resource_eval_parser = subparsers.add_parser(
+        "adventure-resource-eval", help="Run deterministic generated-resource-candidate fixtures",
+    )
+    resource_eval_parser.add_argument("--record-ledger", metavar="PATH", help="Explicitly append this fixture result to a local JSONL experiment ledger")
+    resource_eval_parser.add_argument("--run-id", help="Optional reproducible benchmark run identifier")
+    resource_eval_parser.add_argument("--git-commit", help="Optional source commit recorded with this benchmark run")
+    resource_eval_parser.add_argument("--hardware-profile", help="Optional non-sensitive hardware profile label")
     annotation_eval_parser = subparsers.add_parser(
         "annotation-eval-record",
         help="Record one explicit, privacy-bounded external-document annotation observation",
@@ -713,6 +720,29 @@ def main():
                 workload="adventure-turn-orchestration-fixture",
                 model_profile=BenchmarkModelProfile("internal", "fixture"),
                 architecture_fingerprint="adventure-turn-orchestration-v1",
+                git_commit=args.git_commit,
+                run_id=args.run_id,
+                hardware={"profile": args.hardware_profile} if args.hardware_profile else {},
+            )
+            record = build_benchmark_result_record(manifest, result, run_id=args.run_id)
+            append_benchmark_result(args.record_ledger, record)
+            print(f"\nRecorded benchmark result: {record['record_id']} -> {args.record_ledger}")
+
+    elif args.command == "adventure-resource-eval":
+        from pipeline.adventure_turn_resource_eval import (
+            format_adventure_turn_resource_result,
+            run_adventure_turn_resource_benchmark,
+        )
+        result = run_adventure_turn_resource_benchmark()
+        print(format_adventure_turn_resource_result(result))
+        if args.record_ledger:
+            from pipeline.benchmark import BenchmarkModelProfile, BenchmarkRunManifest
+            from pipeline.experiment_ledger import append_benchmark_result, build_benchmark_result_record
+            manifest = BenchmarkRunManifest(
+                benchmark_id="adventure-turn-resource-fixture",
+                workload="adventure-turn-resource-fixture",
+                model_profile=BenchmarkModelProfile("internal", "fixture"),
+                architecture_fingerprint="adventure-turn-resource-v1",
                 git_commit=args.git_commit,
                 run_id=args.run_id,
                 hardware={"profile": args.hardware_profile} if args.hardware_profile else {},

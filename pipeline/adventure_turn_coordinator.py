@@ -10,6 +10,7 @@ check before a user may select a candidate.
 from __future__ import annotations
 
 from pipeline.adventure_session import AdventureSessionState
+from pipeline.adventure_participant import render_declared_participant_prompt_context
 from pipeline.adventure_turn_context import AdventureTurnContextView
 from pipeline.adventure_turn_generation import AdventureTurnGenerationRequest, AdventureTurnGenerationResult
 from pipeline.adventure_turn_provider import (
@@ -49,8 +50,14 @@ class AdventureTurnCoordinator:
         """
         try:
             context = AdventureTurnContextView.from_session(session)
+            roster = session.participant_roster
+            participant_context = (
+                render_declared_participant_prompt_context(roster)
+                if roster is not None and roster.participants else ""
+            )
             request = AdventureTurnGenerationRequest.from_context_view(
                 context, user_text=user_text, narrator_text=narrator_text,
+                participant_context=participant_context,
                 source_record_ids=source_record_ids,
                 task_id=task_id, provider_name=provider_name, model_name=model_name,
             )

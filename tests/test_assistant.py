@@ -226,6 +226,25 @@ class AssistantTests(unittest.TestCase):
         session.respond("hello")
         self.assertEqual(session.trace.render(), "")
 
+    def test_required_factual_research_returns_actionable_nonexecuting_handoff(self):
+        calls = []
+        config = type("Config", (), {
+            "chat_model": "test", "domain": "personal", "max_session_messages": 4,
+            "max_memories": 0, "memory_policy": "off",
+        })()
+        session = AssistantSession(
+            config, "Persona", chat=lambda **kwargs: calls.append(kwargs) or {"message": {"content": "unused"}},
+            memory_loader=lambda **kwargs: [],
+        )
+
+        result = session.respond("What is the current price of an RTX 4070?")
+
+        self.assertIn("will not invent an answer", result)
+        self.assertIn("tool search <public query>", result)
+        self.assertIn("tool research", result)
+        self.assertEqual([], calls)
+        self.assertEqual([], session.messages)
+
     def test_engine_policy_is_separate_from_persona_and_grounding_is_explicit(self):
         config = type("Config", (), {"chat_model": "test", "domain": "personal", "max_session_messages": 4, "max_memories": 1, "memory_policy": "off", "debug_level": "verbose"})()
         session = AssistantSession(

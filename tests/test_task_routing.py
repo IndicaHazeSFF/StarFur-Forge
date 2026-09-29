@@ -144,6 +144,7 @@ class TaskRoutingTests(unittest.TestCase):
     def test_task_capability_is_core_owned_and_unknown_tasks_are_not_guessed(self):
         self.assertEqual("chat", task_required_capability("adventure_turn_generation"))
         self.assertEqual("chat", task_required_capability("research_claim_generation"))
+        self.assertEqual("chat", task_required_capability("research_relationship_generation"))
         self.assertEqual("vision", task_required_capability("vision"))
         self.assertEqual("image_generation", task_required_capability("image_generation"))
         with self.assertRaisesRegex(TaskRoutePlanningError, "no provider-routing capability"):

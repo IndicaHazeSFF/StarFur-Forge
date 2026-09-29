@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 class AdventureInitiativeError(ValueError):
@@ -39,6 +39,20 @@ class AdventureParticipantMemoryPolicy:
         if not isinstance(self.retain_salient_events, bool):
             raise AdventureInitiativeError("retain_salient_events must be boolean")
 
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "max_context_facts": self.max_context_facts,
+            "max_knowledge_facts": self.max_knowledge_facts,
+            "retain_salient_events": self.retain_salient_events,
+        }
+
+    @classmethod
+    def from_dict(cls, value: object) -> "AdventureParticipantMemoryPolicy":
+        fields = {"max_context_facts", "max_knowledge_facts", "retain_salient_events"}
+        if not isinstance(value, dict) or set(value) != fields:
+            raise AdventureInitiativeError("participant memory policy is invalid")
+        return cls(**value)
+
 
 @dataclass(frozen=True)
 class AdventureParticipant:
@@ -49,6 +63,7 @@ class AdventureParticipant:
     kind: str
     memory_namespace: str
     memory_policy: AdventureParticipantMemoryPolicy = AdventureParticipantMemoryPolicy()
+    initiative_policy: "PersonaInitiativePolicy" = field(default_factory=lambda: PersonaInitiativePolicy())
 
     def __post_init__(self) -> None:
         participant_id = _bounded_text(self.participant_id, field="participant_id", maximum=96).casefold()
@@ -61,6 +76,8 @@ class AdventureParticipant:
             raise AdventureInitiativeError("participant memory must be adventure-scoped")
         if not isinstance(self.memory_policy, AdventureParticipantMemoryPolicy):
             raise TypeError("memory_policy must be AdventureParticipantMemoryPolicy")
+        if not isinstance(self.initiative_policy, PersonaInitiativePolicy):
+            raise TypeError("initiative_policy must be PersonaInitiativePolicy")
         object.__setattr__(self, "participant_id", participant_id)
         object.__setattr__(self, "display_name", display_name)
         object.__setattr__(self, "kind", kind)
@@ -97,6 +114,52 @@ class AdventureParticipantRoster:
                 return participant
         raise AdventureInitiativeError("adventure participant was not found")
 
+    def to_dict(self) -> dict[str, object]:
+        """Serialize package declarations, never their Core-derived namespaces."""
+        return {
+            "schema_version": 2,
+            "participants": [
+                {
+                    "id": participant.participant_id,
+                    "display_name": participant.display_name,
+                    "kind": participant.kind,
+                    "memory_policy": participant.memory_policy.to_dict(),
+                    "initiative_policy": participant.initiative_policy.to_dict(),
+                }
+                for participant in self.participants
+            ],
+        }
+
+    @classmethod
+    def from_dict(cls, adventure_id: object, value: object) -> "AdventureParticipantRoster":
+        """Validate package data and derive the only accepted memory namespaces."""
+        fields = {"schema_version", "participants"}
+        if not isinstance(value, dict) or set(value) != fields or value["schema_version"] not in {1, 2}:
+            raise AdventureInitiativeError("participant roster is invalid")
+        schema_version = value["schema_version"]
+        entries = value["participants"]
+        if not isinstance(entries, list) or len(entries) > 32:
+            raise AdventureInitiativeError("participant roster entries are invalid")
+        normalized_adventure_id = _bounded_text(
+            adventure_id, field="adventure_id", maximum=96,
+        ).casefold()
+        participants = []
+        for entry in entries:
+            entry_fields = {"id", "display_name", "kind", "memory_policy"}
+            if schema_version == 2:
+                entry_fields.add("initiative_policy")
+            if not isinstance(entry, dict) or set(entry) != entry_fields:
+                raise AdventureInitiativeError("participant roster entry is invalid")
+            participant_id = _bounded_text(entry["id"], field="participant_id", maximum=96).casefold()
+            participants.append(AdventureParticipant(
+                participant_id, entry["display_name"], entry["kind"],
+                f"adventure:{normalized_adventure_id}:participant:{participant_id}",
+                AdventureParticipantMemoryPolicy.from_dict(entry["memory_policy"]),
+                PersonaInitiativePolicy.from_dict(entry["initiative_policy"])
+                if schema_version == 2 else PersonaInitiativePolicy(),
+            ))
+        return cls(normalized_adventure_id, tuple(participants))
+
 
 @dataclass(frozen=True)
 class PersonaInitiativePolicy:
@@ -122,6 +185,37 @@ class PersonaInitiativePolicy:
             raise AdventureInitiativeError("cooldown_turns must be between 0 and 100")
         if not isinstance(self.max_actions_per_turn, int) or not 1 <= self.max_actions_per_turn <= 4:
             raise AdventureInitiativeError("max_actions_per_turn must be between 1 and 4")
+
+    def to_dict(self) -> dict[str, object]:
+        """Serialize policy declarations only; not dynamic initiative history."""
+        return {
+            "enabled": self.enabled,
+            "allowed_triggers": list(self.allowed_triggers),
+            "allowed_actions": list(self.allowed_actions),
+            "cooldown_turns": self.cooldown_turns,
+            "max_actions_per_turn": self.max_actions_per_turn,
+            "requires_confirmation": self.requires_confirmation,
+        }
+
+    @classmethod
+    def from_dict(cls, value: object) -> "PersonaInitiativePolicy":
+        """Strictly parse package declarations without accepting runtime state."""
+        fields = {
+            "enabled", "allowed_triggers", "allowed_actions", "cooldown_turns",
+            "max_actions_per_turn", "requires_confirmation",
+        }
+        if not isinstance(value, dict) or set(value) != fields:
+            raise AdventureInitiativeError("initiative policy is invalid")
+        triggers = value["allowed_triggers"]
+        actions = value["allowed_actions"]
+        if not isinstance(triggers, list) or not isinstance(actions, list):
+            raise AdventureInitiativeError("initiative policy is invalid")
+        return cls(
+            enabled=value["enabled"], allowed_triggers=tuple(triggers),
+            allowed_actions=tuple(actions), cooldown_turns=value["cooldown_turns"],
+            max_actions_per_turn=value["max_actions_per_turn"],
+            requires_confirmation=value["requires_confirmation"],
+        )
 
 
 @dataclass(frozen=True)

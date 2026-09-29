@@ -8,6 +8,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from pipeline.adventure_events import AdventureEvent
+from pipeline.adventure_initiative import AdventureParticipant, AdventureParticipantRoster
 from pipeline.adventure_registry import AdventureRegistry
 from pipeline.adventure_relationship import AdventureRelationshipFact
 from pipeline.adventure_session import AdventureSessionState
@@ -34,9 +35,16 @@ class AdventureTurnCoordinatorTests(unittest.TestCase):
         record = self._record()
         event = AdventureEvent(1, "AE-000001", "discovery", "The crew finds a brass key.", None, "2026-08-26T00:00:00+00:00")
         relationship = AdventureRelationshipFact("Vespera", "trust", "49/100", "AE-000002")
+        roster = AdventureParticipantRoster(record.adventure_id, (
+            AdventureParticipant(
+                "murr", "Murr", "persona",
+                f"adventure:{record.adventure_id}:participant:murr",
+            ),
+        ))
         return AdventureSessionState(
             record=record, event_count=2, context_events=(event,),
             relationship_facts=(relationship,), context_relationship_facts=(relationship,),
+            participant_roster=roster,
         )
 
     def test_coordinator_captures_typed_safe_context_and_returns_only_noncanonical_candidates(self):
@@ -58,6 +66,8 @@ class AdventureTurnCoordinatorTests(unittest.TestCase):
         self.assertIn("The crew finds a brass key", prompt)
         self.assertIn("qualitative internal state", prompt)
         self.assertNotIn("49/100", prompt)
+        self.assertIn("murr (persona): Murr", provider.requests[0].participant_context)
+        self.assertNotIn("participant:murr", provider.requests[0].participant_context)
         # The coordinator holds no event-log or inbox reference, so its result
         # is necessarily noncanonical until a later explicit selection/stage.
         self.assertFalse(hasattr(result, "event_id"))

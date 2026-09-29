@@ -7,10 +7,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pipeline.factual_research_policy import (
     FactualResearchContext,
     classify_factual_research_request,
+    explicit_local_research_tool_decision,
 )
 
 
 class FactualResearchPolicyTests(unittest.TestCase):
+    def test_explicit_local_tool_signal_does_not_depend_on_query_wording(self):
+        decision = explicit_local_research_tool_decision()
+        self.assertEqual("research_required", decision.disposition)
+        self.assertEqual("explicit_research_request", decision.reason)
+
     def test_explicit_research_request_requires_research(self):
         for text in (
             "Please research which answer is correct.",

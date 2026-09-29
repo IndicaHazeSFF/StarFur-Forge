@@ -7,6 +7,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pipeline.adventure_registry import AdventureNotFoundError, AdventureRegistry, AdventureRegistryError
+from pipeline.adventure_initiative import AdventureParticipant, AdventureParticipantRoster
 from pipeline.adventure_resources import AdventureResourceCatalog, AdventureResourceDefinition
 
 
@@ -81,6 +82,38 @@ class AdventureRegistryTests(unittest.TestCase):
             ))
             with self.assertRaisesRegex(AdventureRegistryError, "event log exists"):
                 registry.configure_resource_catalog(record, catalog)
+
+    def test_participant_roster_is_immutable_manifest_metadata_before_event_log_exists(self):
+        with tempfile.TemporaryDirectory() as directory:
+            registry = self._registry(directory)
+            record = registry.create("Quiet Ember")
+            roster = AdventureParticipantRoster(record.adventure_id, (
+                AdventureParticipant(
+                    "murr", "Murr", "persona",
+                    f"adventure:{record.adventure_id}:participant:murr",
+                ),
+            ))
+            self.assertEqual((), registry.participant_roster(record).participants)
+            self.assertEqual(roster, registry.configure_participant_roster(record, roster))
+            self.assertEqual(roster, registry.participant_roster(record))
+            self.assertEqual(roster, registry.configure_participant_roster(record, roster))
+            different = AdventureParticipantRoster(record.adventure_id, (
+                AdventureParticipant(
+                    "rook", "Rook", "npc",
+                    f"adventure:{record.adventure_id}:participant:rook",
+                ),
+            ))
+            with self.assertRaisesRegex(AdventureRegistryError, "already configured"):
+                registry.configure_participant_roster(record, different)
+
+    def test_participant_roster_cannot_be_configured_after_event_log_exists(self):
+        with tempfile.TemporaryDirectory() as directory:
+            registry = self._registry(directory)
+            record = registry.create("Quiet Ember")
+            (registry.workspace_path(record.adventure_id) / "events.jsonl").write_text("", encoding="utf-8")
+            roster = AdventureParticipantRoster(record.adventure_id, ())
+            with self.assertRaisesRegex(AdventureRegistryError, "event log exists"):
+                registry.configure_participant_roster(record, roster)
 
 
 if __name__ == "__main__":

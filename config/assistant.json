@@ -44,8 +44,10 @@
       "max_output_tokens": 1024
     },
       "research_claim_generation": {"model": "qwen3:8b", "max_output_tokens": 2048},
+      "research_relationship_generation": {"model": "qwen3:8b", "max_output_tokens": 1024},
       "adventure_turn_generation": {"max_output_tokens": 1024},
-      "adventure_turn_mutation_generation": {"max_output_tokens": 512}
+      "adventure_turn_mutation_generation": {"max_output_tokens": 512},
+      "adventure_turn_resource_generation": {"max_output_tokens": 512}
   },
   "policy_path": "config/assistant_policy.md"
 }
