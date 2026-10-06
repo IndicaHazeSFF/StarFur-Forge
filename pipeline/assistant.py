@@ -252,8 +252,13 @@ def load_policy(path=DEFAULT_POLICY_PATH):
     return text
 
 
-class GenerationInterrupted(Exception):
-    """Internal control flow for a user-interrupted model generation."""
+class GenerationInterrupted(BaseException):
+    """Internal control flow for a user-interrupted model generation.
+
+    Like ``KeyboardInterrupt``, this intentionally bypasses ordinary provider
+    and candidate-validation ``except Exception`` handlers.  Those handlers
+    must not relabel an explicit user interrupt as a provider/schema failure.
+    """
 
 
 def _has_explicit_user_intent(normalized_text):
@@ -274,6 +279,10 @@ def _is_speculative_non_memory_observation(normalized_text):
         not _has_explicit_user_intent(normalized_text)
         and any(marker in normalized_text for marker in future_markers)
     )
+
+
+class ProviderCapacityBusyError(RuntimeError):
+    """A transient local capacity denial, distinct from provider failure."""
 
 
 class AssistantSession:
@@ -405,6 +414,9 @@ class AssistantSession:
         self._current_context_diagnostics = None
         self._current_proposal_diagnostics = {"ran": False, "outcome": "skipped"}
         self._current_task_routes = []
+        # Explicit, session-local user control. This is not process/window
+        # detection and never survives restart or configures the provider.
+        self.focus_mode_enabled = False
         self._generation_started_at = None
         self._first_token_seconds = None
         self._turn_started_at = None
@@ -713,6 +725,7 @@ class AssistantSession:
                 self._provider_route_registry(),
             ),
             self.chat_provider_registry,
+            workload_gate=getattr(self, "_provider_workload_gate", None),
         )
 
     def _task_route(self, task_id, *, model=None):
@@ -725,7 +738,25 @@ class AssistantSession:
         )
         if decision.selected is None:
             raise RuntimeError(f"Task profile {task_id!r} has no configured provider route.")
+        profile = decision.selected.profile
+        if self.focus_mode_defers_profile(profile):
+            raise RuntimeError(
+                f"Task profile {task_id!r} is deferred by Focus Mode "
+                f"({profile.resource_profile} workload)."
+            )
         return executor, decision
+
+    def focus_mode_defers_profile(self, profile):
+        """Return whether this session's manual gate defers one routed profile.
+
+        The helper is intentionally provider-free and accepts only the bounded
+        workload label already supplied by Core routing. It does not probe,
+        monitor, reserve, or modify any provider state.
+        """
+        return bool(
+            self.focus_mode_enabled
+            and getattr(profile, "resource_profile", None) in {"balanced", "background"}
+        )
 
     def _task_profile(self, task_id, *, model=None):
         """Compatibility accessor for the selected profile of one route plan."""
@@ -739,7 +770,11 @@ class AssistantSession:
         active_status = providers.get(self._active_provider_id)
         planner = TaskRoutePlanner(profiles, providers)
         task_ids = tuple(sorted(profiles.profiles)) or (TASK_ASSISTANT_CHAT,)
-        lines = [f"Task routing status: provider {self._active_provider_id} ({active_status.status})"]
+        focus_text = "on" if self.focus_mode_enabled else "off"
+        lines = [
+            f"Task routing status: provider {self._active_provider_id} ({active_status.status})",
+            f"Focus Mode: {focus_text} (balanced/background work {'deferred' if self.focus_mode_enabled else 'eligible'}).",
+        ]
         for task_id in task_ids:
             try:
                 decision = planner.plan(
@@ -763,12 +798,30 @@ class AssistantSession:
                 budgets.append(f"context={public_candidate['context_size']}")
             if public_candidate.get("max_output_tokens") is not None:
                 budgets.append(f"output={public_candidate['max_output_tokens']}")
+            if public_candidate.get("resource_profile") is not None:
+                budgets.append(f"workload={public_candidate['resource_profile']}")
+            if public_candidate.get("model_keep_alive_seconds") is not None:
+                budgets.append(f"keep_alive={public_candidate['model_keep_alive_seconds']}s")
+            if self.focus_mode_enabled and public_candidate.get("resource_profile") in {"balanced", "background"}:
+                budgets.append("focus=deferred")
             budget_text = f" ({', '.join(budgets)})" if budgets else ""
             lines.append(
                 f"{task_id}: {selected.provider_id} / {selected.profile.model} "
                 f"[{selected.provider_status or 'unknown'}]{budget_text}{marker}"
             )
         return "\n".join(lines) + "\nRead-only route preview; no provider was probed or called."
+
+    def focus_mode_status(self):
+        """Render the session-local foreground-work gate without provider I/O."""
+        if self.focus_mode_enabled:
+            return "Focus Mode: on. Balanced and background provider tasks are deferred before provider use."
+        return "Focus Mode: off. Configured task profiles remain eligible for normal routing."
+
+    def focus_mode_set(self, enabled):
+        if not isinstance(enabled, bool):
+            raise TypeError("focus mode state must be boolean")
+        self.focus_mode_enabled = enabled
+        return self.focus_mode_status()
 
     def routing_probe(self):
         """Explicitly probe the active provider without generating text."""
@@ -819,6 +872,8 @@ class AssistantSession:
                 "outcome": error.reason,
             })
             self.provider_lifecycle.fail(error)
+            if error.reason == "provider_concurrency_busy":
+                raise ProviderCapacityBusyError(str(error)) from error
             raise RuntimeError(str(error)) from error
         except Exception as error:
             self.provider_lifecycle.fail(error)
@@ -837,6 +892,17 @@ class AssistantSession:
             self._set_latest_task_route_outcome("completed")
             self.provider_lifecycle.finish()
             return execution.response
+        except KeyboardInterrupt as error:
+            self._current_task_routes.append({
+                "requested_task_id": decision.requested_task_id,
+                "selected_task_id": selected.task_id,
+                "provider": selected.provider_id,
+                "model": selected.profile.model,
+                "fallback_used": decision.selected_index not in (None, 0),
+                "outcome": "provider_stream_cancelled",
+            })
+            self.provider_lifecycle.fail("Generation interrupted")
+            raise GenerationInterrupted() from error
         except RoutedTaskExecutionError as error:
             self._current_task_routes.append({
                 "requested_task_id": decision.requested_task_id,
@@ -847,6 +913,8 @@ class AssistantSession:
                 "outcome": error.reason,
             })
             self.provider_lifecycle.fail(error)
+            if error.reason == "provider_concurrency_busy":
+                raise ProviderCapacityBusyError(str(error)) from error
             raise RuntimeError(str(error)) from error
         except Exception as error:
             self.provider_lifecycle.fail(error)
@@ -967,6 +1035,7 @@ class AssistantSession:
             response = self._provider_complete(messages, model=model, task_id=task_id)
             self.provider_lifecycle.finish()
             return normalize_chat_completion(response).content
+        response = None
         try:
             response = self._provider_complete(messages, model=model, stream=True, task_id=task_id)
             if isinstance(response, (dict, ChatCompletion)) or not hasattr(response, "__iter__"):
@@ -997,6 +1066,10 @@ class AssistantSession:
             self._set_latest_task_route_outcome("provider_stream_failed", only_if_submitted=True)
             self.provider_lifecycle.fail(error)
             raise
+        finally:
+            close = getattr(response, "close", None)
+            if callable(close):
+                close()
 
     def _context_plan(self, user_text, *, external_document_context=None):
         self.trace = RetrievalTrace(self.debug_level)
@@ -2317,9 +2390,9 @@ class AssistantSession:
         verbs = {"suggest": "suggests", "speak": "says", "observe": "observes", "decline": "declines"}
         text = f"{proposal.governed.participant.display_name} {verbs[candidate.action]}: {candidate.summary}"
         try:
-            transcript = AdventureTranscriptLog(
+            transcripts = AdventureTranscriptLog(
                 self.adventure_registry, self.adventure_session.record,
-            ).append("narrator", text)
+            ).append_many((("user", proposal.request.user_text), ("narrator", text)))
         except AdventureTranscriptError as error:
             return f"Participant-action candidate was not recorded: {error}"
         generation["recorded_candidate_ids"] = recorded | frozenset({candidate.candidate_id})
@@ -2328,7 +2401,8 @@ class AssistantSession:
             "actions_this_turn": actions_this_turn + 1,
         }
         return (
-            f"Recorded {candidate.candidate_id} as noncanonical adventure transcript {transcript.record_id}. "
+            f"Recorded {candidate.candidate_id} as noncanonical adventure transcript pair "
+            f"{transcripts[0].record_id} -> {transcripts[-1].record_id}. "
             "It did not create an adventure event or change story state."
         )
 
@@ -3905,6 +3979,12 @@ class AssistantSession:
             return self.routing_status()
         if lowered in {"routing probe", "route probe"}:
             return self.routing_probe()
+        if lowered in {"focus mode", "focus mode status"}:
+            return self.focus_mode_status()
+        if lowered == "focus mode on":
+            return self.focus_mode_set(True)
+        if lowered == "focus mode off":
+            return self.focus_mode_set(False)
         if lowered == "roleplay status":
             return self.roleplay_status()
         if lowered == "roleplay end":
@@ -4108,6 +4188,8 @@ class AssistantSession:
             )
         if lowered == "routing" or lowered.startswith("routing ") or lowered == "route" or lowered.startswith("route "):
             return "Unknown or malformed routing command. Use routing status or routing probe."
+        if lowered == "focus" or lowered.startswith("focus "):
+            return "Unknown or malformed focus command. Use focus mode on, focus mode off, or focus mode status."
         if lowered in {"model list", "list models"}:
             try:
                 return self.model_list()
@@ -4429,6 +4511,7 @@ def run_interactive(
     *,
     enable_brave_web_search=False,
     enable_tavily_web_search=False,
+    enable_cross_process_provider_gate=False,
 ):
     config = load_config(config_path)
     stream_started = {"value": False}
@@ -4438,7 +4521,10 @@ def run_interactive(
         print(text, end="", flush=True)
     # Import locally to avoid a module cycle: the application factory constructs
     # AssistantSession while this module owns the interactive presentation loop.
-    from pipeline.application import create_assistant_application
+    from pipeline.application import (
+        DEFAULT_PROVIDER_PROCESS_GATE_ROOT,
+        create_assistant_application,
+    )
     application = create_assistant_application(
         config_path,
         debug_level=debug_level,
@@ -4447,6 +4533,10 @@ def run_interactive(
         enable_native_web_tools=True,
         enable_brave_web_search=enable_brave_web_search,
         enable_tavily_web_search=enable_tavily_web_search,
+        provider_process_gate_root=(
+            DEFAULT_PROVIDER_PROCESS_GATE_ROOT
+            if enable_cross_process_provider_gate else None
+        ),
     )
     session = application.session
     output_fn("StarFur Assistant (model list/current/use, routing status/probe, tool help/list/status/preview/propose/grant/approve/prepare/execute/artifact/deny/revoke/cancel [trusted local only; sandbox execution disabled], persona list/current/use/inspect, roleplay begin/end/status, adventure list/create/inspect/load/resume/restart/status/events/checkpoints/corrections/correct/retract/state/relationships/knowledge/participants/participant-action/turn/pause/end/unload, remember/forget, memory list/search/inspect/scope, proposal list/inspect/approve/reject/approve all/scope, context stats; quit to exit)")

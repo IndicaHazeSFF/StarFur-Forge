@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Callable
 from urllib.parse import parse_qs, urlsplit
 
-from pipeline.assistant import GenerationInterrupted
+from pipeline.assistant import GenerationInterrupted, ProviderCapacityBusyError
 from pipeline.adventure_import import AdventureImportError, AdventureImportLog
 from pipeline.adventure_registry import AdventureNotFoundError, AdventureRegistry
 from pipeline.application import AssistantApplication, ConversationNotFoundError, create_assistant_application
@@ -525,7 +525,7 @@ class StarFurAPI:
         if lowered == "tool" or lowered.startswith("tool "):
             return True
         return lowered.startswith((
-            "adventure", "persona", "resident", "routing", "route ", "model ",
+            "adventure", "persona", "resident", "routing", "route ", "focus", "model ",
             "roleplay", "remember:", "remember this:", "forget:", "forget this:",
             "memory ", "proposal ",
         ))
@@ -816,6 +816,9 @@ class _Handler(BaseHTTPRequestHandler):
             except DocumentAnnotationError as error:
                 self._send_json(422, {"error": {"message": str(error), "type": "document_annotation_error"}})
                 return
+            except ProviderCapacityBusyError as error:
+                self._send_json(503, {"error": {"message": str(error), "type": "provider_capacity_busy", "code": "provider_concurrency_busy"}})
+                return
             except (ValueError, DocumentIntakeError, DocumentContextError, AdventureImportError, AdventureNotFoundError) as error:
                 self._send_json(400, {"error": {"message": str(error), "type": "invalid_request_error"}})
                 return
@@ -857,6 +860,13 @@ class _Handler(BaseHTTPRequestHandler):
                 self.wfile.flush()
             except (GenerationInterrupted, BrokenPipeError, ConnectionResetError):
                 return
+            except ProviderCapacityBusyError as error:
+                error_payload = {"error": {"message": str(error), "type": "provider_capacity_busy", "code": "provider_concurrency_busy"}}
+                try:
+                    self.wfile.write(b"data: " + _json_bytes(error_payload) + b"\n\ndata: [DONE]\n\n")
+                    self.wfile.flush()
+                except OSError:
+                    pass
             except Exception as error:
                 error_payload = {"error": {"message": str(error), "type": "server_error"}}
                 try:
@@ -872,6 +882,9 @@ class _Handler(BaseHTTPRequestHandler):
             )
         except ValueError as error:
             self._send_json(400, {"error": {"message": str(error), "type": "invalid_request_error"}})
+            return
+        except ProviderCapacityBusyError as error:
+            self._send_json(503, {"error": {"message": str(error), "type": "provider_capacity_busy", "code": "provider_concurrency_busy"}})
             return
         except Exception as error:
             self._send_json(500, {"error": {"message": str(error), "type": "server_error"}})
@@ -893,13 +906,28 @@ def create_api_session(config_path=None, *, stream=False):
     return create_api_application(config_path, stream=stream).session
 
 
-def create_api_application(config_path=None, *, stream=False):
+def create_api_application(
+    config_path=None, *, stream=False, provider_process_gate_root=None,
+):
     """Create the shared assistant application used by the local API server."""
-    return create_assistant_application(config_path, stream=stream)
+    return create_assistant_application(
+        config_path, stream=stream,
+        provider_process_gate_root=provider_process_gate_root,
+    )
 
 
-def serve(*, host="127.0.0.1", port=8000, config_path=None, api_key=None, quiet=False):
-    application = create_api_application(config_path)
+def serve(
+    *, host="127.0.0.1", port=8000, config_path=None, api_key=None,
+    quiet=False, enable_cross_process_provider_gate=False,
+):
+    from pipeline.application import DEFAULT_PROVIDER_PROCESS_GATE_ROOT
+    application = create_api_application(
+        config_path,
+        provider_process_gate_root=(
+            DEFAULT_PROVIDER_PROCESS_GATE_ROOT
+            if enable_cross_process_provider_gate else None
+        ),
+    )
     server = StarFurHTTPServer((host, port), StarFurAPI(application, api_key=api_key), quiet=quiet)
     print(f"StarFur API listening at http://{host}:{port}")
     print(f"OpenAI-compatible endpoint: http://{host}:{port}/v1")

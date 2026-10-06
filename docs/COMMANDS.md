@@ -527,13 +527,60 @@ Inspect the configured task/profile route preview without calling or probing a p
 
     routing status
 
-This shows the resolved provider/model, bounded context/output budgets, and any configured pre-request fallback for each typed task. It is descriptive only; it cannot switch models, execute a task, or alter configuration.
+This shows the resolved provider/model, bounded context/output budgets, configured workload label, optional model-residency request, and any configured pre-request fallback for each typed task. It is descriptive only; it cannot switch models, execute a task, alter configuration, or prove that a model was loaded or unloaded.
 
 Run one explicit, non-generating availability check for the already configured provider:
 
     routing probe
 
 This calls only the provider's supported model-list health method and retains a bounded session-local status, timestamp, optional model count, and bounded error message. It never generates text, changes the selected model, reads or writes memory, or exposes a model-list payload. Run `routing status` afterward to see the updated route availability.
+
+Temporarily defer balanced/background provider work while you game or need the
+computer responsive:
+
+    focus mode on
+    focus mode status
+    focus mode off
+
+Focus Mode is session-local and manual. It performs no process/window monitoring,
+does not change priority or unload a model, and leaves deliberately requested
+interactive chat available. It defers configured balanced/background work before
+the provider is called. `routing status` marks each configured deferred task as
+`focus=deferred`. The authenticated read-only apartment can show only the
+selected session's on/off state; it never changes Focus Mode or exposes route
+details, task names, process/window information, or resource enforcement.
+
+Within one StarFur application process, routed provider calls share a
+capacity-one in-memory gate per provider. A second concurrent conversation is
+deferred before it reaches that provider; it is not queued and the user can try
+again after the active call finishes.
+Live external document annotation uses the same gate before its first model
+request, so a foreground chat and a multi-chunk annotation cannot concurrently
+submit work to the same application-local provider.
+The bounded latest-route diagnostic may label a rejected turn
+`provider_concurrency_busy`; it exposes no queue position, lease, host state,
+or request content.
+
+`scripts/sf_chat.sh` reports that transient condition as `StarFur provider is
+busy; retry after the active request finishes.` and exits with status `75`.
+Other local API failures remain nonzero and include the bounded API message.
+
+For an explicit local cross-process trial, launch every cooperating StarFur
+process with the same opt-in flag:
+
+    python starfur.py assistant --enable-cross-process-provider-gate
+    python starfur.py serve --host 127.0.0.1 --port 8001 --api-key starfur-local --enable-cross-process-provider-gate
+
+The flag adds one nonblocking OS advisory lease per exact provider using a
+fixed runtime directory under this checkout. Streamed requests retain capacity
+until the response is exhausted or closed. A crash cannot leave ownership in
+the lock-file contents; the OS releases the handle. This coordinates only
+cooperating processes in the same checkout and OS lock domain. It does not
+promise Windows-native/WSL lock interoperability, queueing, fairness, provider
+termination, GPU throttling, priority control, or host-level enforcement. The
+live WSL contention/recovery smoke has passed. The feature remains opt-in while
+native-Windows behavior and mixed Windows/WSL non-interoperability are still
+explicitly outside the validated boundary.
 
 Run the checked-in provider-free route portability contract:
 
@@ -544,6 +591,15 @@ This evaluates declarative profiles and fixture provider-status records only. It
 never constructs, probes, or calls a provider; accesses no conversation,
 adventure, memory, or runtime data. It writes an aggregate-only experiment
 ledger record only when `--record-ledger` is supplied explicitly.
+
+Run the checked-in provider-resource admission contract:
+
+    python starfur.py provider-resource-eval
+    python starfur.py provider-resource-eval --record-ledger data/experiment_ledger.jsonl --run-id provider-resource-baseline-001
+
+This runs four fixed provider-free policy fixtures. It records only closed
+admission/defer statuses and reason labels when explicitly ledgered; it does not
+probe a host or provider, reserve resources, route work, or prove enforcement.
 ## Assistant Proposal Provenance
 
 Automatic assistant-memory proposals are derived from user observations only.
@@ -572,9 +628,13 @@ An explicit correction is classified as the corrected fact's underlying type and
 ## Interrupting Generation
 
 Press Ctrl+C during a streamed response to stop that generation and return to the
-assistant prompt. The partial response is not saved to conversation history and does
-not produce a memory proposal. Press Ctrl+C while waiting at the input prompt to exit
-cleanly.
+assistant prompt. Ollama-backed JSON-schema tasks also use a streamed transport
+internally, so participant/adventure/research candidate generation can be interrupted
+without publishing a partial candidate. The partial response is not saved to
+conversation history and does not produce a memory proposal, transcript, or event.
+Closing the response requests cancellation but is not proof that the provider stopped;
+check system/provider activity if resource use continues. Press Ctrl+C while waiting at
+the input prompt to exit cleanly.
 
 ## Assistant Memory Review
 
@@ -819,13 +879,16 @@ failed, or stale status without provider output. A candidate is not an action:
 it cannot stage an event, create a transcript/memory, or run autonomously, and
 there is no action-performance command in this slice. `adventure participant
 action record <TP-###>` is the one explicit presentation exception: it copies a
-currently reviewed candidate once into the optional adventure transcript as
-noncanonical narrator text. It does not create an adventure event, change
-state, write memory, establish initiative history, or perform a game-world
-action. For the current loaded session only, a recorded participant transcript
-counts toward that participant's declared cooldown and per-turn maximum; merely
-generating or reviewing a candidate does not. These pacing counters reset after
-an adventure remount or application restart.
+currently reviewed candidate once together with its captured player-turn text
+into the optional adventure transcript as one atomic noncanonical `user` then
+`narrator` pair. It does not create an adventure event, change state, write
+memory, establish initiative history, or perform a game-world action. That
+explicit pair can later be supplied to the existing transcript-based candidate
+review flow, which remains separately model-backed and review-only. For the
+current loaded session only, a recorded participant transcript counts toward
+that participant's declared cooldown and per-turn maximum; merely generating or
+reviewing a candidate does not. These pacing counters reset after an adventure
+remount or application restart.
 `adventure turn` provides an explicit staged-event transaction for future
 generated adventure turns. `adventure turn stage` keeps one ordinary validated
 event draft in session memory only; the `state`, `relationship`, `knowledge`, and `resource`
@@ -1314,9 +1377,20 @@ local model again. This is fail-closed: a disabled session rejects injected
 chat adapters and provider registries instead of allowing dependency wiring to
 silently restore generation.
 
-`config/assistant.json` may declare validated `task_profiles` for workloads such as `assistant_chat`, `assistant_proposal`, `adventure_turn_generation`, `document_annotation`, `coding`, `vision`, and `image_generation`. A profile may declare a provider label, model, bounded generation settings, context size, output ceiling, and a fallback task name. Profiles do not construct or probe providers. Normal session chat, proposal extraction, and generated-adventure-turn calls now form a deterministic route from bounded provider status and submit it through one already-injected chat adapter. The route is chosen before the request; a provider failure never triggers an implicit second request or model fallback.
+`config/assistant.json` may declare validated `task_profiles` for workloads such as `assistant_chat`, `assistant_proposal`, `adventure_turn_generation`, `document_annotation`, `coding`, `vision`, and `image_generation`. A profile may declare a provider label, model, bounded generation settings, context size, output ceiling, fallback task name, workload label, and an optional `model_keep_alive_seconds` request. For Ollama, a configured residency value is forwarded as `keep_alive`; omitted values preserve Ollama's default behavior. It is a request rather than a measured guarantee that memory was released. Profiles do not construct or probe providers. Normal session chat, proposal extraction, and generated-adventure-turn calls now form a deterministic route from bounded provider status and submit it through one already-injected chat adapter. The route is chosen before the request; a provider failure never triggers an implicit second request or model fallback.
 
-Document annotation has its own bounded content-validation policy: the configured `document_annotation` profile may receive two attempts for a chunk, then an explicitly configured `document_annotation_fallback` profile may receive one attempt only when the primary output remained invalid. The current stock configuration uses Qwen3 8B alone for all three bounded attempts. Phi-4 Mini remains an explicit benchmark/experimental model rather than an automatic intake fallback, because the first public quality runs produced schema-valid empty output with zero expected-fact recall. A valid empty proposal list ends the sequence normally. Annotation results expose only model labels, bounded attempt counts, and whether fallback ran; no provider output is retained. Both paths remain review-only and create no memory until the existing explicit review/approval flow.
+The stock interactive profiles set 8192/4096-token contexts and
+`max_output_tokens` to `1024` for normal assistant chat and `256` for proposal
+extraction. The stock balanced adventure profiles likewise request `512`
+tokens for ordinary-event candidates and `256` for typed mutation/resource
+candidates. These are conservative local defaults for foreground usability;
+users may adjust an explicit profile value within the validated configuration
+bounds. Normal chat retains more output headroom because a reasoning-capable
+local model may consume part of the provider output budget before producing
+visible response text; the narrower structured and proposal tasks remain at
+their smaller ceilings.
+
+Document annotation has its own bounded content-validation policy: the configured `document_annotation` profile may receive two attempts for a chunk, then an explicitly configured `document_annotation_fallback` profile may receive one attempt only when the primary output remained invalid. The current stock configuration uses Qwen3 8B alone for all three bounded attempts. It is classified as `background`, so manual Focus Mode defers a new annotation request before any model call; it does not unload between chunks. Phi-4 Mini remains an explicit benchmark/experimental model rather than an automatic intake fallback, because the first public quality runs produced schema-valid empty output with zero expected-fact recall. A valid empty proposal list ends the sequence normally. Annotation results expose only model labels, bounded attempt counts, and whether fallback ran; no provider output is retained. Both paths remain review-only and create no memory until the existing explicit review/approval flow.
 
 After an explicit annotation request, record its bounded reliability outcome without retaining source text, review IDs, candidates, prompts, or provider output:
 

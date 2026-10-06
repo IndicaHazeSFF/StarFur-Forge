@@ -1546,3 +1546,131 @@
 
 - Behavior: only an explicitly recorded participant transcript consumes the declared cooldown and per-turn action allowance. A second same-turn generation is denied before any provider call; a later session turn becomes eligible again when the declared cooldown permits it.
 - Constraints: pacing history is bounded, session-local, and reset on adventure remount/restart. It is not canonical adventure state, durable persona memory, or autonomous scheduling.
+
+## 2026-09-29 - Preserve selected participant suggestions as transcript pairs
+
+- Behavior: explicit recording now appends the captured player-turn text and selected participant narration together in one validated, atomic noncanonical `user`/`narrator` transcript pair.
+- Constraints: the pair is presentation history only. It may later be explicitly supplied to the pre-existing transcript candidate-review flow, but it cannot itself create an event, state change, memory, initiative history, scheduler task, or performed action.
+
+## 2026-10-01 - Smoke participant transcript-pair continuation
+
+- Verification: the WSL/Ollama smoke generated one Murr review candidate, recorded the exact player turn plus selected narration as `AT-000003 -> AT-000004`, and generated a later review-only ordinary candidate with that exact pair as source provenance.
+- Constraints: no candidate was staged or committed; the authoritative event log remained empty after the smoke and abort.
+
+## 2026-09-29 - Plan permissioned image-model selection
+
+- Documentation: added a future provider/media roadmap boundary for bounded public model-catalog research, explicit general-versus-specialty user choice, separately confirmed and integrity-checked installation, local/hosted disclosure separation, and provenance-bearing noncanonical image output.
+
+## 2026-09-29 - Expand grounded persistent-companion roadmap
+
+- Documentation: added future resident routine/emotional continuity, an inspectable shared-experience journal, grounded artifact/verified-learning lifecycle, permissioned arrival/focus policy, and behavioral quality fixtures for quiet, non-coercive companionship.
+- Voice policy: custom Murr TTS is an optional licensed commissioned voice package with explicit training/inference rights, provenance, compatibility, and installation consent. Generic/local TTS, captions, and authored recordings remain nonblocking fallbacks; voice cloning from a sample alone is prohibited.
+
+## 2026-09-29 - Define resident agency and continuity contracts
+
+- Documentation: aligned the persistent-companion goal with bounded intentions and unfinished business, reversible self-directed interest development, meaningful requests for user input, honest self-knowledge/social repair, and identity continuity across restarts, provider swaps, and zero-provider periods.
+- Evaluation: added future behavioral checks for initiative quality, follow-through, defer/refusal handling, interest formation/decay, state/dialogue/artifact consistency, truthful uncertainty, and prevention of fabricated off-screen activity or permission bypass.
+
+## 2026-09-29 - Define configurable screen awareness
+
+- Documentation: separated optional screen awareness from Ambient Presence and specified off-by-default cadence/scope controls, visible status, local/least-invasive observation preference, redaction, zero-retention defaults, immediate revocation, and independent webcam/microphone permissions.
+
+## 2026-09-29 - Expand grant-ready benchmark planning
+
+- Documentation: added an optional research/grant evidence track for small-model scaffolding, trustworthy continuity, safe autonomy, resident quality, adventure/writing co-creation, and privacy-preserving local operation.
+- Ledger requirements: future runs bind manifests, commits, fixture hashes, model/provider/hardware metadata, seeds, and bounded aggregate outcomes, with reproducible exports, variance reporting, privacy controls, and human-study ethics boundaries. This remains separate from Steam release gates.
+
+## 2026-09-29 - Add foreground-friendly inference requirement
+
+- Documentation: added interactive/balanced/background resource profiles, cooperative yielding, explicit cancellation/unload/cooling expectations, focus-mode pausing, and fail-closed behavior when a provider cannot enforce requested limits.
+- Evaluation: future measurements include resource peaks, time-to-first-token, cancellation time, model residency, and optional foreground frame-time impact.
+
+## 2026-10-01 - Make structured Ollama generation interruptible
+
+- Behavior: Ollama JSON-schema requests now use a streamed transport internally, close that response on Ctrl+C, and return only a complete reassembled result to Core's existing strict validators. User interruption bypasses ordinary candidate/provider-failure wrapping, so partial adventure, participant, or research output cannot become review state.
+- Bounds: the default participant-action profile now caps context at 4096 tokens and output at 256 tokens. Closing the response is a cancellation request, not verified proof that Ollama stopped.
+- Verification: focused provider, assistant, participant no-write, routing, application, and API regressions pass; native WSL/Ollama interruption and foreground-recovery smoke remains required.
+
+## 2026-10-01 - Add pure inference resource admission contracts
+
+- Architecture: added provider-free `interactive`, `balanced`, and `background` resource envelopes, exact backend enforcement claims, and a pure fail-closed admission decision.
+- Constraints: missing requested controls and explicit foreground conflicts defer work. The contract performs no provider call, monitoring, routing, reservation, process-priority change, GPU probing, or model lifecycle operation.
+- Verification: focused tests cover exact admission, absent VRAM/cancellation enforcement, foreground yielding, and closed validation.
+
+## 2026-10-01 - Label routed workloads with resource profiles
+
+- Behavior: task profiles may now carry bounded `interactive`, `balanced`, or `background` labels; the default configuration classifies chat/proposals and participant actions as interactive, adventure generation as balanced, and research as background. Route previews expose only that label.
+- Constraints: labels do not grant resources, probe hardware, change process priority, unload models, or admit work. Runtime admission still requires an exact backend capability record through the provider-resource policy boundary.
+- Verification: task-profile parsing, invalid-label rejection, route preview, focused application, and API suites pass.
+
+## 2026-10-01 - Preserve workload labels in bounded route traces
+
+- Behavior: completed route metadata and resident diagnostics may carry only the selected workload label (`interactive`, `balanced`, or `background`) alongside existing task/provider/status fields.
+- Constraints: the label is not a budget, grant, hardware observation, admission decision, or provider payload; invalid labels are discarded at the presentation boundary.
+- Verification: routed-execution, resident-snapshot, application, and API-focused suites pass.
+
+## 2026-10-02 - Add opt-in per-task model residency request plumbing
+
+- Behavior: a task profile may now carry a bounded `model_keep_alive_seconds` value. When supplied, a routed adapter must explicitly declare support before Ollama forwards it as the provider's top-level `keep_alive` request; omitted settings preserve prior provider defaults.
+- Visibility: trusted local `routing status` displays an explicitly configured workload label and residency request without probing the provider or claiming that the model is resident.
+- Constraints: this is a requested provider setting, not evidence of model unload, a resource admission decision, or an enforced CPU/RAM/VRAM/cancellation limit. No broader automatic model lifecycle was added.
+
+## 2026-10-02 - Request release after bounded background and participant work
+
+- Behavior: stock participant-action and background-research task profiles now send Ollama `keep_alive=0` once a request completes. Chat, annotation, and ordinary adventure generation retain the provider default.
+- Verification: native WSL/Ollama smoke completed one Murr participant-action candidate and then reported no loaded model through `ollama ps`. The application still does not infer future release success merely because it sent the setting.
+
+## 2026-10-02 - Add manual session-local Focus Mode
+
+- Behavior: `focus mode on` defers `balanced` and `background` routed provider tasks before any provider request; `focus mode off` restores normal route eligibility. Explicit interactive chat remains available.
+- Constraints: Focus Mode is session-ephemeral and manual. It does not inspect windows/processes, alter OS priority, unload a model, or claim resource enforcement.
+
+## 2026-10-03 - Defer document annotation in Focus Mode
+
+- Behavior: the stock document-annotation workload is now classified `background`, so manual Focus Mode defers a new intake before any provider call. Route status labels each balanced/background task deferred by Focus Mode.
+- Constraints: the separate application/API annotation route now honors the same session Focus Mode decision before annotator/provider construction. Annotation retains the provider's normal residency behavior between chunks; this classification does not add automatic unload, scheduling, monitoring, or resource enforcement.
+
+## 2026-10-03 - Surface bounded Focus Mode status in the apartment
+
+- Behavior: the authenticated resident snapshot and read-only apartment may now display only whether the selected session's manual Focus Mode is on or off.
+- Constraints: the public value is a session-ephemeral boolean only. It exposes no task IDs, defer decisions, provider budgets, monitoring state, process/window data, or enforcement claim; polling it cannot change Focus Mode or call a provider. The `focus` Core namespace also preempts stale document-context extensions in authenticated API chat.
+
+## 2026-10-04 - Smoke local claim-relationship review
+
+- Verification: the WSL/Ollama path fetched one public IANA source, produced a two-claim session-local `RR-...` review, safely rejected one malformed relationship response, then created one inspectable `RX-...` relationship proposal. The deterministic relationship brief and `proposal list` confirmed no answer, verification, memory, learning, adventure, or canonical state was created; `ollama ps` showed no resident model afterward.
+
+## 2026-10-04 - Add provider-free resource-admission benchmark
+
+- Behavior: `provider-resource-eval` evaluates four checked-in resource-admission fixtures and may explicitly append closed status/reason aggregates to the experiment ledger.
+- Constraints: it performs no host or provider probe, routing, reservation, model request, monitoring, or enforcement claim; a passing fixture proves only the pure Core policy remains deterministic.
+
+## 2026-10-04 - Add in-process provider concurrency-gate foundation
+
+- Architecture: `ProviderWorkloadGate` can issue one opaque, process-local lease per admitted configured provider capacity and immediately defer competing work without waiting or queuing.
+- Initial constraints: before its later application integration, the foundation could not itself probe, launch, monitor, preempt, cancel, unload, persist, or expose provider work.
+
+## 2026-10-04 - Gate concurrent routed provider requests per application
+
+- Behavior: `AssistantApplication` now shares a capacity-one process-local provider gate across its conversation sessions. Routed text and structured calls acquire before submission, fail fast as `provider_concurrency_busy` when occupied, and release their opaque lease in completion/failure/interruption cleanup.
+- API behavior: chat capacity contention is now a typed transient `503 provider_capacity_busy` response rather than an internal-server-error response; it still does not queue or start a second provider request.
+- Streaming behavior: because an SSE response has already started, the same condition is emitted as a typed terminal SSE error event rather than an HTTP-status rewrite or generic server error.
+- Local client behavior: `scripts/sf_chat.sh` renders that typed contention as a plain retry-after-active-request message and exits with temporary-failure status `75`.
+- Repair: the helper now keeps its bounded local API response in memory instead of using temporary files, avoiding WSL `/tmp` cleanup/race behavior entirely.
+- Presentation: the existing bounded resident route trace now retains the closed `provider_concurrency_busy` outcome, with no lease, queue, prompt, provider payload, or host-resource detail.
+- Behavior: live external document annotation now shares that same application-local admission gate; an occupied provider produces the same typed transient capacity denial before an annotator can call it. Injected test annotators remain provider-free and bypass the runtime gate.
+- Verification: the threaded WSL/API/Ollama smoke admitted a long `gate-a` request, declined concurrent `gate-b` with typed HTTP `503 provider_capacity_busy` before provider use, and then completed `gate-b` normally after capacity released.
+- Constraints: this adds no queue, preemption, process/GPU control, provider monitoring, cross-process lock, model lifecycle control, or public lease details. Separate application processes intentionally remain independent.
+
+## 2026-10-05 - Bound stock interactive generation length
+
+- Behavior: the stock `assistant_chat` and `assistant_proposal` task profiles now request bounded `8192`/`4096` token contexts and `512`/`256` token outputs respectively. The values remain ordinary validated local configuration, not measured wall-time or GPU enforcement.
+- Rationale: ordinary local conversation and proposal extraction no longer default to an unbounded generated response, reducing avoidable foreground contention while preserving explicit per-profile user adjustment.
+- Behavior: ordinary adventure-turn candidate generation now requests at most `512` output tokens, while typed mutation and resource candidates request at most `256`. The candidate envelopes remain Core-validated and review-only.
+
+## 2026-10-06 - Add opt-in cross-process provider admission
+
+- Architecture: `ProviderProcessGate` adds a capacity-one, nonblocking OS advisory lease per hashed exact-provider ID. Persistent lock-file contents are never ownership evidence; process exit releases the OS-held lease, and malformed/unsafe roots fail closed.
+- Integration: the existing workload gate can compose the process lease without exposing it. Assistant CLI and API server accept `--enable-cross-process-provider-gate`; default startup remains application-local pending WSL smoke validation.
+- Streaming repair: routed streaming responses now retain their workload lease until iterator exhaustion or explicit close, rather than releasing capacity immediately when an iterator is returned.
+- Constraints: this adds no queue, wait, fairness, process discovery/termination, provider-stop proof, model lifecycle control, resource throttling, or Windows-native/WSL lock-interoperability claim.
+- Smoke follow-up: a live cross-process recovery completed without stranded capacity, while the initial `512`-token normal-chat ceiling truncated visible Qwen output after provider-side reasoning consumed part of the budget. Normal chat now requests `1024` output tokens; proposal and structured adventure ceilings remain unchanged.

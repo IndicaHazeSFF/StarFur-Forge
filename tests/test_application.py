@@ -3,6 +3,7 @@ import sys
 import re
 import threading
 import time
+import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -866,6 +867,9 @@ class AssistantApplicationTests(unittest.TestCase):
             "configured_task_count": 1, "routable_task_count": 1,
             "unavailable_task_count": 0, "storage": "session_ephemeral",
         })
+        self.assertEqual(result["focus_mode"], {
+            "enabled": False, "storage": "session_ephemeral",
+        })
         self.assertEqual(result["sandbox_execution"], {
             "schema_version": 1, "configured": False,
             "host_status": "unprobed", "supervisor_status": "unprobed",
@@ -906,6 +910,17 @@ class AssistantApplicationTests(unittest.TestCase):
         self.assertNotIn("TI-", rendered)
         self.assertNotIn("fixture.py", rendered)
         self.assertNotIn("Count only", rendered)
+
+    def test_resident_snapshot_exposes_only_focus_mode_boolean(self):
+        session = FakeSession()
+        session.focus_mode_enabled = True
+
+        snapshot = AssistantApplication(session).resident_snapshot()
+
+        self.assertEqual(snapshot["focus_mode"], {
+            "enabled": True, "storage": "session_ephemeral",
+        })
+        self.assertEqual(session.calls, [])
 
     def test_resident_snapshot_uses_only_injected_passive_sandbox_status(self):
         class PassiveStatus:
@@ -1402,6 +1417,46 @@ class AssistantApplicationTests(unittest.TestCase):
 
         self.assertIs(primary, captured["kwargs"]["provider"])
         self.assertIs(registry, captured["kwargs"]["provider_registry"])
+
+    def test_factory_opt_in_composes_one_cross_process_provider_gate(self):
+        config = FakeConfig()
+        provider = type("PrimaryProvider", (), {
+            "name": "primary",
+            "complete": lambda self, *args, **kwargs: {"message": {"content": "ok"}},
+            "list_models": lambda self: {"models": []},
+            "probe_health": lambda self: {"models": []},
+        })()
+        registry = ChatProviderRegistry({
+            "primary": ChatProviderRegistration("primary", provider),
+        })
+
+        class GateSession(FakeSession):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.chat_provider_registry = kwargs["provider_registry"]
+
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "pipeline.application.load_config", return_value=config,
+        ), patch(
+            "pipeline.application.load_persona", return_value="persona",
+        ), patch("pipeline.application.load_policy", return_value="policy"):
+            root = Path(directory).resolve()
+            first = create_assistant_application(
+                "custom.json", session_factory=GateSession,
+                provider=provider, provider_registry=registry,
+                provider_process_gate_root=root,
+            )
+            second = create_assistant_application(
+                "custom.json", session_factory=GateSession,
+                provider=provider, provider_registry=registry,
+                provider_process_gate_root=root,
+            )
+            admitted = first._workload_gate.try_acquire("primary", 1)
+            self.assertEqual("admitted", admitted.status)
+            self.assertEqual(
+                "deferred", second._workload_gate.try_acquire("primary", 1).status,
+            )
+            self.assertTrue(first._workload_gate.release(admitted.lease))
 
     def test_factory_rejects_a_provider_registry_without_a_selected_active_provider(self):
         with self.assertRaisesRegex(ValueError, "explicit active provider"):

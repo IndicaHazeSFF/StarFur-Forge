@@ -14,6 +14,7 @@ from typing import Any, Mapping
 from pipeline.provider_registry import ChatProviderRegistry
 from pipeline.providers import StructuredChatCompletionProvider
 from pipeline.task_routing import TaskRouteDecision, TaskRoutePlanner
+from pipeline.provider_workload_gate import ProviderWorkloadGate
 
 
 class RoutedTaskExecutionError(RuntimeError):
@@ -22,6 +23,42 @@ class RoutedTaskExecutionError(RuntimeError):
     def __init__(self, message: str, *, reason: str) -> None:
         super().__init__(message)
         self.reason = reason
+
+
+class _LeaseBoundResponseIterator:
+    """Retain one workload lease until a streamed response ends or closes."""
+
+    def __init__(self, response, release) -> None:
+        self._response = response
+        self._iterator = iter(response)
+        self._release_callback = release
+        self._released = False
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        try:
+            return next(self._iterator)
+        except BaseException:
+            self._release()
+            raise
+
+    def close(self) -> None:
+        try:
+            close = getattr(self._response, "close", None)
+            if callable(close):
+                close()
+        finally:
+            self._release()
+
+    def _release(self) -> None:
+        if self._released:
+            return
+        self._released = True
+        callback = self._release_callback
+        self._release_callback = None
+        callback()
 
 
 @dataclass(frozen=True)
@@ -50,7 +87,7 @@ class RoutedChatExecution:
         selected = self.decision.selected
         if selected is None:
             raise RuntimeError("routed execution has no selected provider")
-        return {
+        result = {
             "requested_task_id": self.decision.requested_task_id,
             "selected_task_id": selected.task_id,
             "provider": selected.provider_id,
@@ -58,18 +95,43 @@ class RoutedChatExecution:
             "fallback_used": self.decision.selected_index not in (None, 0),
             "outcome": "submitted",
         }
+        if selected.profile.resource_profile is not None:
+            result["resource_profile"] = selected.profile.resource_profile
+        if selected.profile.model_keep_alive_seconds is not None:
+            result["model_keep_alive_seconds"] = selected.profile.model_keep_alive_seconds
+        return result
 
 
 class RoutedChatExecutor:
     """Execute exactly one route-selected chat request, with no hidden retry."""
 
-    def __init__(self, planner: TaskRoutePlanner, providers: ChatProviderRegistry) -> None:
+    def __init__(
+        self, planner: TaskRoutePlanner, providers: ChatProviderRegistry,
+        *, workload_gate: ProviderWorkloadGate | None = None,
+    ) -> None:
         if not isinstance(planner, TaskRoutePlanner):
             raise TypeError("routed chat planner is invalid")
         if not isinstance(providers, ChatProviderRegistry):
             raise TypeError("routed chat provider registry is invalid")
+        if workload_gate is not None and not isinstance(workload_gate, ProviderWorkloadGate):
+            raise TypeError("routed chat workload gate is invalid")
         self._planner = planner
         self._providers = providers
+        self._workload_gate = workload_gate
+
+    def _acquire_workload_lease(self, decision: TaskRouteDecision):
+        """Claim one optional process-local capacity lease before provider use."""
+        selected = decision.selected
+        if selected is None or self._workload_gate is None:
+            return None
+        admission = self._workload_gate.try_acquire(
+            selected.provider_id, selected.profile.max_concurrent_requests or 1,
+        )
+        if not admission.lease:
+            raise RoutedTaskExecutionError(
+                "selected provider capacity is currently busy", reason="provider_concurrency_busy",
+            )
+        return admission.lease
 
     def execute(
         self, task_id: object, messages, *, default_model: str,
@@ -114,15 +176,40 @@ class RoutedChatExecutor:
             raise RoutedTaskExecutionError(
                 "selected provider adapter is unavailable", reason="provider_adapter_unavailable",
             )
-        try:
-            response = provider.complete(
-                messages,
-                model=selected.profile.model,
-                options=dict(selected.profile.options) or None,
-                stream=stream,
+        if (
+            selected.profile.model_keep_alive_seconds is not None
+            and getattr(provider, "supports_model_keep_alive_seconds", False) is not True
+        ):
+            raise RoutedTaskExecutionError(
+                "selected provider does not support model residency control",
+                reason="provider_residency_control_unavailable",
             )
+        lease = self._acquire_workload_lease(decision)
+        try:
+            kwargs = {
+                "model": selected.profile.model,
+                "options": dict(selected.profile.options) or None,
+                "stream": stream,
+            }
+            if selected.profile.model_keep_alive_seconds is not None:
+                kwargs["keep_alive_seconds"] = selected.profile.model_keep_alive_seconds
+            response = provider.complete(messages, **kwargs)
+            if (
+                lease is not None
+                and stream
+                and not isinstance(response, Mapping)
+                and hasattr(response, "__iter__")
+            ):
+                response = _LeaseBoundResponseIterator(
+                    response,
+                    lambda retained=lease: self._workload_gate.release(retained),
+                )
+                lease = None
         except Exception as error:
             raise RoutedTaskExecutionError("routed provider request failed", reason="provider_request_failed") from error
+        finally:
+            if lease is not None:
+                self._workload_gate.release(lease)
         return RoutedChatExecution(decision, response)
 
     def execute_structured_planned(
@@ -150,15 +237,29 @@ class RoutedChatExecutor:
                 "selected provider does not support structured output",
                 reason="provider_capability_unavailable",
             )
-        try:
-            response = provider.complete_structured(
-                messages,
-                schema=dict(schema),
-                model=selected.profile.model,
-                options=dict(selected.profile.options) or None,
+        if (
+            selected.profile.model_keep_alive_seconds is not None
+            and getattr(provider, "supports_model_keep_alive_seconds", False) is not True
+        ):
+            raise RoutedTaskExecutionError(
+                "selected provider does not support model residency control",
+                reason="provider_residency_control_unavailable",
             )
+        lease = self._acquire_workload_lease(decision)
+        try:
+            kwargs = {
+                "schema": dict(schema),
+                "model": selected.profile.model,
+                "options": dict(selected.profile.options) or None,
+            }
+            if selected.profile.model_keep_alive_seconds is not None:
+                kwargs["keep_alive_seconds"] = selected.profile.model_keep_alive_seconds
+            response = provider.complete_structured(messages, **kwargs)
         except Exception as error:
             raise RoutedTaskExecutionError("routed provider request failed", reason="provider_request_failed") from error
+        finally:
+            if lease is not None:
+                self._workload_gate.release(lease)
         return RoutedChatExecution(decision, response)
 
 

@@ -37,17 +37,24 @@
   "debug_level": "off",
   "ollama_options": {},
   "task_profiles": {
-    "assistant_chat": {},
-    "assistant_proposal": {},
+    "assistant_chat": {"context_size": 8192, "max_output_tokens": 1024, "resource_profile": "interactive"},
+    "assistant_proposal": {"context_size": 4096, "max_output_tokens": 256, "resource_profile": "interactive"},
     "document_annotation": {
       "model": "qwen3:8b",
-      "max_output_tokens": 1024
+      "max_output_tokens": 1024,
+      "resource_profile": "background"
     },
-      "research_claim_generation": {"model": "qwen3:8b", "max_output_tokens": 2048},
-      "research_relationship_generation": {"model": "qwen3:8b", "max_output_tokens": 1024},
-      "adventure_turn_generation": {"max_output_tokens": 1024},
-      "adventure_turn_mutation_generation": {"max_output_tokens": 512},
-      "adventure_turn_resource_generation": {"max_output_tokens": 512}
+      "research_claim_generation": {"model": "qwen3:8b", "max_output_tokens": 2048, "resource_profile": "background", "model_keep_alive_seconds": 0},
+      "research_relationship_generation": {"model": "qwen3:8b", "max_output_tokens": 1024, "resource_profile": "background", "model_keep_alive_seconds": 0},
+      "adventure_turn_generation": {"max_output_tokens": 512, "resource_profile": "balanced"},
+      "adventure_turn_mutation_generation": {"max_output_tokens": 256, "resource_profile": "balanced"},
+      "adventure_turn_resource_generation": {"max_output_tokens": 256, "resource_profile": "balanced"},
+      "adventure_participant_action_generation": {
+        "context_size": 4096,
+        "max_output_tokens": 256,
+        "resource_profile": "interactive",
+        "model_keep_alive_seconds": 0
+      }
   },
   "policy_path": "config/assistant_policy.md"
 }

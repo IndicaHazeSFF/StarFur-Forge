@@ -19,9 +19,13 @@ import secrets
 import threading
 import time
 from time import perf_counter
+from pathlib import Path
 from typing import Callable, Iterator
 
-from pipeline.assistant import PROJECT_ROOT, AssistantSession, load_config, load_persona, load_policy
+from pipeline.assistant import (
+    PROJECT_ROOT, AssistantSession, ProviderCapacityBusyError, load_config,
+    load_persona, load_policy,
+)
 from pipeline.capabilities import CapabilityManifest, CapabilityRegistry, build_core_capability_registry
 from pipeline.db import upsert_assistant_memory_proposal
 from pipeline.document_annotation import DocumentProposalAnnotator, FailoverDocumentProposalAnnotator
@@ -50,6 +54,8 @@ from pipeline.persona_registry import PersonaRegistry, load_persona_package
 from pipeline.persona_runtime import PersonaRuntimeRegistry
 from pipeline.provider_registry import ChatProviderRegistry
 from pipeline.providers import ChatProvider, provider_health_snapshot, provider_is_configured
+from pipeline.provider_workload_gate import ProviderWorkloadGate
+from pipeline.provider_process_gate import ProviderProcessGate
 from pipeline.research_coordinator import ResearchClaimCoordinator, ResearchCoordinatorError
 from pipeline.research_brief import build_research_cited_brief
 from pipeline.research_answer_policy import evaluate_research_answer_policy
@@ -78,12 +84,13 @@ from pipeline.system_metrics import LocalSystemMetricsProvider, NullSystemMetric
 
 DEFAULT_CONVERSATION_ID = "default"
 DEFAULT_MAX_CONVERSATIONS = 16
+DEFAULT_PROVIDER_PROCESS_GATE_ROOT = PROJECT_ROOT / "data" / "runtime" / "provider-workload"
 _CONVERSATION_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}\Z")
 _ROUTE_TRACE_ID_RE = re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")
 _ROUTE_TRACE_OUTCOMES = frozenset({
     "submitted", "completed", "route_unavailable", "provider_adapter_unavailable",
     "provider_capability_unavailable", "provider_request_failed",
-    "provider_stream_failed", "provider_stream_cancelled",
+    "provider_stream_failed", "provider_stream_cancelled", "provider_concurrency_busy",
 })
 
 
@@ -147,14 +154,18 @@ def _bounded_task_route_trace(value: object) -> list[dict[str, object]]:
             continue
         if outcome not in _ROUTE_TRACE_OUTCOMES or not isinstance(fallback_used, bool):
             continue
-        bounded.append({
+        bounded_item = {
             "requested_task_id": requested,
             "selected_task_id": selected,
             "provider": provider,
             "model": model,
             "fallback_used": fallback_used,
             "outcome": outcome,
-        })
+        }
+        resource_profile = item.get("resource_profile")
+        if isinstance(resource_profile, str) and resource_profile in {"interactive", "balanced", "background"}:
+            bounded_item["resource_profile"] = resource_profile
+        bounded.append(bounded_item)
     return bounded
 
 
@@ -175,10 +186,14 @@ class AssistantApplication:
         persona_asset_resolver: PersonaAssetResolver | None = None,
         local_web_runtime_factory: Callable[[], object] | None = None,
         local_web_search_runtime_factory: Callable[[], object] | None = None,
+        workload_gate: ProviderWorkloadGate | None = None,
     ):
         if max_conversations <= 0:
             raise ValueError("max_conversations must be positive.")
+        if workload_gate is not None and not isinstance(workload_gate, ProviderWorkloadGate):
+            raise TypeError("workload_gate must be a ProviderWorkloadGate or None.")
         self.session = session
+        self._workload_gate = workload_gate or self._default_workload_gate(session)
         self.retriever = retriever or getattr(session, "retriever", None)
         self.system_metrics_provider = system_metrics_provider or NullSystemMetricsProvider()
         if not callable(getattr(self.system_metrics_provider, "snapshot", None)):
@@ -212,6 +227,17 @@ class AssistantApplication:
         self._initialize_provider_health(session)
         self._attach_capability_manifest(session)
         self._attach_retriever(session)
+        self._attach_workload_gate(session)
+
+    @staticmethod
+    def _default_workload_gate(session):
+        """Build one local capacity-one gate without touching any provider."""
+        registry = getattr(session, "chat_provider_registry", None)
+        provider_ids = getattr(registry, "provider_ids", None)
+        if not callable(provider_ids):
+            return None
+        ids = tuple(provider_ids())
+        return ProviderWorkloadGate({provider_id: 1 for provider_id in ids}) if ids else None
 
     def _new_session_slot(self, session: AssistantSession) -> _SessionSlot:
         session_instance_id = f"session-{secrets.token_hex(16)}"
@@ -265,6 +291,11 @@ class AssistantApplication:
         setter = getattr(session, "set_retriever", None)
         if callable(setter):
             setter(self.retriever)
+
+    def _attach_workload_gate(self, session):
+        """Attach only the shared process-local capacity gate to real sessions."""
+        if self._workload_gate is not None and isinstance(session, AssistantSession):
+            session._provider_workload_gate = self._workload_gate
 
     @staticmethod
     def _initialize_provider_health(session):
@@ -328,6 +359,7 @@ class AssistantApplication:
         self._initialize_provider_health(session)
         self._attach_capability_manifest(session)
         self._attach_retriever(session)
+        self._attach_workload_gate(session)
         # Do not evict here.  A newly created slot is not yet request-pinned,
         # so eviction at this point can select and remove the very slot this
         # method is about to return when older conversations are busy.
@@ -1469,6 +1501,9 @@ class AssistantApplication:
                     "storage": "session_ephemeral",
                 },
                 routing=routing,
+                focus_mode={
+                    "enabled": getattr(session, "focus_mode_enabled", False) is True,
+                },
                 sandbox_execution=sandbox_public,
                 tool_activity=tool_activity,
             ).public_dict()
@@ -1487,8 +1522,9 @@ class AssistantApplication:
         """
         with self._locked_session_for() as session:
             max_attempts = 3
+            workload_lease = None
             if annotator is None:
-                provider, profile = self._document_annotation_route(
+                provider, profile, provider_id = self._document_annotation_route(
                     session, TASK_DOCUMENT_ANNOTATION,
                 )
                 profiles = getattr(session.config, "task_profiles", TaskProfiles())
@@ -1509,9 +1545,11 @@ class AssistantApplication:
                     fallback_config = profiles.get(TASK_DOCUMENT_ANNOTATION_FALLBACK)
                     if fallback_config is None or fallback_config.fallback_task is not None:
                         raise RuntimeError("Document annotation fallback profile is invalid.")
-                    _, fallback_profile = self._document_annotation_route(
+                    _, fallback_profile, fallback_provider_id = self._document_annotation_route(
                         session, TASK_DOCUMENT_ANNOTATION_FALLBACK,
                     )
+                    if fallback_provider_id != provider_id:
+                        raise RuntimeError("Document annotation fallback provider is invalid.")
                     annotator = FailoverDocumentProposalAnnotator(
                         primary,
                         DocumentProposalAnnotator(
@@ -1522,6 +1560,15 @@ class AssistantApplication:
                         ),
                     )
                     max_attempts = annotator.max_attempts
+                if self._workload_gate is not None:
+                    admission = self._workload_gate.try_acquire(
+                        provider_id, profile.max_concurrent_requests or 1,
+                    )
+                    if admission.lease is None:
+                        raise ProviderCapacityBusyError(
+                            "selected provider capacity is currently busy"
+                        )
+                    workload_lease = admission.lease
             lifecycle = getattr(session, "provider_lifecycle", None)
             if lifecycle is not None:
                 lifecycle.begin_generation(stream=False, model=getattr(annotator, "model", self._active_model_for_session(session)))
@@ -1534,6 +1581,9 @@ class AssistantApplication:
                 if lifecycle is not None:
                     lifecycle.fail(error)
                 raise
+            finally:
+                if workload_lease is not None:
+                    self._workload_gate.release(workload_lease)
             if lifecycle is not None:
                 lifecycle.finish()
             if result.execution is not None:
@@ -1573,7 +1623,13 @@ class AssistantApplication:
         selected = decision.selected
         if selected is None or selected.task_id != task_id:
             raise RuntimeError("Document annotation route is unavailable.")
-        return provider, selected.profile
+        focus_deferred = getattr(session, "focus_mode_defers_profile", None)
+        if callable(focus_deferred) and focus_deferred(selected.profile):
+            raise RuntimeError(
+                f"Document annotation task {task_id!r} is deferred by Focus Mode "
+                f"({selected.profile.resource_profile} workload)."
+            )
+        return provider, selected.profile, selected.provider_id
 
     def create_document_pending_proposal(self, candidate):
         """Explicitly hand one server-reviewed candidate to the normal proposal store."""
@@ -1707,6 +1763,7 @@ def create_assistant_application(
     enable_tavily_web_search: bool = False,
     local_web_runtime_factory: Callable[[], object] | None = None,
     local_web_search_runtime_factory: Callable[[], object] | None = None,
+    provider_process_gate_root: Path | str | None = None,
 ):
     """Create the standard Assistant Mode application for any presentation client."""
     if not isinstance(enable_native_web_tools, bool):
@@ -1721,6 +1778,10 @@ def create_assistant_application(
         raise TypeError("local_web_runtime_factory must be callable or None")
     if local_web_search_runtime_factory is not None and not callable(local_web_search_runtime_factory):
         raise TypeError("local_web_search_runtime_factory must be callable or None")
+    if provider_process_gate_root is not None:
+        provider_process_gate_root = Path(provider_process_gate_root)
+        if not provider_process_gate_root.is_absolute():
+            raise ValueError("provider_process_gate_root must be absolute")
     if enable_native_web_tools and local_web_runtime_factory is None:
         from pipeline.tool_web_native import build_native_web_tool_runtime
         local_web_runtime_factory = build_native_web_tool_runtime
@@ -1781,8 +1842,18 @@ def create_assistant_application(
             **kwargs,
         )
 
+    initial_session = make_session()
+    workload_gate = None
+    if provider_process_gate_root is not None:
+        provider_process_gate_root.mkdir(parents=True, exist_ok=True)
+        provider_ids = tuple(initial_session.chat_provider_registry.provider_ids())
+        if provider_ids:
+            workload_gate = ProviderWorkloadGate(
+                {provider_id: 1 for provider_id in provider_ids},
+                process_gate=ProviderProcessGate(provider_process_gate_root),
+            )
     return AssistantApplication(
-        make_session(),
+        initial_session,
         capability_manifest=manifest,
         session_factory=make_session,
         max_conversations=max_conversations,
@@ -1792,6 +1863,7 @@ def create_assistant_application(
         persona_asset_resolver=PersonaAssetResolver(installed_asset_packages),
         local_web_runtime_factory=local_web_runtime_factory,
         local_web_search_runtime_factory=local_web_search_runtime_factory,
+        workload_gate=workload_gate,
     )
 
 
@@ -1800,6 +1872,7 @@ __all__ = [
     "ConversationNotFoundError",
     "DEFAULT_CONVERSATION_ID",
     "DEFAULT_MAX_CONVERSATIONS",
+    "DEFAULT_PROVIDER_PROCESS_GATE_ROOT",
     "create_assistant_application",
     "normalize_conversation_id",
 ]

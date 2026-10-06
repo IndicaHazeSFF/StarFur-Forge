@@ -11,11 +11,11 @@ sys.modules.setdefault("ollama", types.ModuleType("ollama"))
 
 from pipeline.application import AssistantApplication
 from pipeline.adventure_registry import AdventureRegistry
-from pipeline.assistant import AssistantConfig, AssistantSession, load_config
+from pipeline.assistant import AssistantConfig, AssistantSession, ProviderCapacityBusyError, load_config
 from pipeline.document_intake import prepare_document_text
 from pipeline.provider_registry import ChatProviderRegistration, ChatProviderRegistry
 from pipeline.task_profiles import (
-    TASK_ADVENTURE_TURN_GENERATION, TASK_ADVENTURE_TURN_MUTATION_GENERATION, TASK_ASSISTANT_CHAT, TASK_DOCUMENT_ANNOTATION, TASK_DOCUMENT_ANNOTATION_FALLBACK, TASK_RESEARCH_CLAIM_GENERATION, TASK_RESEARCH_RELATIONSHIP_GENERATION, TaskProfile, TaskProfiles,
+    TASK_ADVENTURE_TURN_GENERATION, TASK_ADVENTURE_TURN_MUTATION_GENERATION, TASK_ADVENTURE_TURN_RESOURCE_GENERATION, TASK_ASSISTANT_CHAT, TASK_DOCUMENT_ANNOTATION, TASK_DOCUMENT_ANNOTATION_FALLBACK, TASK_RESEARCH_CLAIM_GENERATION, TASK_RESEARCH_RELATIONSHIP_GENERATION, TaskProfile, TaskProfiles,
     load_task_profiles,
 )
 
@@ -67,6 +67,31 @@ def config_with_profiles(profiles):
 
 
 class TaskProfileTests(unittest.TestCase):
+    def test_stock_chat_and_adventure_profiles_have_bounded_output_ceilings(self):
+        config = load_config(Path(__file__).resolve().parents[1] / "config" / "assistant.json")
+        chat = config.task_profiles.resolve(
+            TASK_ASSISTANT_CHAT, default_model=config.chat_model, base_options=config.ollama_options,
+        )
+        proposal = config.task_profiles.resolve(
+            "assistant_proposal", default_model=config.chat_model, base_options=config.ollama_options,
+        )
+        turn = config.task_profiles.resolve(
+            TASK_ADVENTURE_TURN_GENERATION, default_model=config.chat_model, base_options=config.ollama_options,
+        )
+        mutation = config.task_profiles.resolve(
+            TASK_ADVENTURE_TURN_MUTATION_GENERATION, default_model=config.chat_model, base_options=config.ollama_options,
+        )
+        resource = config.task_profiles.resolve(
+            TASK_ADVENTURE_TURN_RESOURCE_GENERATION, default_model=config.chat_model, base_options=config.ollama_options,
+        )
+        self.assertEqual(8192, chat.options["num_ctx"])
+        self.assertEqual(1024, chat.options["num_predict"])
+        self.assertEqual(4096, proposal.options["num_ctx"])
+        self.assertEqual(256, proposal.options["num_predict"])
+        self.assertEqual(512, turn.options["num_predict"])
+        self.assertEqual(256, mutation.options["num_predict"])
+        self.assertEqual(256, resource.options["num_predict"])
+
     def test_config_parses_validated_profiles_without_changing_legacy_fields(self):
         payload = {
             "chat_model": "chat-model",
@@ -74,6 +99,8 @@ class TaskProfileTests(unittest.TestCase):
                 "assistant_chat": {
                     "provider": "ollama", "model": "profile-model",
                     "generation_options": {"temperature": 0.2}, "context_size": 4096,
+                    "resource_profile": "interactive", "max_concurrent_requests": 2,
+                    "model_keep_alive_seconds": 0,
                 },
                 "vision": {"provider": "future-vision", "fallback_task": "assistant_chat"},
             },
@@ -85,6 +112,9 @@ class TaskProfileTests(unittest.TestCase):
         profile = config.task_profiles.resolve(TASK_ASSISTANT_CHAT, default_model=config.chat_model, base_options=config.ollama_options)
         self.assertEqual(profile.model, "profile-model")
         self.assertEqual(profile.options, {"temperature": 0.2, "num_ctx": 4096})
+        self.assertEqual("interactive", profile.resource_profile)
+        self.assertEqual(2, profile.max_concurrent_requests)
+        self.assertEqual(0, profile.model_keep_alive_seconds)
         self.assertEqual(config.chat_model, "profile-model")
 
     def test_invalid_profile_configuration_is_rejected(self):
@@ -94,6 +124,12 @@ class TaskProfileTests(unittest.TestCase):
             load_task_profiles({"assistant_chat": {"max_output_tokens": 0}})
         with self.assertRaisesRegex(ValueError, "Unknown task profile generation option"):
             load_task_profiles({"assistant_chat": {"generation_options": {"num_predict": 42}}})
+        with self.assertRaisesRegex(ValueError, "resource_profile"):
+            load_task_profiles({"assistant_chat": {"resource_profile": "unbounded"}})
+        with self.assertRaisesRegex(ValueError, "max_concurrent_requests"):
+            load_task_profiles({"assistant_chat": {"max_concurrent_requests": 0}})
+        with self.assertRaisesRegex(ValueError, "model_keep_alive_seconds"):
+            load_task_profiles({"assistant_chat": {"model_keep_alive_seconds": -1}})
 
     def test_provider_mode_is_validated_and_disabled_mode_never_routes_generation(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -115,6 +151,98 @@ class TaskProfileTests(unittest.TestCase):
                 replace(config_with_profiles(TaskProfiles()), provider_mode="disabled"), "Persona",
                 provider=FakeProvider(), memory_loader=lambda **_kwargs: [], policy="Policy",
             )
+
+    def test_focus_mode_defers_only_noninteractive_work_before_provider_use(self):
+        profiles = TaskProfiles({
+            TASK_ASSISTANT_CHAT: TaskProfile(
+                TASK_ASSISTANT_CHAT, provider="ollama", resource_profile="interactive",
+            ),
+            TASK_ADVENTURE_TURN_GENERATION: TaskProfile(
+                TASK_ADVENTURE_TURN_GENERATION, provider="ollama", resource_profile="balanced",
+            ),
+            TASK_RESEARCH_CLAIM_GENERATION: TaskProfile(
+                TASK_RESEARCH_CLAIM_GENERATION, provider="ollama", resource_profile="background",
+            ),
+        })
+        provider = FakeProvider()
+        session = AssistantSession(
+            config_with_profiles(profiles), "Persona", provider=provider,
+            memory_loader=lambda **_kwargs: [], policy="Policy",
+        )
+
+        self.assertIn("Focus Mode: off", session.command("focus mode status"))
+        self.assertIn("Focus Mode: on", session.command("focus mode on"))
+        focus_status = session.command("routing status")
+        self.assertIn("adventure_turn_generation: ollama / chat-model [unprobed] (workload=balanced, focus=deferred)", focus_status)
+        self.assertIn("assistant_chat: ollama / chat-model [unprobed] (workload=interactive)", focus_status)
+        with self.assertRaisesRegex(RuntimeError, "deferred by Focus Mode"):
+            session._provider_complete(
+                ({"role": "user", "content": "generate"},),
+                task_id=TASK_ADVENTURE_TURN_GENERATION,
+            )
+        with self.assertRaisesRegex(RuntimeError, "deferred by Focus Mode"):
+            session._task_route(TASK_RESEARCH_CLAIM_GENERATION)
+        application = AssistantApplication(session)
+        with self.assertRaisesRegex(RuntimeError, "deferred by Focus Mode"):
+            application._document_annotation_route(session, TASK_RESEARCH_CLAIM_GENERATION)
+        self.assertEqual([], provider.calls)
+        self.assertEqual(
+            {"message": {"content": "answer"}},
+            session._provider_complete(({"role": "user", "content": "hello"},)),
+        )
+        self.assertEqual(1, len(provider.calls))
+        self.assertIn("Focus Mode: off", session.command("focus mode off"))
+
+    def test_application_attaches_one_shared_capacity_gate_before_routed_provider_use(self):
+        provider = FakeProvider()
+        session = AssistantSession(
+            config_with_profiles(TaskProfiles({
+                TASK_ASSISTANT_CHAT: TaskProfile(TASK_ASSISTANT_CHAT, provider="ollama"),
+            })),
+            "Persona", provider=provider, memory_loader=lambda **_kwargs: [], policy="Policy",
+        )
+        application = AssistantApplication(session)
+        gate = application._workload_gate
+        self.assertIsNotNone(gate)
+        held = gate.try_acquire("ollama", 1)
+        with self.assertRaisesRegex(RuntimeError, "capacity is currently busy"):
+            session._provider_complete(({"role": "user", "content": "hello"},))
+        self.assertEqual([], provider.calls)
+        self.assertTrue(gate.release(held.lease))
+        self.assertEqual(
+            {"message": {"content": "answer"}},
+            session._provider_complete(({"role": "user", "content": "hello"},)),
+        )
+
+    def test_document_annotation_uses_shared_capacity_gate_only_for_live_adapter(self):
+        provider = FakeProvider()
+
+        def annotation_complete(messages, *, model=None, options=None, stream=False):
+            provider.calls.append({"model": model, "options": dict(options or {}), "stream": stream})
+            return {"message": {"content": '{"proposals": []}'}}
+
+        provider.complete = annotation_complete
+        session = AssistantSession(
+            config_with_profiles(TaskProfiles({
+                TASK_DOCUMENT_ANNOTATION: TaskProfile(
+                    TASK_DOCUMENT_ANNOTATION, provider="ollama", resource_profile="background",
+                ),
+            })),
+            "Persona", provider=provider, memory_loader=lambda **_kwargs: [], policy="Policy",
+        )
+        application = AssistantApplication(session)
+        gate = application._workload_gate
+        held = gate.try_acquire("ollama", 1)
+        document = prepare_document_text("No durable facts.", "notes.md", domain="personal")
+        with self.assertRaises(ProviderCapacityBusyError):
+            application.annotate_document(document)
+        self.assertEqual([], provider.calls)
+        self.assertTrue(gate.release(held.lease))
+
+        result = application.annotate_document(document)
+        self.assertEqual((), result.candidates)
+        self.assertEqual(1, len(provider.calls))
+        self.assertEqual(0, gate.active_count("ollama"))
 
     def test_chat_profile_options_apply_but_active_model_remains_authoritative(self):
         profiles = TaskProfiles({
@@ -460,12 +588,17 @@ class TaskProfileTests(unittest.TestCase):
                 TASK_DOCUMENT_ANNOTATION: TaskProfile(
                     TASK_DOCUMENT_ANNOTATION, provider="ollama", model="annotation-model",
                     context_size=2048, max_output_tokens=333,
+                    resource_profile="background", model_keep_alive_seconds=0,
                 ),
             })), "Persona", provider=provider,
             memory_loader=lambda **_kwargs: [], policy="Policy",
         )
         budgeted_status = budgeted.command("routing status")
-        self.assertIn("document_annotation: ollama / annotation-model [unprobed] (context=2048, output=333)", budgeted_status)
+        self.assertIn(
+            "document_annotation: ollama / annotation-model [unprobed] "
+            "(context=2048, output=333, workload=background, keep_alive=0s)",
+            budgeted_status,
+        )
 
     def test_routing_probe_is_explicit_non_generating_and_updates_route_status(self):
         provider = FakeProvider()

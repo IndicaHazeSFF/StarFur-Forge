@@ -9,24 +9,26 @@ from pipeline.provider_registry import ChatProviderRegistration, ChatProviderReg
 from pipeline.task_execution import RoutedChatExecutor, RoutedTaskExecutionError
 from pipeline.task_profiles import TaskProfile, TaskProfiles
 from pipeline.task_routing import ProviderRouteRegistry, ProviderRouteStatus, TaskRoutePlanner
+from pipeline.provider_workload_gate import ProviderWorkloadGate
 
 
 class FakeChatProvider:
     name = "fake"
+    supports_model_keep_alive_seconds = True
 
     def __init__(self, response=None, error=None):
         self.response = response if response is not None else {"message": {"content": "ok"}}
         self.error = error
         self.calls = []
 
-    def complete(self, messages, *, model=None, options=None, stream=False):
-        self.calls.append((messages, model, options, stream))
+    def complete(self, messages, *, model=None, options=None, stream=False, keep_alive_seconds=None):
+        self.calls.append((messages, model, options, stream, keep_alive_seconds))
         if self.error is not None:
             raise self.error
         return self.response
 
-    def complete_structured(self, messages, *, schema, model=None, options=None):
-        self.calls.append((messages, model, options, False, schema))
+    def complete_structured(self, messages, *, schema, model=None, options=None, keep_alive_seconds=None):
+        self.calls.append((messages, model, options, False, schema, keep_alive_seconds))
         if self.error is not None:
             raise self.error
         return self.response
@@ -39,10 +41,11 @@ class FakeChatProvider:
 
 
 class TaskExecutionTests(unittest.TestCase):
-    def _executor(self, *, primary_status="available", include_adapter=True, provider=None):
+    def _executor(self, *, primary_status="available", include_adapter=True, provider=None, workload_gate=None):
         profiles = TaskProfiles({
             "assistant_chat": TaskProfile(
                 "assistant_chat", provider="local", model="small", max_output_tokens=123,
+                resource_profile="interactive", model_keep_alive_seconds=0,
             ),
         })
         planner = TaskRoutePlanner(
@@ -53,7 +56,7 @@ class TaskExecutionTests(unittest.TestCase):
         registry = ChatProviderRegistry(
             {"local": ChatProviderRegistration("local", provider)} if include_adapter else {},
         )
-        return RoutedChatExecutor(planner, registry), provider
+        return RoutedChatExecutor(planner, registry, workload_gate=workload_gate), provider
 
     def test_executes_exactly_one_selected_registered_provider_with_profile_budget(self):
         executor, provider = self._executor()
@@ -71,6 +74,7 @@ class TaskExecutionTests(unittest.TestCase):
         self.assertEqual("small", provider.calls[0][1])
         self.assertEqual({"num_predict": 123}, provider.calls[0][2])
         self.assertFalse(provider.calls[0][3])
+        self.assertEqual(0, provider.calls[0][4])
 
         public = result.public_dict()
         self.assertEqual({
@@ -79,6 +83,8 @@ class TaskExecutionTests(unittest.TestCase):
             "provider": "local",
             "model": "small",
             "fallback_used": False,
+            "resource_profile": "interactive",
+            "model_keep_alive_seconds": 0,
             "outcome": "submitted",
         }, public)
         self.assertNotIn("response", public)
@@ -95,12 +101,77 @@ class TaskExecutionTests(unittest.TestCase):
             missing.execute("assistant_chat", (), default_model="fallback", default_provider_id="local")
         self.assertEqual("provider_adapter_unavailable", captured.exception.reason)
 
+    def test_residency_request_fails_closed_for_an_adapter_that_does_not_opt_in(self):
+        class NoResidencyProvider:
+            def complete(self, messages, *, model=None, options=None, stream=False):
+                raise AssertionError("provider must not be called")
+
+        executor, _ = self._executor(provider=NoResidencyProvider())
+        decision = executor.plan(
+            "assistant_chat", default_model="fallback", default_provider_id="local",
+        )
+        with self.assertRaises(RoutedTaskExecutionError) as captured:
+            executor.execute_planned(decision, ())
+        self.assertEqual("provider_residency_control_unavailable", captured.exception.reason)
+
     def test_provider_failures_do_not_silently_trigger_another_request(self):
         executor, provider = self._executor(provider=FakeChatProvider(error=RuntimeError("offline")))
         with self.assertRaisesRegex(RoutedTaskExecutionError, "request failed") as captured:
             executor.execute("assistant_chat", (), default_model="fallback", default_provider_id="local")
         self.assertEqual("provider_request_failed", captured.exception.reason)
         self.assertEqual(1, len(provider.calls))
+
+    def test_shared_workload_gate_defers_before_provider_call_and_releases_after_failure(self):
+        gate = ProviderWorkloadGate({"local": 1})
+        held = gate.try_acquire("local", 1)
+        executor, provider = self._executor(workload_gate=gate)
+        with self.assertRaises(RoutedTaskExecutionError) as busy:
+            executor.execute("assistant_chat", (), default_model="fallback", default_provider_id="local")
+        self.assertEqual("provider_concurrency_busy", busy.exception.reason)
+        self.assertEqual([], provider.calls)
+        self.assertTrue(gate.release(held.lease))
+
+        failing, failing_provider = self._executor(
+            provider=FakeChatProvider(error=RuntimeError("offline")), workload_gate=gate,
+        )
+        with self.assertRaises(RoutedTaskExecutionError):
+            failing.execute("assistant_chat", (), default_model="fallback", default_provider_id="local")
+        self.assertEqual(0, gate.active_count("local"))
+
+    def test_streaming_response_retains_capacity_until_exhausted_or_closed(self):
+        gate = ProviderWorkloadGate({"local": 1})
+        executor, _ = self._executor(
+            provider=FakeChatProvider(response=iter((
+                {"message": {"content": "one"}},
+                {"message": {"content": "two"}},
+            ))),
+            workload_gate=gate,
+        )
+
+        execution = executor.execute(
+            "assistant_chat", (), default_model="fallback",
+            default_provider_id="local", stream=True,
+        )
+        self.assertEqual(1, gate.active_count("local"))
+        self.assertEqual("one", next(execution.response)["message"]["content"])
+        self.assertEqual(1, gate.active_count("local"))
+        self.assertEqual("two", next(execution.response)["message"]["content"])
+        with self.assertRaises(StopIteration):
+            next(execution.response)
+        self.assertEqual(0, gate.active_count("local"))
+
+        executor, _ = self._executor(
+            provider=FakeChatProvider(response=iter(({"message": {"content": "held"}},))),
+            workload_gate=gate,
+        )
+        execution = executor.execute(
+            "assistant_chat", (), default_model="fallback",
+            default_provider_id="local", stream=True,
+        )
+        self.assertEqual(1, gate.active_count("local"))
+        execution.response.close()
+        execution.response.close()
+        self.assertEqual(0, gate.active_count("local"))
 
     def test_structured_execution_uses_exact_route_schema_and_no_stream(self):
         executor, provider = self._executor()
@@ -112,7 +183,7 @@ class TaskExecutionTests(unittest.TestCase):
         result = executor.execute_structured_planned(decision, (), schema=schema)
 
         self.assertEqual("local", result.provider_id)
-        self.assertEqual(((), "small", {"num_predict": 123}, False, schema), provider.calls[0])
+        self.assertEqual(((), "small", {"num_predict": 123}, False, schema, 0), provider.calls[0])
 
     def test_structured_execution_fails_closed_when_capability_is_absent(self):
         class TextOnlyProvider:

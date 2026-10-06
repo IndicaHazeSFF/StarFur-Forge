@@ -1,6 +1,6 @@
 # Pending copy manifest
 
-## Pipeline (53)
+## Pipeline (56)
 
 - `pipeline/assistant.py`
 - `pipeline/application.py`
@@ -55,6 +55,9 @@
 - `pipeline/task_routing.py`
 - `pipeline/task_execution.py`
 - `pipeline/providers.py`
+- `pipeline/api.py`
+- `pipeline/provider_workload_gate.py`
+- `pipeline/provider_process_gate.py`
 
 ## Configuration (2)
 
@@ -65,7 +68,7 @@
 
 - `presentation/apartment.html`
 
-## Tests (50)
+## Tests (52)
 
 - `tests/test_api.py`
 - `tests/test_application.py`
@@ -116,6 +119,8 @@
 - `tests/test_task_profiles.py`
 - `tests/test_task_routing.py`
 - `tests/test_task_execution.py`
+- `tests/test_provider_workload_gate.py`
+- `tests/test_provider_process_gate.py`
 - `tests/test_chat_provider.py`
 
 ## Documentation and policy (5)
@@ -252,9 +257,57 @@ smoke passed with an explicit `example.com` rank.
 chains one selected discovery rank through a fresh fetch and the existing local
 nonpublishing cited-claim review. Its combined WSL/Ollama smoke passed with the
 explicit `example.com` source, one cited review, and no memory proposal.
-S11am adds only a strict provider-free relationship-proposal contract bound to
-one exact review. Its support/conflict labels remain untrusted proposals and
-cannot become verification or answer authority; no live integration exists.
-S11an/S11ao add exact local-only disclosure/prompt binding and one fake-provider
-coordinator for that relationship contract. No runtime adapter or command is
-wired; the next application integration is the live-model smoke boundary.
+The local claim-relationship route has now passed its live smoke: a reviewed IANA source
+produced two session-local cited claims, the first malformed relationship output
+failed safely, and a later exact retry created one inspectable noncanonical
+`RX-...` proposal. Its deterministic brief, empty proposal list, and empty
+`ollama ps` result confirmed that no answer/verification/state was published and
+the background model release request completed on the installed provider.
+Ollama structured-output calls now consume a streaming transport internally so
+Ctrl+C can close the response while Core still receives only one complete
+strictly validated result. Explicit interruption bypasses ordinary candidate
+failure wrapping and cannot publish partial participant/adventure/research
+review state. Default participant actions are bounded to 4096 context and 256
+output tokens; native WSL/Ollama interruption and foreground recovery remain
+the live smoke gate. A separate provider-free resource-policy foundation now
+models interactive/balanced/background envelopes and defers when exact backend
+controls are unavailable; it is not wired to routing, monitoring, or execution.
+The stock normal-chat output ceiling is now 1024 tokens after the initial
+512-token live trial truncated visible Qwen output when provider-side reasoning
+shared that budget. Proposal and structured adventure ceilings remain smaller.
+Task profiles now carry descriptive workload labels for interactive chat and
+participant work, balanced adventure generation, and background research;
+route previews expose only the bounded label and no admission is implied.
+Completed route traces and resident diagnostics now preserve that same bounded
+label only; it is not evidence of enforcement or provider health.
+Task profiles can additionally carry an opt-in bounded `model_keep_alive_seconds`
+request. Routed Ollama calls forward it only when configured; absence preserves
+the provider default. This is neither proof of model unload nor resource admission.
+The stock participant-action and background-research tasks request `keep_alive=0`
+after completion; normal chat, annotation, and ordinary adventure generation retain
+their provider default. The WSL/Ollama participant-action smoke completed one
+candidate and then showed no loaded model through `ollama ps`.
+The trusted local manual `focus mode on/off/status` gate is session-local and
+defers balanced/background tasks before provider use while keeping interactive
+work eligible. It does not inspect foreground apps, alter priority, unload a
+model, or persist a preference.
+Document annotation is classified as background so Focus Mode defers a new
+intake before a provider call; the application/API route honors that same
+session decision before it constructs an annotator. It does not request
+unload/reload per chunk.
+The bounded resident snapshot and apartment may show only that selected
+session's manual Focus Mode is on or off. This presentation marker is
+session-ephemeral and has no task, process/window, budget, or enforcement
+detail; it cannot alter the mode or trigger a provider call.
+`provider-resource-eval` is the checked-in deterministic admission-policy
+fixture: four closed provider-free cases can be recorded to the experiment
+ledger as statuses/reasons only. It measures no real provider, host, routing,
+reservation, or enforced resource limit.
+`ProviderWorkloadGate` defaults to process-local exact-provider admission and
+may explicitly compose `ProviderProcessGate` for one same-checkout, same-OS-lock-
+domain capacity-one lease. Routed streams retain the lease through exhaustion
+or close. Assistant/API startup exposes an opt-in flag; the WSL contention and
+recovery smoke passed, while the default remains application-local pending
+native-Windows validation and an explicit rollout decision. No queue, host monitoring,
+throttling, process termination, provider-stop proof, Windows/WSL lock
+interoperability, preemption, or model lifecycle claim exists.

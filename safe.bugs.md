@@ -81,3 +81,18 @@ persisted mutation and an inspectable failure category.
 
 **Status:** Core fail-closed behavior passed. Preserve as a provider/model
 reliability case for latency, timeout, and portability evaluation.
+
+## Qwen exact-reply smoke exposed a `/think` suffix
+
+**Observed:** A live normal-chat recovery request asking for exactly `recovered`
+returned `recovered /think` after the cross-process provider-capacity smoke.
+
+**Expected:** Tasks that genuinely require an exact textual form need a bounded
+task/provider contract rather than relying on ordinary conversational
+instruction following. General response normalization must not blindly strip
+arbitrary user-visible text.
+
+**Impact:** Low for ordinary conversation and unrelated to provider admission;
+the recovery request completed and capacity was released correctly. Preserve
+this as a model-portability case for a future explicit reasoning/exact-response
+mode.
