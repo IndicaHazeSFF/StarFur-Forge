@@ -393,6 +393,13 @@ def main():
     resource_eval_parser.add_argument("--run-id", help="Optional reproducible benchmark run identifier")
     resource_eval_parser.add_argument("--git-commit", help="Optional source commit recorded with this benchmark run")
     resource_eval_parser.add_argument("--hardware-profile", help="Optional non-sensitive hardware profile label")
+    participant_eval_parser = subparsers.add_parser(
+        "adventure-participant-eval", help="Run provider-free participant lifecycle fixtures in temporary workspaces",
+    )
+    participant_eval_parser.add_argument("--record-ledger", metavar="PATH", help="Explicitly append aggregate fixture results to a local JSONL ledger")
+    participant_eval_parser.add_argument("--run-id", help="Optional reproducible benchmark run identifier")
+    participant_eval_parser.add_argument("--git-commit", help="Optional source commit recorded with this benchmark run")
+    participant_eval_parser.add_argument("--hardware-profile", help="Optional non-sensitive hardware profile label")
     annotation_eval_parser = subparsers.add_parser(
         "annotation-eval-record",
         help="Record one explicit, privacy-bounded external-document annotation observation",
@@ -795,6 +802,28 @@ def main():
             record = build_benchmark_result_record(manifest, result, run_id=args.run_id)
             append_benchmark_result(args.record_ledger, record)
             print(f"\nRecorded benchmark result: {record['record_id']} -> {args.record_ledger}")
+
+    elif args.command == "adventure-participant-eval":
+        from pipeline.adventure_participant_eval import (
+            BENCHMARK_VERSION, FIXTURE_FINGERPRINT, format_adventure_participant_result,
+            run_adventure_participant_benchmark,
+        )
+        result = run_adventure_participant_benchmark()
+        print(format_adventure_participant_result(result))
+        if args.record_ledger:
+            from pipeline.benchmark import BenchmarkModelProfile, BenchmarkRunManifest
+            from pipeline.experiment_ledger import append_benchmark_result, build_benchmark_result_record
+            manifest = BenchmarkRunManifest(
+                benchmark_id="adventure-participant-lifecycle-fixture",
+                workload="adventure-participant-lifecycle-fixture",
+                model_profile=BenchmarkModelProfile("internal", "fixture"),
+                architecture_fingerprint=f"{BENCHMARK_VERSION}:{FIXTURE_FINGERPRINT}",
+                git_commit=args.git_commit, run_id=args.run_id,
+                hardware={"profile": args.hardware_profile} if args.hardware_profile else {},
+            )
+            record = build_benchmark_result_record(manifest, result, run_id=args.run_id)
+            append_benchmark_result(args.record_ledger, record)
+            print(f"\nRecorded participant fixture result: {record['record_id']} -> {args.record_ledger}")
 
     elif args.command == "annotation-eval-record":
         from pipeline.benchmark import BenchmarkModelProfile, BenchmarkRunManifest

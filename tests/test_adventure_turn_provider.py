@@ -10,12 +10,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pipeline.adventure_registry import AdventureRegistry
 from pipeline.adventure_turn_generation import AdventureTurnGenerationRequest
 from pipeline.adventure_turn_mutation_generation import AdventureTurnMutationGenerationRequest
+from pipeline.providers import ChatCompletion, ChatProviderOutputLimitError
 from pipeline.adventure_turn_provider import (
     AdventureTurnProviderError,
     ChatAdventureTurnCandidateProvider,
     MAX_ADVENTURE_TURN_PROVIDER_RESPONSE_CHARACTERS,
     validate_adventure_turn_provider_result,
     ChatAdventureTurnMutationCandidateProvider,
+    CallableAdventureTurnCandidateProvider, CallableAdventureTurnMutationCandidateProvider,
     validate_adventure_turn_mutation_provider_result,
 )
 
@@ -57,6 +59,25 @@ class _CompletionOnlyProvider:
 
 
 class AdventureTurnProviderTests(unittest.TestCase):
+    def test_ordinary_and_mutation_adapters_reject_limited_typed_results_before_json(self):
+        for adapter, request in ((ChatAdventureTurnCandidateProvider, self._request()),
+                                 (ChatAdventureTurnMutationCandidateProvider, self._mutation_request())):
+            for content in ('{"schema_version":1,"candidates":[]}', 'not json', ''):
+                provider = _FakeChatProvider(ChatCompletion(content, "length"))
+                with self.assertRaises(AdventureTurnProviderError) as caught:
+                    adapter(provider).propose(request)
+                self.assertEqual("provider_output_limit", caught.exception.reason)
+                self.assertEqual(1, len(provider.calls))
+
+    def test_callback_limit_errors_preserve_reason_before_value_error_handling(self):
+        def limited(_messages):
+            raise ChatProviderOutputLimitError()
+        for adapter, request in ((CallableAdventureTurnCandidateProvider, self._request()),
+                                 (CallableAdventureTurnMutationCandidateProvider, self._mutation_request())):
+            with self.assertRaises(AdventureTurnProviderError) as caught:
+                adapter(limited).propose(request)
+            self.assertEqual("provider_output_limit", caught.exception.reason)
+
     def _request(self):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)

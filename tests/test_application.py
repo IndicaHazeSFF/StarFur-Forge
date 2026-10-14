@@ -748,6 +748,67 @@ class AssistantApplicationTests(unittest.TestCase):
         self.assertIsNone(session.stream_writer)
         self.assertEqual(app.active_model, "fake:latest")
 
+    def test_mixed_paste_is_rejected_at_facade_even_for_legacy_sessions(self):
+        session = FakeSession()
+        app = AssistantApplication(session)
+        chunks = []
+        for trusted in (False, True):
+            for text in ("hello\ncontext stats", "tool grant TI-example\ntool approve TI-example", "focus mode on\nhello"):
+                result = app.respond_completion(
+                    text, trusted_local_control=trusted, stream_writer=chunks.append,
+                    external_document_context=object(),
+                )
+                self.assertIn("No command or model request was run", result.content)
+                self.assertEqual("stop", result.finish_reason)
+        self.assertEqual([], session.calls)
+        self.assertEqual([], session.messages)
+        self.assertEqual([], chunks)
+        self.assertFalse(session.stream)
+        self.assertIsNone(session.stream_writer)
+        self.assertIn("No local tool requests", app.respond("tool list", trusted_local_control=True))
+
+    def test_explicit_context_diagnostics_bypass_legacy_generation(self):
+        session = FakeSession()
+        app = AssistantApplication(session)
+        for text in ("context stats", "show context stats", "what are my current context stats?"):
+            self.assertEqual("stats", app.respond(text, external_document_context=object()))
+        self.assertEqual([], session.calls)
+        session.context_stats = None
+        self.assertEqual("Context diagnostics are unavailable for this session.", app.respond("show context stats"))
+        self.assertEqual([], session.calls)
+
+    def test_mixed_tool_controls_do_not_consume_or_revoke_existing_authority(self):
+        session = FakeSession()
+        app = AssistantApplication(session)
+        created = app.respond(
+            'tool propose sandbox.run {"task_kind":"python_tests","objective":"inert fixture",'
+            '"files":[{"path":"main.py","content":"pass"}]}', trusted_local_control=True,
+        )
+        request_id = re.search(r"TI-[A-Za-z0-9_-]+", created).group(0)
+        app.respond(f"tool grant {request_id}", trusted_local_control=True)
+        app.respond(f"tool approve {request_id}", trusted_local_control=True)
+        before = app.respond(f"tool status {request_id}", trusted_local_control=True)
+        self.assertIn("[approved]", before)
+
+        for text in (f"tool revoke {request_id}\nhello", f"tool execute {request_id}\ncontext stats"):
+            self.assertIn("No command or model request was run", app.respond(text, trusted_local_control=True))
+            self.assertEqual(before, app.respond(f"tool status {request_id}", trusted_local_control=True))
+        self.assertEqual([], session.calls)
+
+    def test_multiline_prose_and_quoted_examples_reach_the_session_unchanged(self):
+        session = FakeSession()
+        app = AssistantApplication(session)
+        for text in ("Hello\nHow was your day?", "Explain:\n```\ncontext stats\n```"):
+            self.assertEqual("answer", app.respond(text))
+            self.assertEqual(text, session.calls[-1][0])
+
+    def test_pending_confirmation_stays_session_owned_for_diagnostic_requests(self):
+        session = FakeSession()
+        session._pending_bulk_proposal_ids = [77]
+        app = AssistantApplication(session)
+        self.assertEqual("answer", app.respond("show context stats"))
+        self.assertEqual([("show context stats", False)], session.calls)
+
     def test_request_scoped_streaming_is_restored_after_response(self):
         session = FakeSession()
         app = AssistantApplication(session)
@@ -759,6 +820,38 @@ class AssistantApplicationTests(unittest.TestCase):
         self.assertEqual(session.calls, [("stream", True)])
         self.assertFalse(session.stream)
         self.assertIsNone(session.stream_writer)
+
+    def test_response_metadata_is_bound_to_its_own_request(self):
+        class CompletingSession(FakeSession):
+            def respond(self, text):
+                self.active_model = text
+                self.last_chat_finish_reason = "length" if text == "first-model" else "stop"
+                return text
+
+        session = CompletingSession()
+        app = AssistantApplication(session)
+        first = app.respond_completion("first-model")
+        second = app.respond_completion("second-model")
+
+        self.assertEqual(("first-model", "first-model", "length"),
+                         (first.content, first.model, first.finish_reason))
+        self.assertEqual(("second-model", "second-model", "stop"),
+                         (second.content, second.model, second.finish_reason))
+        self.assertFalse(session.stream)
+        self.assertIsNone(session.stream_writer)
+
+    def test_passive_completion_diagnostics_allowlist_only_closed_reasons(self):
+        session = FakeSession()
+        app = AssistantApplication(session)
+        for reason in ("stop", "length", "unknown", "private/provider/detail", {"private": "payload"}):
+            session.last_turn_diagnostics = {
+                "turn_status": "output_limited", "completed": False, "finish_reason": reason,
+            }
+            result = app.runtime_diagnostics()["latest_turn"]
+            self.assertEqual(reason if isinstance(reason, str) and reason in {"stop", "length", "unknown"} else None,
+                             result["finish_reason"])
+            self.assertNotIn("private", repr(result))
+        self.assertEqual([], session.calls)
 
     def test_request_scoped_streaming_is_restored_after_error(self):
         session = FailingSession()

@@ -73,6 +73,17 @@ def detect_command_help(query: str) -> CommandHelp | None:
         )
 
     if _contains_any(value, (
+        "how do i inspect participant context", "how can i inspect participant context",
+        "how do i check participant context", "how can i check participant context",
+    )):
+        return CommandHelp(
+            intent="adventure_participant_context",
+            title="To inspect a mounted participant's bounded context usage, use:",
+            commands=("adventure participants", "adventure participant context <participant-id>"),
+            notes=("Read-only counts and view character size only; no provider, memory, history, or selection-policy change. This is not a full-request token measurement.",),
+        )
+
+    if _contains_any(value, (
         "how do i use participant actions", "how can i use participant actions",
         "how do i make murr suggest", "how can murr suggest",
         "how do i generate a participant action", "how can i generate a participant action",
@@ -84,6 +95,7 @@ def detect_command_help(query: str) -> CommandHelp | None:
             commands=(
                 "adventure participants",
                 "adventure participant inspect <participant-id>",
+                "adventure participant context <participant-id>",
                 "adventure turn begin",
                 "adventure participant action generate <participant-id> <trigger>: <completed user-turn text>",
                 "adventure participant actions",
@@ -135,7 +147,10 @@ def detect_command_help(query: str) -> CommandHelp | None:
             intent="context_diagnostics",
             title="To view read-only diagnostics for the most recent completed turn, use:",
             commands=("context stats",),
-            notes=("This command does not call a model or change memories, proposals, SQLite, or Chroma.",),
+            notes=(
+                "Send it as a separate message. `show context stats` and `show me context diagnostics` also return the real read-only snapshot, not a model-written report.",
+                "This command does not call a model or change memories, proposals, SQLite, or Chroma.",
+            ),
         )
 
     if _contains_any(value, (
@@ -224,6 +239,18 @@ def detect_command_help(query: str) -> CommandHelp | None:
                 "resident action clear",
             ),
             notes=("This is restart-ephemeral presentation state only. It does not start work, call a provider, or change memory.",),
+        )
+    if _contains_any(value, (
+        "how do i turn on focus mode", "how can i turn on focus mode",
+        "how do i enable focus mode", "how can i enable focus mode",
+        "how do i pause background work", "how can i pause background work",
+        "how do i game without lag", "how can i game without lag",
+    )):
+        return CommandHelp(
+            intent="focus_mode",
+            title="To temporarily defer background provider work, use:",
+            commands=("focus mode on", "focus mode status", "focus mode off"),
+            notes=("Focus Mode is session-local and manual. It does not inspect applications, change system priority, unload models, or block explicit interactive chat.",),
         )
     if _contains_any(value, ("how do i switch persona", "how can i switch persona", "how do i change persona", "how can i change persona", "how do i list personas", "how can i list personas", "how do i select a persona", "how can i select a persona")):
         return CommandHelp(

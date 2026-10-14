@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 import re
 from typing import Any, Mapping
 
+from pipeline.provider_resource_policy import RESOURCE_PROFILE_IDS
+
 
 TASK_ASSISTANT_CHAT = "assistant_chat"
 TASK_ASSISTANT_PROPOSAL = "assistant_proposal"
@@ -79,6 +81,10 @@ class TaskProfile:
     context_size: int | None = None
     max_output_tokens: int | None = None
     fallback_task: str | None = None
+    resource_profile: str | None = None
+    max_concurrent_requests: int | None = None
+    model_keep_alive_seconds: int | None = None
+    model_thinking: bool | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "task_id", normalize_task_id(self.task_id))
@@ -96,6 +102,24 @@ class TaskProfile:
             object.__setattr__(self, "fallback_task", normalize_task_id(self.fallback_task))
             if self.fallback_task == self.task_id:
                 raise ValueError("Task profile cannot fall back to itself.")
+        if self.resource_profile is not None and self.resource_profile not in RESOURCE_PROFILE_IDS:
+            raise ValueError("Task profile resource_profile is invalid.")
+        if self.max_concurrent_requests is not None:
+            if (
+                isinstance(self.max_concurrent_requests, bool)
+                or not isinstance(self.max_concurrent_requests, int)
+                or not 1 <= self.max_concurrent_requests <= 64
+            ):
+                raise ValueError("Task profile max_concurrent_requests must be an integer from 1 through 64.")
+        if self.model_keep_alive_seconds is not None:
+            if (
+                isinstance(self.model_keep_alive_seconds, bool)
+                or not isinstance(self.model_keep_alive_seconds, int)
+                or not 0 <= self.model_keep_alive_seconds <= 86_400
+            ):
+                raise ValueError("Task profile model_keep_alive_seconds must be an integer from 0 through 86400.")
+        if self.model_thinking is not None and not isinstance(self.model_thinking, bool):
+            raise ValueError("Task profile model_thinking must be a boolean when supplied.")
         object.__setattr__(self, "generation_options", validate_generation_options(self.generation_options))
 
     def resolved(self, *, default_model: str, base_options: Mapping[str, int | float] | None = None) -> "ResolvedTaskProfile":
@@ -111,6 +135,10 @@ class TaskProfile:
             model=self.model or default_model,
             options=options,
             fallback_task=self.fallback_task,
+            resource_profile=self.resource_profile,
+            max_concurrent_requests=self.max_concurrent_requests,
+            model_keep_alive_seconds=self.model_keep_alive_seconds,
+            model_thinking=self.model_thinking,
         )
 
     def public_dict(self) -> dict[str, Any]:
@@ -122,6 +150,10 @@ class TaskProfile:
             "context_size": self.context_size,
             "max_output_tokens": self.max_output_tokens,
             "fallback_task": self.fallback_task,
+            "resource_profile": self.resource_profile,
+            "max_concurrent_requests": self.max_concurrent_requests,
+            "model_keep_alive_seconds": self.model_keep_alive_seconds,
+            "model_thinking": self.model_thinking,
         }
 
 
@@ -132,6 +164,10 @@ class ResolvedTaskProfile:
     model: str
     options: Mapping[str, int | float]
     fallback_task: str | None = None
+    resource_profile: str | None = None
+    max_concurrent_requests: int | None = None
+    model_keep_alive_seconds: int | None = None
+    model_thinking: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -158,7 +194,9 @@ class TaskProfiles:
         task_id = normalize_task_id(task_id)
         profile = self.profiles.get(task_id)
         if profile is None:
-            return ResolvedTaskProfile(task_id, None, default_model, dict(base_options or {}))
+            return ResolvedTaskProfile(
+                task_id, None, default_model, dict(base_options or {}), None, None, None, None,
+            )
         return profile.resolved(default_model=default_model, base_options=base_options)
 
     def public_dict(self) -> dict[str, dict[str, Any]]:
@@ -172,7 +210,7 @@ def load_task_profiles(value: Any) -> TaskProfiles:
     if not isinstance(value, Mapping):
         raise ValueError("task_profiles must be a JSON object.")
     profiles: dict[str, TaskProfile] = {}
-    allowed = {"provider", "model", "generation_options", "context_size", "max_output_tokens", "fallback_task"}
+    allowed = {"provider", "model", "generation_options", "context_size", "max_output_tokens", "fallback_task", "resource_profile", "max_concurrent_requests", "model_keep_alive_seconds", "model_thinking"}
     for raw_task_id, raw_profile in value.items():
         task_id = normalize_task_id(raw_task_id)
         if not isinstance(raw_profile, Mapping):

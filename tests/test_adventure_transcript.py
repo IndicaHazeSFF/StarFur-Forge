@@ -84,6 +84,21 @@ class AdventureTranscriptTests(unittest.TestCase):
             self.assertFalse((workspace / "events.jsonl").exists())
             self.assertFalse((workspace / "manifest.json").read_text(encoding="utf-8").find("transcript") >= 0)
 
+    def test_append_many_writes_one_validated_presentation_pair_or_nothing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            _registry, _record, log = self._log(directory)
+
+            pair = log.append_many((
+                ("user", "I offer Murr the brass key."),
+                ("narrator", "Murr suggests checking its teeth first."),
+            ))
+            self.assertEqual(("AT-000001", "AT-000002"), tuple(item.record_id for item in pair))
+            self.assertEqual(["user", "narrator"], [item.role for item in log.records()])
+
+            with self.assertRaisesRegex(AdventureTranscriptError, "role is unsupported"):
+                log.append_many((("user", "This must not persist."), ("assistant", "Bad role.")))
+            self.assertEqual(2, len(log.records()))
+
     def test_invalid_transcript_fails_closed_and_live_lock_blocks_writer(self):
         with tempfile.TemporaryDirectory() as directory:
             registry, record, first = self._log(directory)

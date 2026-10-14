@@ -10,6 +10,7 @@ from pipeline.task_execution import RoutedChatExecutor, RoutedTaskExecutionError
 from pipeline.task_profiles import TaskProfile, TaskProfiles
 from pipeline.task_routing import ProviderRouteRegistry, ProviderRouteStatus, TaskRoutePlanner
 from pipeline.provider_workload_gate import ProviderWorkloadGate
+from pipeline.providers import ChatCompletion, ChatProviderOutputLimitError
 
 
 class FakeChatProvider:
@@ -121,6 +122,48 @@ class TaskExecutionTests(unittest.TestCase):
         self.assertEqual("provider_request_failed", captured.exception.reason)
         self.assertEqual(1, len(provider.calls))
 
+    def test_explicit_thinking_is_forwarded_on_exact_text_and_structured_routes(self):
+        class ThinkingProvider(FakeChatProvider):
+            supports_model_thinking = True
+            def complete(self, messages, **kwargs):
+                self.calls.append(kwargs)
+                return self.response
+            def complete_structured(self, messages, **kwargs):
+                self.calls.append(kwargs)
+                return self.response
+
+        provider = ThinkingProvider()
+        executor, _ = self._executor(provider=provider)
+        for enabled in (False, True):
+            planner = TaskRoutePlanner(
+                TaskProfiles({"assistant_chat": TaskProfile("assistant_chat", provider="local", model_thinking=enabled)}),
+                ProviderRouteRegistry({"local": ProviderRouteStatus("local", "available")}),
+            )
+            decision = planner.plan("assistant_chat", default_model="model", default_provider_id="local")
+            executor.execute_planned(decision, ())
+            executor.execute_structured_planned(decision, (), schema={"type": "object"})
+            self.assertIs(enabled, provider.calls[-1]["thinking"])
+            self.assertIs(enabled, provider.calls[-2]["thinking"])
+            self.assertNotIn("think", provider.calls[-1].get("options") or {})
+
+    def test_unsupported_thinking_fails_before_capacity_or_provider_use(self):
+        gate = ProviderWorkloadGate({"local": 1})
+        executor, provider = self._executor(workload_gate=gate)
+        planner = TaskRoutePlanner(
+            TaskProfiles({"assistant_chat": TaskProfile("assistant_chat", provider="local", model_thinking=False)}),
+            ProviderRouteRegistry({"local": ProviderRouteStatus("local", "available")}),
+        )
+        decision = planner.plan("assistant_chat", default_model="model", default_provider_id="local")
+        for structured in (False, True):
+            with self.assertRaises(RoutedTaskExecutionError) as error:
+                if structured:
+                    executor.execute_structured_planned(decision, (), schema={"type": "object"})
+                else:
+                    executor.execute_planned(decision, ())
+            self.assertEqual("provider_thinking_control_unavailable", error.exception.reason)
+            self.assertEqual([], provider.calls)
+            self.assertEqual(0, gate.active_count("local"))
+
     def test_shared_workload_gate_defers_before_provider_call_and_releases_after_failure(self):
         gate = ProviderWorkloadGate({"local": 1})
         held = gate.try_acquire("local", 1)
@@ -197,6 +240,29 @@ class TaskExecutionTests(unittest.TestCase):
         with self.assertRaises(RoutedTaskExecutionError) as caught:
             executor.execute_structured_planned(decision, (), schema={"type": "object"})
         self.assertEqual("provider_capability_unavailable", caught.exception.reason)
+
+    def test_structured_output_limit_is_typed_and_releases_capacity_without_retry(self):
+        for raised in (False, True):
+            with self.subTest(raised=raised):
+                gate = ProviderWorkloadGate({"local": 1})
+                provider = FakeChatProvider(
+                    response=ChatCompletion('{"answer":"complete-looking"}', "length"),
+                    error=ChatProviderOutputLimitError() if raised else None,
+                )
+                executor, _ = self._executor(provider=provider, workload_gate=gate)
+                decision = executor.plan("assistant_chat", default_model="fallback", default_provider_id="local")
+                with self.assertRaises(RoutedTaskExecutionError) as caught:
+                    executor.execute_structured_planned(decision, (), schema={"type": "object"})
+                self.assertEqual("provider_output_limit", caught.exception.reason)
+                self.assertNotIn("complete-looking", str(caught.exception))
+                self.assertEqual(1, len(provider.calls))
+                self.assertEqual(0, gate.active_count("local"))
+                provider.error = None
+                provider.response = ChatCompletion("{}", "stop")
+                self.assertEqual(ChatCompletion("{}", "stop"), executor.execute_structured_planned(
+                    decision, (), schema={"type": "object"},
+                ).response)
+                self.assertEqual(0, gate.active_count("local"))
 
 
 if __name__ == "__main__":

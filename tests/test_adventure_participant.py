@@ -19,10 +19,98 @@ from pipeline.adventure_session import AdventureSessionState
 
 
 class AdventureParticipantViewTests(unittest.TestCase):
+    def test_context_usage_is_counts_only_and_measures_the_existing_render(self):
+        record = self._record()
+        participant = AdventureParticipant("vespera", "Vespera", "npc",
+            f"adventure:{record.adventure_id}:participant:vespera",
+            AdventureParticipantMemoryPolicy(max_context_facts=2, max_knowledge_facts=3))
+        view = AdventureParticipantView(record.adventure_id, participant, 10,
+            ("Private fixture event prose.",),
+            (AdventureRelationshipFact("Vespera", "trust", "cautious", "AE-000002"),),
+            (AdventureKnowledgeFact("Vespera", "believes", "Private fixture belief.", "AE-000003"),),
+            (AdventureResourceFact("fuel", "Fuel", "integer", 20, "public", "AE-000004"),))
+        usage = view.context_usage()
+        self.assertEqual({
+            "selected_events": 1, "event_limit": 2,
+            "selected_relationships": 1, "relationship_limit": 16,
+            "selected_knowledge": 1, "knowledge_limit": 3,
+            "selected_public_resources": 1, "public_resource_limit": 16,
+            "selected_fact_count": 4, "rendered_characters": len(view.render()),
+            "character_limit": 12000,
+            "character_budget_omissions": 0,
+        }, usage)
+        self.assertTrue(all(type(value) is int for value in usage.values()))
+        usage["selected_events"] = 99
+        self.assertEqual(1, view.context_usage()["selected_events"])
+
+    def test_context_usage_preserves_disabled_events_and_render_limit_denial(self):
+        record = self._record()
+        participant = AdventureParticipant("murr", "Murr", "persona",
+            f"adventure:{record.adventure_id}:participant:murr",
+            AdventureParticipantMemoryPolicy(retain_salient_events=False))
+        view = AdventureParticipantView.from_session(AdventureSessionState(record=record), participant)
+        self.assertEqual(0, view.context_usage()["event_limit"])
+        self.assertEqual(0, view.context_usage()["selected_fact_count"])
+        excessive = AdventureParticipantView(record.adventure_id, participant, 1,
+            ("x" * 12001,), (), (), ())
+        with self.assertRaises(AdventureInitiativeError):
+            excessive.context_usage()
+
     def _record(self):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         return AdventureRegistry(directory.name, now=lambda: datetime(2026, 8, 27, tzinfo=UTC)).create("Quiet Ember")
+
+    def test_character_selection_skips_a_whole_large_resource_then_keeps_later_facts(self):
+        record = self._record()
+        participant = AdventureParticipant("murr", "Murr", "persona",
+            f"adventure:{record.adventure_id}:participant:murr")
+        inventory = tuple((f"item_{index:04d}_" + "x" * 49, 1) for index in range(200))
+        large = AdventureResourceFact("cargo", "Cargo", "inventory", inventory, "public", "AE-000001")
+        small = AdventureResourceFact("hatch", "Hatch", "flag", True, "public", "AE-000002")
+        hidden = AdventureResourceFact("secret", "Secret", "inventory", inventory, "hidden", "AE-000003")
+        session = AdventureSessionState(record=record, event_count=3,
+            resource_facts=(large, small, hidden), context_resource_facts=(large, small, hidden))
+        view = AdventureParticipantView.from_session(session, participant)
+        self.assertEqual((small,), view.public_resources)
+        self.assertEqual(1, view.context_usage()["character_budget_omissions"])
+        self.assertLessEqual(len(view.render()), 12000)
+        self.assertNotIn("item_", view.render())
+        self.assertEqual((large, small, hidden), session.resource_facts)
+        self.assertEqual(view, AdventureParticipantView.from_session(session, participant))
+
+    def test_character_selection_preserves_category_order_and_whole_perspective_facts(self):
+        record = self._record()
+        participant = AdventureParticipant("murr", "Murr", "persona",
+            f"adventure:{record.adventure_id}:participant:murr")
+        events = tuple(AdventureEvent(index + 1, f"AE-{index + 1:06d}", "discovery",
+            str(index) + "e" * 499, None, "2026-08-27T00:00:00+00:00") for index in range(8))
+        relationships = tuple(AdventureRelationshipFact("Murr", f"dimension_{index}", "r" * 160,
+            f"AE-{index + 9:06d}") for index in range(12))
+        knowledge = tuple(AdventureKnowledgeFact("Murr", "believes", f"{index:02d}" + "k" * 498,
+            f"AE-{index + 21:06d}") for index in range(12))
+        resource = AdventureResourceFact("cargo", "Cargo", "inventory",
+            tuple(("item_" + str(index) + "x" * 40, 1) for index in range(40)), "public", "AE-000033")
+        session = AdventureSessionState(record=record, event_count=33, context_events=events,
+            context_relationship_facts=relationships, relationship_facts=relationships,
+            context_knowledge_facts=knowledge, knowledge_facts=knowledge,
+            context_resource_facts=(resource,), resource_facts=(resource,))
+        view = AdventureParticipantView.from_session(session, participant)
+        self.assertEqual(tuple(event.summary for event in events), view.events)
+        self.assertEqual(relationships, view.relationships)
+        self.assertTrue(all(fact in knowledge for fact in view.knowledge))
+        self.assertLessEqual(len(view.render()), 12000)
+        self.assertGreater(view.context_usage()["character_budget_omissions"], 0)
+        self.assertEqual(knowledge, session.knowledge_facts)
+        self.assertEqual(view, AdventureParticipantView.from_session(session, participant))
+
+    def test_omission_count_rejects_boolean_negative_and_unbounded_values(self):
+        record = self._record()
+        participant = AdventureParticipant("murr", "Murr", "persona",
+            f"adventure:{record.adventure_id}:participant:murr")
+        for count in (True, -1, 113, "1"):
+            with self.subTest(count=count), self.assertRaises(AdventureInitiativeError):
+                AdventureParticipantView(record.adventure_id, participant, 0, (), (), (), (), count)
 
     def test_view_exposes_only_participant_relevant_public_context(self):
         record = self._record()
@@ -56,11 +144,20 @@ class AdventureParticipantViewTests(unittest.TestCase):
         self.assertEqual((vespera_relationship,), view.relationships)
         self.assertEqual((vespera_knowledge,), view.knowledge)
         self.assertEqual((fuel,), view.public_resources)
+        self.assertEqual(AdventureParticipantView(record.adventure_id, participant, 7,
+            (event.summary,), (vespera_relationship,), (vespera_knowledge,), (fuel,)), view)
+        self.assertEqual(0, view.character_budget_omissions)
         self.assertIn("trust: cautious", rendered)
         self.assertIn("believes: the hatch is trapped", rendered)
         self.assertNotIn("Rook", rendered)
         self.assertNotIn("primary_slot", rendered)
         self.assertNotIn("captain token", rendered)
+        usage = view.context_usage()
+        self.assertEqual(1, usage["selected_events"])
+        self.assertEqual(1, usage["selected_relationships"])
+        self.assertEqual(1, usage["selected_knowledge"])
+        self.assertEqual(1, usage["selected_public_resources"])
+        self.assertEqual(4, usage["selected_fact_count"])
 
     def test_view_rejects_unmounted_or_cross_adventure_participant_namespace(self):
         record = self._record()

@@ -4,12 +4,22 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from pipeline.providers import ChatCompletion
+from pipeline.providers import ChatCompletion, ChatProviderOutputLimitError
 from pipeline.research_disclosure import ResearchProviderTarget
 from pipeline.research_provider import LocalResearchClaimProvider, LocalResearchRelationshipProvider
 
 
 class ResearchProviderTests(unittest.TestCase):
+    def test_both_local_adapters_reject_complete_looking_limited_output(self):
+        target = ResearchProviderTarget.create("ollama", "qwen3:8b", "local")
+        for adapter, method in ((LocalResearchClaimProvider, "propose_claims"),
+                                (LocalResearchRelationshipProvider, "propose_relationships")):
+            calls = []
+            provider = adapter(target, lambda *_args: calls.append(1) or ChatCompletion("{}", "length"))
+            with self.assertRaises(ChatProviderOutputLimitError):
+                getattr(provider, method)(({}, {}), model=target.model, schema={"type": "object"})
+            self.assertEqual([1], calls)
+
     def test_exact_local_target_returns_only_normalized_text(self):
         calls = []
         target = ResearchProviderTarget.create("ollama", "qwen3:8b", "local")

@@ -27,6 +27,9 @@ from pipeline.assistant import (
     load_persona, load_policy,
 )
 from pipeline.capabilities import CapabilityManifest, CapabilityRegistry, build_core_capability_registry
+from pipeline.command_input import (
+    MIXED_CONTROL_INPUT_GUIDANCE, has_ambiguous_multiline_controls, is_context_stats_request,
+)
 from pipeline.db import upsert_assistant_memory_proposal
 from pipeline.document_annotation import DocumentProposalAnnotator, FailoverDocumentProposalAnnotator
 from pipeline.document_intake import PreparedDocument, extract_document_memory_candidates_resilient
@@ -91,7 +94,25 @@ _ROUTE_TRACE_OUTCOMES = frozenset({
     "submitted", "completed", "route_unavailable", "provider_adapter_unavailable",
     "provider_capability_unavailable", "provider_request_failed",
     "provider_stream_failed", "provider_stream_cancelled", "provider_concurrency_busy",
+    "provider_thinking_control_unavailable", "provider_output_limit",
 })
+
+
+@dataclass(frozen=True)
+class AssistantResponse:
+    """One request's text/model and closed completion status, captured under its session lock."""
+
+    content: str
+    model: str
+    finish_reason: str | None
+
+    def __post_init__(self):
+        if not isinstance(self.content, str) or not isinstance(self.model, str):
+            raise TypeError("assistant response text and model must be strings")
+        if self.finish_reason is not None and (
+            not isinstance(self.finish_reason, str) or self.finish_reason not in {"stop", "length"}
+        ):
+            raise ValueError("assistant response finish reason is invalid")
 
 
 @dataclass
@@ -1362,21 +1383,44 @@ class AssistantApplication:
         trusted_local_control: bool = False,
     ):
         """Run one chat/command request through its bounded isolated session."""
+        return self.respond_completion(
+            user_text, stream_writer=stream_writer, conversation_id=conversation_id,
+            external_document_context=external_document_context, trusted_local_control=trusted_local_control,
+        ).content
+
+    def respond_completion(
+        self, user_text: str, *, stream_writer=None, conversation_id=None,
+        external_document_context=None, trusted_local_control: bool = False,
+    ) -> AssistantResponse:
+        """Capture response metadata atomically with the request that produced it."""
         if not isinstance(trusted_local_control, bool):
             raise TypeError("trusted_local_control must be a boolean")
         with self._locked_tool_slot_for(conversation_id) as slot:
             session = slot.session
+            session.last_chat_finish_reason = "stop"
             with self._streaming(session, stream_writer):
-                if self._is_tool_control_namespace(user_text):
+                if has_ambiguous_multiline_controls(user_text):
+                    content = MIXED_CONTROL_INPUT_GUIDANCE
+                elif is_context_stats_request(user_text) and getattr(session, "_pending_bulk_proposal_ids", None) is None:
+                    reader = getattr(session, "context_stats", None)
+                    content = reader() if callable(reader) else "Context diagnostics are unavailable for this session."
+                elif self._is_tool_control_namespace(user_text):
                     if not trusted_local_control:
-                        return (
+                        content = (
                             "Tool controls are unavailable through shared chat/API requests. "
                             "Use the trusted local Assistant CLI."
                         )
-                    return self._local_tool_control(slot, user_text)
-                if external_document_context is None:
-                    return session.respond(user_text)
-                return session.respond(user_text, external_document_context=external_document_context)
+                    else:
+                        content = self._local_tool_control(slot, user_text)
+                elif external_document_context is None:
+                    content = session.respond(user_text)
+                else:
+                    content = session.respond(user_text, external_document_context=external_document_context)
+                reason = getattr(session, "last_chat_finish_reason", None)
+                return AssistantResponse(
+                    content or "", self._active_model_for_session(session),
+                    reason if isinstance(reason, str) and reason in {"stop", "length"} else None,
+                )
 
     def domain_for(self, conversation_id=None) -> str:
         """Return the selected session domain without treating it as client input."""
@@ -1533,6 +1577,7 @@ class AssistantApplication:
                     profile.model,
                     options=profile.options,
                     max_output_tokens=profile.options.get("num_predict", 1024),
+                    model_thinking=profile.model_thinking,
                 )
                 if profile.fallback_task is None:
                     annotator = primary
@@ -1557,6 +1602,7 @@ class AssistantApplication:
                             fallback_profile.model,
                             options=fallback_profile.options,
                             max_output_tokens=fallback_profile.options.get("num_predict", 1024),
+                            model_thinking=fallback_profile.model_thinking,
                         ),
                     )
                     max_attempts = annotator.max_attempts
@@ -1672,9 +1718,11 @@ class AssistantApplication:
             phase_timings = dict(snapshot.get("phase_timings") or {})
             latest_turn = None
             if snapshot:
+                reason = snapshot.get("finish_reason")
                 latest_turn = {
                     "status": snapshot.get("turn_status", "unknown"),
                     "completed": bool(snapshot.get("completed")),
+                    "finish_reason": reason if isinstance(reason, str) and reason in {"stop", "length", "unknown"} else None,
                     "model": snapshot.get("model", self._active_model_for_session(session)),
                     "provider": snapshot.get("provider", provider_name or "unknown"),
                     "response_characters": snapshot.get("response_characters", 0),
@@ -1869,6 +1917,7 @@ def create_assistant_application(
 
 __all__ = [
     "AssistantApplication",
+    "AssistantResponse",
     "ConversationNotFoundError",
     "DEFAULT_CONVERSATION_ID",
     "DEFAULT_MAX_CONVERSATIONS",

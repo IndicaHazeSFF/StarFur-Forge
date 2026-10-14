@@ -2,6 +2,33 @@
 
 Temporary operator reference while StarFur Forge is under development.
 
+## Provider-free regression checks
+
+Run full discovery from the repository root with an explicit top level:
+
+    python -m unittest discover -s tests -t . -v
+
+For a focused subset:
+
+    python -m unittest discover -s tests -t . -p "test_adventure_*.py" -q
+
+The `tests.*` package identity prevents collisions with root-level manual
+scripts. Do not use the old full-discovery form without `-t .`. Both manual
+`test_chunker.py` scripts retain explicit inspection behavior but do no corpus
+work when imported. Actual chunker unit coverage lives in
+`tests/test_chunker_regression.py`. No Ollama/Chroma service or API key is needed;
+tests use injected fakes and temporary state, including test-owned reset/restore
+fixtures. Do not run real factory-reset/restore commands for this smoke.
+
+Known native-Windows follow-up: the temporary restore test reproduces a file
+replacement denial in `factory_restore`. It is not skipped or claimed fixed.
+Intermittent API-test errors, including an HTTP connection reset, were observed
+across native full runs; their cause is not diagnosed or claimed fixed. Report
+any recurrence. Full discovery now reaches these tests rather than
+stopping at the import collision.
+A focused API rerun also reproduced a timeout reading the fixed Murr PNG
+response. Its cause remains open; this slice does not alter the asset or transport.
+
 Run commands from:
 
     ~/StarFur-Forge
@@ -636,6 +663,48 @@ Closing the response requests cancellation but is not proof that the provider st
 check system/provider activity if resource use continues. Press Ctrl+C while waiting at
 the input prompt to exit cleanly.
 
+Ctrl+C during non-streaming memory-proposal extraction or its repair also returns
+to the prompt. If the visible reply already completed, the CLI says
+`Memory proposal generation interrupted. Completed reply kept.` The completed
+recent-history pair stays; the interrupted proposal is not persisted or retried.
+`context stats` records the completed chat and interrupted proposal separately.
+Local capacity cleanup is not proof that Ollama stopped processing.
+
+### Offline repair of the inspected Action Smoke registration
+
+Only for the known Action Smoke orphan with its existing manifest/transcript and
+no event log. Stop all StarFur assistant/server writers first; this helper is not
+concurrent registry recovery and does not stop or inspect processes itself.
+From the repository root, preview without writing:
+
+```bash
+python3 scripts/restore_action_smoke.py --root adventures
+```
+
+Only after a successful preview, explicitly apply:
+
+```bash
+python3 scripts/restore_action_smoke.py --root adventures --apply
+```
+
+Apply validates exact identity, declared roster/resources, transcript sequence,
+and existing registry records; linked inputs, unexpected workspace files,
+conflicting identities, and detected input changes fail closed. It backs up the
+original registry plus existing manifest/transcript and the optional regular
+`.transcript.write.lock` file into a private directory
+under `adventures/_registration_backups/`, prints that location, and atomically
+replaces only the registry with one added entry. Other records and story files
+are preserved; a repeated successful repair is a no-op. Retain backups if an
+error occurs. No automatic repair, new adventure, provider call, Core command,
+event, memory, or general-purpose recovery endpoint is introduced.
+
+The normal transcript lock file is preserved, backed up, and rechecked without
+acquiring, deleting, or rewriting it. Its presence is not proof of an active
+writer; stopping all StarFur writers remains a separate required step.
+
+Copy only the pending source/docs manifest between checkouts; do not overwrite
+WSL `adventures/` or `data/` with another checkout's runtime state.
+
 ## Assistant Memory Review
 
 Start interactive Assistant Mode:
@@ -710,6 +779,7 @@ Prepare or inspect isolated CYOA workspace metadata with exact Core commands:
     adventure correct knowledge <AE-######> <character> <knows|believes|uncertain>: <fact>
     adventure participants
     adventure participant inspect <participant-id>
+    adventure participant context <participant-id>
     adventure participant action generate <participant-id> <trigger>: <completed user-turn text>
     adventure participant actions
     adventure participant action generation status
@@ -869,11 +939,46 @@ bounded event-backed perspective from the mounted adventure projections. A
 participant is not an autonomous agent or a full assistant-memory instance:
 persona and participant IDs are context labels, never permissions, and these
 read-only controls cannot call a provider, schedule action, or create memories.
+
+`adventure participant context <participant-id>` reports only selected shared
+event, relationship, knowledge, and public-resource counts plus the rendered
+view's character count. The displayed ceilings apply per category; the existing
+`max_context_facts` policy limits shared event selection, not every category
+combined. These are not model tokens or the full request budget. The report
+contains no fact bodies, participant identities, namespace, or event references.
+Whole facts are additionally fitted to the unchanged 12,000-character view
+ceiling. Selection preserves existing category order (shared events,
+relationships, knowledge, public resources) and item order. A fact that does
+not fit is skipped intact; later smaller facts may still be selected. Views
+already within the ceiling render identically. `Whole facts omitted for
+character budget` counts only size omissions after subject/visibility filtering
+and category caps, not hidden facts or full-history omissions. No canonical
+fact is changed, summarized, or cut into partial text. This is not importance
+ranking, full-request token budgeting, or a CPU/GPU guarantee.
+Inspection uses the mounted snapshot without reading full history; run `adventure
+refresh` separately to reload changes written elsewhere. Neither command grants
+participant initiative, and usage inspection leaves pending/staged work intact.
+
 `adventure participant action generate <participant-id> <trigger>: <completed
 user-turn text>` is an explicit, model-backed request for untrusted `TP-###`
+action candidates. The model receives a versioned JSON data frame, not a
+delimiter-based source block. Quotes, newlines, and command-shaped text stay
+inside one untrusted turn value. UTF-8 validation and a 64,000-byte serialized
+source-frame ceiling run before provider use; violations report `input_invalid`
+with no candidate/state write or automatic retry. The existing turn/view and
+profile limits remain unchanged. This is data framing, not prompt-injection
+immunity, permission, or a full-prompt token/resource budget.
+
+The request proposes only untrusted
 action candidates for one roster participant. It requires an active staged
 adventure turn plus that participant's declared, eligible policy. `adventure
-participant actions` reopens only the session-local review output, while
+participant actions` reopens only the session-local review output. Each candidate
+summary appears as JSON-quoted/escaped `Proposed wording (untrusted)` beneath
+its ID/action label. Even wording such as "Murr takes the key" is an untrusted
+proposal, not a Core assertion of a completed action. Generation guidance asks
+for proposed-next-step wording, but the parser does not guess grammar, rewrite
+the summary, or change the declared action kind.
+
 `adventure participant action generation status` reports bounded completed,
 failed, or stale status without provider output. A candidate is not an action:
 it cannot stage an event, create a transcript/memory, or run autonomously, and
@@ -1365,6 +1470,21 @@ Adventure-turn benchmark results use the same opt-in ledger and keep the pipelin
 
 `python starfur.py adventure-turn-eval` runs the deterministic C3 orchestration fixture suite in temporary adventure workspaces. It tests valid candidate review/stage/commit, explicit no-change output, invalid envelopes, and stale-origin rejection without invoking a model or touching an installed adventure. Add `--record-ledger <path>` to retain the bounded outcome record.
 
+### Participant lifecycle regression benchmark
+
+    python starfur.py adventure-participant-eval
+    python starfur.py adventure-participant-eval --record-ledger /tmp/starfur-participant-smoke.jsonl --run-id participant-smoke-001
+
+This runs seven `adventure-participant-lifecycle-v1` fixtures through real session
+commands in temporary workspaces, using synthetic responses only. Cases cover
+review-only and no-action output, once-only user/narrator transcript pairs,
+pacing, interruption/capacity recovery, stale origin, and malformed envelopes.
+Each run repeats the suite to measure determinism. No API server, key, Ollama,
+Chroma, production memory, or installed adventure is accessed. The optional
+ledger record contains closed labels/counts and an internal fixture manifest;
+`--git-commit` and `--hardware-profile` may add explicit run metadata. It is not
+a live-model quality or verified-stop benchmark. Default runs append nothing.
+
 ### Task/provider profiles
 
 Set the top-level `provider_mode` in `config/assistant.json` to `"ollama"`
@@ -1385,10 +1505,73 @@ extraction. The stock balanced adventure profiles likewise request `512`
 tokens for ordinary-event candidates and `256` for typed mutation/resource
 candidates. These are conservative local defaults for foreground usability;
 users may adjust an explicit profile value within the validated configuration
-bounds. Normal chat retains more output headroom because a reasoning-capable
-local model may consume part of the provider output budget before producing
-visible response text; the narrower structured and proposal tasks remain at
-their smaller ceilings.
+bounds. Earlier live replies cut off at both tested normal-chat ceilings;
+the contribution of reasoning versus visible output was not measured. The
+narrower structured and proposal tasks remain at their smaller ceilings.
+
+A profile may additionally set `"model_thinking": false` or `true`. Omission
+or `null` preserves the provider default. This is separate from `options`:
+the Ollama adapter forwards it as top-level `think`, only after declaring
+support for that control. Other adapters without that declaration fail before
+provider use. An installed model/server may still reject the request; there is
+no implicit retry or fallback. The stock `assistant_chat` profile sets it to
+`false`; the stock `adventure_participant_action_generation` profile also
+requests `false`, retaining its 4096 context, 256 output, and `keep_alive=0`.
+Other structured workloads retain their configured/provider defaults. The
+installed participant default passed its focused WSL compatibility smoke with
+both review-only and valid no-action output. This is not a speed, quality,
+resource-enforcement, or verified-stop guarantee for other models/servers.
+Named reasoning levels are not supported by this initial boolean
+contract. See the [Ollama chat API](https://docs.ollama.com/api/chat).
+
+`routing status` includes `thinking=off`/`on` for an explicitly configured
+profile without probing a provider. After normal chat, `context stats` reports
+the bounded finish reason: `stop`, `length`, `unknown`, or `not_reported`.
+When the provider reports `length`, the local CLI adds a separate output-limit
+notice, the turn is `output_limited`, and memory-proposal extraction is skipped.
+Partial answer text remains visible conversation history, but StarFur never
+continues or increases the budget automatically. JSON and SSE chat responses
+report `finish_reason: "length"`; a missing/unknown provider reason becomes
+`null`, not an invented `stop`. Core-owned deterministic controls report `stop`.
+Ollama schema-constrained results and document annotation reject a reported
+output limit even when the text looks like complete JSON. No thinking text or
+raw provider metadata is exposed by these contracts.
+
+Adventure ordinary/typed/resource/participant generation status and trusted
+local research failures distinguish a reported structured output limit as
+`provider_output_limit`. Such a result is rejected before JSON/task validation,
+even when it looks complete: no candidate, transcript, event, research review,
+memory, or learning record is published. This is separate from malformed output
+and a transport failure. There is no automatic retry, continuation, budget
+increase, or fallback; local capacity is released, which is not verified proof
+that a remote provider stopped. Legacy unreported completion status retains the
+existing strict task-validation path rather than an invented natural stop.
+
+### Pasted commands and real context diagnostics
+
+Send each Core command as its own message. A single multiline message containing
+an unquoted command-shaped line is rejected in full with guidance before any
+command, retrieval, model call, or document extension runs. StarFur does not
+automatically split or execute a pasted batch. This includes multiline control
+payloads: use a single-line control request. Ordinary multiline prose remains
+supported; quote command examples or use fenced code blocks to discuss them.
+Some terminals deliver pasted lines as separate `input()` requests rather than
+one multiline message; each separately delivered request still runs normally.
+
+`context stats` returns the existing bounded Core snapshot. Whole-message
+read-only aliases are `show context stats`, `show me context stats`,
+`display context stats`, `show context diagnostics`, `show me context diagnostics`,
+`display context diagnostics`, `show current context stats`, `show my context stats`,
+`what are my context stats`, `what are my current context stats`, and
+`what are the current context stats` (case-insensitive, optional trailing `?`).
+They call no model and report explicitly when no snapshot is available. A valid
+request other than exact `approve all` still cancels an outstanding bulk
+confirmation; an ambiguous multiline request is rejected before that flow and
+does not consume or clear confirmation.
+
+Model-written statistics in ordinary chat or quoted examples are not actual
+Core diagnostics. This boundary prevents explicit controls from becoming model
+prompts; it does not claim to verify or filter arbitrary generated prose.
 
 Document annotation has its own bounded content-validation policy: the configured `document_annotation` profile may receive two attempts for a chunk, then an explicitly configured `document_annotation_fallback` profile may receive one attempt only when the primary output remained invalid. The current stock configuration uses Qwen3 8B alone for all three bounded attempts. It is classified as `background`, so manual Focus Mode defers a new annotation request before any model call; it does not unload between chunks. Phi-4 Mini remains an explicit benchmark/experimental model rather than an automatic intake fallback, because the first public quality runs produced schema-valid empty output with zero expected-fact recall. A valid empty proposal list ends the sequence normally. Annotation results expose only model labels, bounded attempt counts, and whether fallback ran; no provider output is retained. Both paths remain review-only and create no memory until the existing explicit review/approval flow.
 

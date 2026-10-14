@@ -86,11 +86,25 @@ class TaskProfileTests(unittest.TestCase):
         )
         self.assertEqual(8192, chat.options["num_ctx"])
         self.assertEqual(1024, chat.options["num_predict"])
+        self.assertIs(False, chat.model_thinking)
         self.assertEqual(4096, proposal.options["num_ctx"])
         self.assertEqual(256, proposal.options["num_predict"])
         self.assertEqual(512, turn.options["num_predict"])
         self.assertEqual(256, mutation.options["num_predict"])
         self.assertEqual(256, resource.options["num_predict"])
+
+    def test_stock_participant_thinking_request_does_not_raise_its_budget_or_change_other_tasks(self):
+        config = load_config(Path(__file__).resolve().parents[1] / "config" / "assistant.json")
+        participant = config.task_profiles.resolve(
+            "adventure_participant_action_generation", default_model=config.chat_model,
+        )
+        self.assertIs(False, participant.model_thinking)
+        self.assertEqual({"num_ctx": 4096, "num_predict": 256}, dict(participant.options))
+        self.assertEqual(0, participant.model_keep_alive_seconds)
+        for task_id in (TASK_ADVENTURE_TURN_GENERATION, TASK_ADVENTURE_TURN_MUTATION_GENERATION,
+                        TASK_ADVENTURE_TURN_RESOURCE_GENERATION, TASK_RESEARCH_CLAIM_GENERATION,
+                        TASK_RESEARCH_RELATIONSHIP_GENERATION, TASK_DOCUMENT_ANNOTATION):
+            self.assertIsNone(config.task_profiles.resolve(task_id, default_model=config.chat_model).model_thinking)
 
     def test_config_parses_validated_profiles_without_changing_legacy_fields(self):
         payload = {
@@ -101,6 +115,7 @@ class TaskProfileTests(unittest.TestCase):
                     "generation_options": {"temperature": 0.2}, "context_size": 4096,
                     "resource_profile": "interactive", "max_concurrent_requests": 2,
                     "model_keep_alive_seconds": 0,
+                    "model_thinking": False,
                 },
                 "vision": {"provider": "future-vision", "fallback_task": "assistant_chat"},
             },
@@ -115,6 +130,7 @@ class TaskProfileTests(unittest.TestCase):
         self.assertEqual("interactive", profile.resource_profile)
         self.assertEqual(2, profile.max_concurrent_requests)
         self.assertEqual(0, profile.model_keep_alive_seconds)
+        self.assertIs(False, profile.model_thinking)
         self.assertEqual(config.chat_model, "profile-model")
 
     def test_invalid_profile_configuration_is_rejected(self):
@@ -130,6 +146,16 @@ class TaskProfileTests(unittest.TestCase):
             load_task_profiles({"assistant_chat": {"max_concurrent_requests": 0}})
         with self.assertRaisesRegex(ValueError, "model_keep_alive_seconds"):
             load_task_profiles({"assistant_chat": {"model_keep_alive_seconds": -1}})
+        for invalid in (0, 1, "false", "high", [], {}):
+            with self.assertRaisesRegex(ValueError, "model_thinking"):
+                load_task_profiles({"assistant_chat": {"model_thinking": invalid}})
+
+    def test_thinking_preview_is_passive_and_omission_preserves_provider_default(self):
+        profiles = load_task_profiles({"assistant_chat": {"model_thinking": False}})
+        session = AssistantSession(config_with_profiles(profiles), "Persona", provider=FakeProvider(), memory_loader=lambda **_kwargs: [], policy="Policy")
+        self.assertIn("thinking=off", session.command("routing status"))
+        self.assertEqual([], session.provider.calls)
+        self.assertIsNone(TaskProfiles().resolve("assistant_chat", default_model="legacy").model_thinking)
 
     def test_provider_mode_is_validated_and_disabled_mode_never_routes_generation(self):
         with tempfile.TemporaryDirectory() as directory:

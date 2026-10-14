@@ -23,9 +23,10 @@ from pipeline.adventure_participant_action import (
 from pipeline.adventure_participant_action_generation import (
     AdventureParticipantActionGenerationError,
     AdventureParticipantActionGenerationRequest,
+    AdventureParticipantActionInputError,
 )
 from pipeline.adventure_session import AdventureSessionState
-from pipeline.providers import normalize_chat_completion
+from pipeline.providers import ChatProviderOutputLimitError, normalize_structured_chat_completion
 
 
 class AdventureParticipantActionCoordinatorError(RuntimeError):
@@ -57,8 +58,12 @@ class CallableAdventureParticipantActionCandidateProvider:
             raise TypeError("participant action generation request is invalid")
         try:
             response = self._complete(request.messages())
-            content = response if isinstance(response, str) else normalize_chat_completion(response).content
+            content = response if isinstance(response, str) else normalize_structured_chat_completion(response).content
             return json.loads(content)
+        except ChatProviderOutputLimitError as error:
+            raise AdventureParticipantActionCoordinatorError(reason="provider_output_limit") from error
+        except AdventureParticipantActionInputError as error:
+            raise AdventureParticipantActionCoordinatorError(reason="input_invalid") from error
         except (TypeError, ValueError, json.JSONDecodeError) as error:
             raise AdventureParticipantActionCoordinatorError(reason="response_not_json") from error
         except AdventureParticipantActionCoordinatorError:
@@ -115,6 +120,7 @@ class AdventureParticipantActionCoordinator:
                 turns_since_last_action=turns_since_last_action,
                 actions_this_turn=actions_this_turn,
             )
+            request.messages()  # Validate source framing/bytes before any injected provider seam.
             parsed = parse_untrusted_participant_action_candidates(self._provider.propose(request))
             governed = bind_participant_action_candidates(
                 parsed,
@@ -126,6 +132,8 @@ class AdventureParticipantActionCoordinator:
             )
         except AdventureParticipantActionCoordinatorError:
             raise
+        except AdventureParticipantActionInputError as error:
+            raise AdventureParticipantActionCoordinatorError(reason="input_invalid") from error
         except AdventureParticipantActionGenerationError as error:
             raise AdventureParticipantActionCoordinatorError(reason="policy_ineligible") from error
         except AdventureParticipantActionCandidateError as error:

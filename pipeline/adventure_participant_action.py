@@ -11,6 +11,7 @@ initiative decision before an explicit review surface can expose it.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from typing import Mapping
 
 from pipeline.adventure_initiative import (
@@ -205,7 +206,8 @@ def render_participant_action_candidate_batch(batch: AdventureParticipantActionC
         lines.append("(none; no participant action was proposed)")
     for candidate in batch.candidates:
         lines.extend((
-            f"{candidate.candidate_id} {candidate.participant_id} [{candidate.action}] {candidate.summary}",
+            f"{candidate.candidate_id} {candidate.participant_id} [{candidate.action}]",
+            f"  Proposed wording (untrusted): {json.dumps(candidate.summary)}",
             f"  Model-declared confidence (advisory): {candidate.confidence:.2f}",
         ))
     lines.append(

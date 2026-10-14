@@ -2,9 +2,11 @@ import tempfile
 import unittest
 from pathlib import Path
 import sys
+import types
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.modules.setdefault("ollama", types.ModuleType("ollama"))
 
 from pipeline.benchmark import BenchmarkModelProfile, BenchmarkRunManifest
 from pipeline.experiment_ledger import (
@@ -96,7 +98,81 @@ def sample_task_routing_result():
     }
 
 
+def sample_provider_resource_admission_result():
+    return {
+        "benchmark_version": "provider-resource-admission-v1", "repeatability": True,
+        "resource_admission_pass_rate": 1.0,
+        "results": [{
+            "name": "balanced_yields_to_foreground", "kind": "provider_resource_admission",
+            "expected_status": "deferred", "actual_status": "deferred",
+            "expected_reasons": ["foreground_busy"],
+            "actual_reasons": ["foreground_busy"], "pass": True,
+        }],
+    }
+
+
 class ExperimentLedgerTests(unittest.TestCase):
+    def test_participant_lifecycle_results_round_trip_as_counts_only(self):
+        from pipeline.adventure_participant_eval import run_adventure_participant_benchmark
+        result = run_adventure_participant_benchmark()
+        record = build_benchmark_result_record(sample_manifest(), result)
+        self.assertEqual("passed", record["outcome"]["status"])
+        self.assertEqual(1.0, record["metrics"]["participant_lifecycle_pass_rate"])
+        self.assertEqual(7, len(record["cases"]))
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ledger.jsonl"
+            append_benchmark_result(path, record)
+            self.assertEqual(record["cases"], load_benchmark_results(path)[0]["cases"])
+            self.assertNotIn("Synthetic", path.read_text())
+
+    def test_participant_lifecycle_rejects_content_invalid_counts_and_forged_pass(self):
+        from copy import deepcopy
+        from pipeline.adventure_participant_eval import run_adventure_participant_benchmark
+        baseline = run_adventure_participant_benchmark()
+        for field, value in (("prompt", "private"), ("name", "private fixture text"),
+                ("actual_outcome", "private outcome"), ("actual_candidates", True),
+                ("actual_provider_calls", 17), ("invariants_preserved", "yes"), ("actual_events", 1),
+                ("name", []), ("expected_outcome", {})):
+            with self.subTest(field=field):
+                result = deepcopy(baseline)
+                result["results"][0][field] = value
+                with self.assertRaises(ValueError):
+                    build_benchmark_result_record(sample_manifest(), result)
+
+        failed = deepcopy(baseline)
+        failed["results"][0].update(actual_events=1, **{"pass": False})
+        self.assertEqual("failed", build_benchmark_result_record(sample_manifest(), failed)["outcome"]["status"])
+        for value in (float("nan"), float("inf"), -1, 2, True):
+            with self.subTest(rate=value):
+                result = deepcopy(baseline)
+                result["participant_lifecycle_pass_rate"] = value
+                with self.assertRaises(ValueError):
+                    build_benchmark_result_record(sample_manifest(), result)
+
+    def test_participant_record_is_revalidated_before_any_append(self):
+        from copy import deepcopy
+        from pipeline.adventure_participant_eval import run_adventure_participant_benchmark
+        baseline = build_benchmark_result_record(sample_manifest(), run_adventure_participant_benchmark())
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "never-created.jsonl"
+            for field, value in (("prompt", "private"), ("actual_events", 1)):
+                record = deepcopy(baseline)
+                record["cases"][0][field] = value
+                with self.assertRaises(ValueError):
+                    append_benchmark_result(path, record)
+                self.assertFalse(path.exists())
+
+    def test_provider_resource_admission_records_closed_policy_outcomes_only(self):
+        record = build_benchmark_result_record(sample_manifest(), sample_provider_resource_admission_result())
+        self.assertEqual(record["metrics"]["resource_admission_pass_rate"], 1.0)
+        self.assertEqual(record["cases"][0]["actual_reasons"], ["foreground_busy"])
+        self.assertNotIn("backend", record["cases"][0])
+
+    def test_provider_resource_admission_rejects_unbounded_reason_labels(self):
+        result = sample_provider_resource_admission_result()
+        result["results"][0]["actual_reasons"] = ["host_gpu_busy"]
+        with self.assertRaises(ValueError):
+            build_benchmark_result_record(sample_manifest(), result)
     def test_record_is_append_only_and_omits_query_content(self):
         record = build_benchmark_result_record(sample_manifest(), sample_result(), run_id="smoke-1")
         self.assertEqual(record["schema_version"], EXPERIMENT_LEDGER_SCHEMA_VERSION)

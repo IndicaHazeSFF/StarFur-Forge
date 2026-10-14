@@ -37,7 +37,7 @@
   "debug_level": "off",
   "ollama_options": {},
   "task_profiles": {
-    "assistant_chat": {"context_size": 8192, "max_output_tokens": 1024, "resource_profile": "interactive"},
+    "assistant_chat": {"context_size": 8192, "max_output_tokens": 1024, "resource_profile": "interactive", "model_thinking": false},
     "assistant_proposal": {"context_size": 4096, "max_output_tokens": 256, "resource_profile": "interactive"},
     "document_annotation": {
       "model": "qwen3:8b",
@@ -53,7 +53,8 @@
         "context_size": 4096,
         "max_output_tokens": 256,
         "resource_profile": "interactive",
-        "model_keep_alive_seconds": 0
+        "model_keep_alive_seconds": 0,
+        "model_thinking": false
       }
   },
   "policy_path": "config/assistant_policy.md"

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from pipeline.providers import normalize_chat_completion
+from pipeline.providers import normalize_structured_chat_completion
 from pipeline.research_disclosure import ResearchProviderTarget
 
 
@@ -47,7 +47,7 @@ class LocalResearchClaimProvider:
         if not isinstance(schema, dict) or not schema:
             raise TypeError("research response schema is invalid")
         response = self._completion(messages, model, schema)
-        return normalize_chat_completion(response).content
+        return normalize_structured_chat_completion(response).content
 
 
 class LocalResearchRelationshipProvider(LocalResearchClaimProvider):

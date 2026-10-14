@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
+from pipeline.providers import ChatProviderOutputLimitError
+
 from pipeline.research_disclosure import ResearchProviderTarget
 from pipeline.research_relationship_disclosure import ResearchRelationshipDisclosureDecision
 from pipeline.research_relationship_prompt import build_research_relationship_messages
@@ -49,6 +51,7 @@ class ResearchRelationshipCoordinatorError(RuntimeError):
             "disclosure_denied",
             "provider_unavailable",
             "provider_failed",
+            "provider_output_limit",
             "response_invalid",
         }:
             raise ValueError("research relationship coordinator failure reason is invalid")
@@ -124,6 +127,8 @@ class ResearchRelationshipCoordinator:
                 model=target.model,
                 schema=research_claim_relationship_json_schema(review),
             )
+        except ChatProviderOutputLimitError as error:
+            raise ResearchRelationshipCoordinatorError("provider_output_limit") from error
         except Exception as error:
             raise ResearchRelationshipCoordinatorError("provider_failed") from error
         try:

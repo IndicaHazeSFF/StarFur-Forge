@@ -15,6 +15,20 @@ from pipeline.adventure_initiative import AdventureParticipant, AdventurePartici
 
 
 class AdventureParticipantActionCandidateTests(unittest.TestCase):
+    def test_action_like_wording_is_quoted_as_untrusted_proposal_without_rewriting(self):
+        summary = 'Murr takes the brass key. "Completed," she says.'
+        batch = parse_untrusted_participant_action_candidates({"schema_version": 1,
+            "candidates": [{"participant_id": "murr", "action": "suggest",
+                "summary": summary, "confidence": 0.9}]})
+        rendered = render_participant_action_candidate_batch(batch)
+        self.assertIn("TP-001 murr [suggest]\n", rendered)
+        self.assertIn('Proposed wording (untrusted): "Murr takes the brass key.', rendered)
+        self.assertIn('\\"Completed,\\"', rendered)
+        self.assertEqual(summary, batch.candidates[0].summary)
+        self.assertEqual("suggest", batch.candidates[0].action)
+        self.assertEqual(rendered, render_participant_action_candidate_batch(batch))
+        self.assertIn("not performed or staged", rendered)
+
     def test_closed_candidate_batch_is_noncanonical_and_rendered_for_review(self):
         batch = parse_untrusted_participant_action_candidates({
             "schema_version": 1,

@@ -10,6 +10,16 @@ from pipeline.command_help import detect_command_help
 
 
 class CommandHelpTests(unittest.TestCase):
+    def test_participant_context_help_returns_exact_passive_control(self):
+        for question in ("How do I inspect participant context?", "How can I check participant context?"):
+            with self.subTest(question=question):
+                payload = detect_command_help(question)
+                self.assertEqual("adventure_participant_context", payload.intent)
+                self.assertEqual(("adventure participants", "adventure participant context <participant-id>"), payload.commands)
+                self.assertIn("not a full-request token measurement", payload.render())
+        self.assertIn("adventure participant context <participant-id>",
+            detect_command_help("How do I use participant actions?").commands)
+
     def test_proposal_help_is_exact_and_id_aware(self):
         payload = detect_command_help("How do I view new memory proposals? And how do I approve proposals?")
         self.assertEqual(payload.intent, "proposal_review")
@@ -25,6 +35,8 @@ class CommandHelpTests(unittest.TestCase):
         payload = detect_command_help("How do I show context diagnostics?")
         self.assertEqual(payload.intent, "context_diagnostics")
         self.assertIn("context stats", payload.render())
+        self.assertIn("separate message", payload.render())
+        self.assertIn("not a model-written report", payload.render())
 
     def test_model_help_returns_real_model_commands(self):
         payload = detect_command_help("How do I select a model?")
@@ -131,7 +143,15 @@ class CommandHelpTests(unittest.TestCase):
         self.assertIn("resident status", rendered)
         self.assertIn("resident action <idle|resting|reading|working|waiting|chatting|adventuring>", rendered)
         self.assertIn("resident action clear", rendered)
-        self.assertIn("does not start work", rendered)
+
+    def test_focus_mode_help_is_exact_and_provider_free(self):
+        payload = detect_command_help("How do I turn on focus mode?")
+        self.assertIsNotNone(payload)
+        self.assertEqual("focus_mode", payload.intent)
+        rendered = payload.render()
+        self.assertIn("focus mode on", rendered)
+        self.assertIn("focus mode off", rendered)
+        self.assertIn("does not inspect applications", rendered)
 
     def test_persona_asset_help_exposes_only_the_read_only_command(self):
         payload = detect_command_help("How do I inspect persona assets?")

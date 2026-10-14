@@ -18,7 +18,7 @@ from pipeline.persona_assets import PersonaAssetManifest
 
 from pipeline.adventure_events import AdventureEventLog
 from pipeline.adventure_registry import AdventureRegistry
-from pipeline.assistant import AssistantSession
+from pipeline.assistant import AssistantSession, ProviderCapacityBusyError
 from pipeline.api import APARTMENT_DASHBOARD_PATH, API_MODEL_ID, CONVERSATION_HEADER, DOCUMENT_ADVENTURE_IMPORT_PATH, DOCUMENT_ANNOTATE_PATH, DOCUMENT_CONTEXT_PATH, DOCUMENT_PREPARE_PATH, DOCUMENT_REVIEW_PATH, DOCUMENT_REVIEWS_PATH, MURR_IDLE_ASSET_PATH, PERSONA_RUNTIME_PATH, RESIDENT_SNAPSHOT_PATH, StarFurAPI, StarFurHTTPServer
 
 
@@ -180,6 +180,51 @@ class APITests(unittest.TestCase):
         self.assertIn("unavailable through shared chat/API", payload["choices"][0]["message"]["content"])
         self.assertEqual([], self.session.calls)
 
+    def test_focus_namespace_preempts_stale_document_context_extension(self):
+        status, raw = self.request("POST", "/v1/chat/completions", {
+            "model": API_MODEL_ID,
+            "messages": [{"role": "user", "content": "focus mode on"}],
+            "starfur_document_context": {
+                "review_id": "DR-" + "f" * 32,
+                "limit": 1,
+            },
+        })
+
+        self.assertEqual(200, status)
+        self.assertEqual("normal answer", json.loads(raw)["choices"][0]["message"]["content"])
+        self.assertEqual([None], self.session.document_contexts)
+
+    def test_mixed_paste_preempts_both_document_extensions_without_partial_work(self):
+        for stream in (False, True):
+            with patch.object(self.api, "document_review_command", side_effect=AssertionError("must not review")), patch.object(
+                self.api, "_chat_document_context", side_effect=AssertionError("must not retrieve"),
+            ):
+                status, raw = self.request("POST", "/v1/chat/completions", {
+                    "model": API_MODEL_ID, "stream": stream,
+                    "messages": [{"role": "user", "content": "Write a story.\ncontext stats"}],
+                    "starfur_document_review": {"action": "approve", "review_id": "invalid"},
+                    "starfur_document_context": {"review_id": "invalid"},
+                })
+            self.assertEqual(200, status)
+            self.assertIn(b"No command or model request was run", raw)
+            self.assertIn(b'"finish_reason": "stop"', raw)
+        self.assertEqual([], self.session.calls)
+        self.assertEqual([], self.proposal_writes)
+        self.assertEqual([], self.session.document_contexts)
+
+    def test_diagnostic_alias_preempts_stale_document_extensions(self):
+        self.session.context_stats = lambda: "actual Core snapshot"
+        status, raw = self.request("POST", "/v1/chat/completions", {
+            "model": API_MODEL_ID,
+            "messages": [{"role": "user", "content": "show me context diagnostics"}],
+            "starfur_document_review": {"action": "approve", "review_id": "invalid"},
+            "starfur_document_context": {"review_id": "invalid"},
+        })
+        self.assertEqual(200, status)
+        self.assertEqual("actual Core snapshot", json.loads(raw)["choices"][0]["message"]["content"])
+        self.assertEqual([], self.session.calls)
+        self.assertEqual([], self.proposal_writes)
+
     def test_diagnostics_provider_probe_is_explicit_and_non_generating(self):
         class Provider:
             name = "probe fake"
@@ -229,6 +274,9 @@ class APITests(unittest.TestCase):
         self.assertEqual(payload["sandbox_execution"]["reason"], "not_configured")
         self.assertEqual(payload["tool_activity"]["total_count"], 0)
         self.assertEqual(payload["tool_activity"]["pending_review_count"], 0)
+        self.assertEqual(payload["focus_mode"], {
+            "enabled": False, "storage": "session_ephemeral",
+        })
         self.assertNotIn("invocation_id", payload["tool_activity"])
         self.assertNotIn("messages", payload)
         self.assertEqual(self.session.calls, [])
@@ -258,6 +306,7 @@ class APITests(unittest.TestCase):
         self.assertIn("dataset.failed", page)
         self.assertIn("sandbox-execution", page)
         self.assertIn("tool-activity", page)
+        self.assertIn("focus-mode", page)
         self.assertNotIn("local-test", page)
         self.assertEqual(self.session.calls, [])
 
@@ -305,6 +354,55 @@ class APITests(unittest.TestCase):
         self.assertIn("data: [DONE]", text)
         self.assertEqual(self.session.calls, ["stream please"])
 
+    def test_output_limit_status_matches_json_and_sse_without_becoming_response_text(self):
+        def limited_response(text, **_kwargs):
+            self.session.last_chat_finish_reason = "length"
+            if self.session.stream and self.session.stream_writer:
+                self.session.stream_writer("partial")
+            return "partial"
+        self.session.respond = limited_response
+        for stream in (False, True):
+            status, raw = self.request("POST", "/v1/chat/completions", {
+                "model": API_MODEL_ID, "stream": stream,
+                "messages": [{"role": "user", "content": "a long answer"}],
+            })
+            self.assertEqual(200, status)
+            if stream:
+                frames = [json.loads(line[6:]) for line in raw.decode().splitlines() if line.startswith("data: {")]
+                self.assertEqual("length", frames[-1]["choices"][0]["finish_reason"])
+                self.assertEqual("partial", frames[0]["choices"][0]["delta"]["content"])
+            else:
+                self.assertEqual("length", json.loads(raw)["choices"][0]["finish_reason"])
+            self.assertNotIn(b"Response reached", raw)
+
+    def test_unknown_completion_status_is_nullable_and_cannot_leak_provider_labels(self):
+        def unknown_response(text, **_kwargs):
+            self.session.last_chat_finish_reason = "private/provider/detail"
+            return "answer"
+        self.session.respond = unknown_response
+        status, raw = self.request("POST", "/v1/chat/completions", {
+            "model": API_MODEL_ID, "messages": [{"role": "user", "content": "hello"}],
+        })
+        self.assertEqual(200, status)
+        self.assertIsNone(json.loads(raw)["choices"][0]["finish_reason"])
+        self.assertNotIn(b"private/provider/detail", raw)
+
+    def test_streaming_capacity_contention_is_typed_not_server_error(self):
+        def busy_complete(*args, **kwargs):
+            raise ProviderCapacityBusyError("selected provider capacity is currently busy")
+
+        self.api.complete = busy_complete
+        status, raw = self.request("POST", "/v1/chat/completions", {
+            "model": API_MODEL_ID, "stream": True,
+            "messages": [{"role": "user", "content": "hello"}],
+        })
+        text = raw.decode("utf-8")
+        self.assertEqual(status, 200)
+        self.assertIn('"type": "provider_capacity_busy"', text)
+        self.assertIn('"code": "provider_concurrency_busy"', text)
+        self.assertNotIn('"type": "server_error"', text)
+        self.assertIn("data: [DONE]", text)
+
     def test_auth_and_validation_errors_are_clear(self):
         status, raw = self.request("GET", "/health", auth=False)
         self.assertEqual(status, 401)
@@ -312,6 +410,35 @@ class APITests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn("non-empty list", json.loads(raw)["error"]["message"])
         self.assertEqual(self.session.calls, [])
+
+    def test_chat_returns_transient_capacity_error_without_server_error(self):
+        def busy_complete(*args, **kwargs):
+            raise ProviderCapacityBusyError("selected provider capacity is currently busy")
+
+        self.api.complete = busy_complete
+        status, raw = self.request("POST", "/v1/chat/completions", {
+            "model": API_MODEL_ID,
+            "messages": [{"role": "user", "content": "hello"}],
+        })
+        payload = json.loads(raw)
+        self.assertEqual(status, 503)
+        self.assertEqual(payload["error"]["type"], "provider_capacity_busy")
+        self.assertEqual(payload["error"]["code"], "provider_concurrency_busy")
+        self.assertNotEqual(payload["error"]["type"], "server_error")
+
+    def test_document_annotation_capacity_contention_is_typed_transient_error(self):
+        with patch.object(
+            self.application,
+            "annotate_document",
+            side_effect=ProviderCapacityBusyError("selected provider capacity is currently busy"),
+        ):
+            status, raw = self.request("POST", DOCUMENT_ANNOTATE_PATH, {
+                "filename": "notes.md", "content": "No durable facts.",
+            })
+        payload = json.loads(raw)
+        self.assertEqual(status, 503)
+        self.assertEqual(payload["error"]["type"], "provider_capacity_busy")
+        self.assertEqual(payload["error"]["code"], "provider_concurrency_busy")
 
     def test_chat_isolates_ephemeral_sessions_and_honors_header_priority(self):
         status, _ = self.request("POST", "/v1/chat/completions", {
@@ -850,6 +977,33 @@ class AdventureAPITests(unittest.TestCase):
         self.assertIn("Created adventure workspace: Document-Safe Lantern", content)
         self.assertEqual([], self.provider_calls)
         self.assertEqual([], self.session.messages)
+
+    def test_participant_context_usage_is_passive_and_preempts_document_extensions(self):
+        from pipeline.adventure_initiative import AdventureParticipant, AdventureParticipantRoster
+        self.chat("adventure create Context API Fixture")
+        record = self.session.adventure_registry.resolve_title("Context API Fixture")
+        self.session.adventure_registry.configure_participant_roster(record, AdventureParticipantRoster(
+            record.adventure_id, (AdventureParticipant("murr", "Murr", "persona",
+                f"adventure:{record.adventure_id}:participant:murr"),)))
+        self.chat("adventure load Context API Fixture")
+        self.chat("adventure turn begin")
+        self.chat("adventure turn stage discovery: Private staged fixture.")
+        before_turn = self.session.adventure_turn
+        with patch("pipeline.db.connect", side_effect=AssertionError("DB forbidden")), patch.object(
+            AdventureEventLog, "events", side_effect=AssertionError("full event read forbidden")
+        ):
+            content = self.chat("adventure participant context murr",
+                starfur_document_context={"review_id": "DR-" + "f" * 32, "limit": 1},
+                starfur_document_review={"action": "list"})
+        self.assertIn("Selected facts total: 0", content)
+        self.assertIn("Rendered view characters:", content)
+        self.assertNotIn("Private", content)
+        self.assertNotIn(record.adventure_id, content)
+        self.assertIs(before_turn, self.session.adventure_turn)
+        self.assertEqual(1, len(before_turn.drafts))
+        self.assertEqual([], self.provider_calls)
+        self.assertEqual([], self.session.messages)
+        self.assertEqual([], self.session.proposals)
 
     def test_stale_document_extensions_do_not_override_non_adventure_core_controls(self):
         extensions = {

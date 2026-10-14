@@ -8,6 +8,7 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from pipeline.research_coordinator import ResearchClaimCoordinator, ResearchCoordinatorError
+from pipeline.providers import ChatProviderOutputLimitError
 from pipeline.research_disclosure import (
     ResearchDisclosureIntent,
     ResearchProviderTarget,
@@ -52,6 +53,14 @@ class _Provider:
 
 
 class ResearchCoordinatorTests(unittest.TestCase):
+    def test_reported_output_limit_stays_distinct_and_nonpublishing(self):
+        packet, target, decision = inputs()
+        provider = _Provider(error=ChatProviderOutputLimitError())
+        with self.assertRaises(ResearchCoordinatorError) as caught:
+            ResearchClaimCoordinator(provider).propose(packet, target, decision)
+        self.assertEqual("provider_output_limit", caught.exception.reason)
+        self.assertEqual(1, len(provider.calls))
+
     def test_valid_cited_claim_is_nonpublishing_result(self):
         packet, target, decision = inputs()
         provider = _Provider(json.dumps({

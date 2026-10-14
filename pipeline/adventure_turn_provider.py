@@ -23,7 +23,10 @@ from pipeline.adventure_turn_mutation_candidates import (
 )
 from pipeline.adventure_turn_mutation_generation import AdventureTurnMutationGenerationRequest
 from pipeline.adventure_turn_resource_generation import AdventureTurnResourceGenerationRequest
-from pipeline.providers import ChatCompletionProvider, ChatProviderResponseError, normalize_chat_completion
+from pipeline.providers import (
+    ChatCompletionProvider, ChatProviderResponseError, ChatProviderOutputLimitError,
+    normalize_structured_chat_completion,
+)
 
 
 MAX_ADVENTURE_TURN_PROVIDER_RESPONSE_CHARACTERS = 16_000
@@ -83,6 +86,8 @@ class CallableAdventureTurnCandidateProvider:
             return _parse_json_content(content)
         except AdventureTurnProviderError:
             raise
+        except ChatProviderOutputLimitError as error:
+            raise AdventureTurnProviderError("adventure-turn output limit", reason="provider_output_limit") from error
         except (TypeError, ValueError, json.JSONDecodeError) as error:
             raise AdventureTurnProviderError(
                 "adventure-turn provider response was not strict JSON", reason="response_not_json",
@@ -107,6 +112,8 @@ class CallableAdventureTurnMutationCandidateProvider:
             return _parse_json_content(_response_content(response))
         except AdventureTurnProviderError:
             raise
+        except ChatProviderOutputLimitError as error:
+            raise AdventureTurnProviderError("adventure-turn output limit", reason="provider_output_limit") from error
         except (TypeError, ValueError, json.JSONDecodeError) as error:
             raise AdventureTurnProviderError(
                 "adventure-turn mutation provider response was not strict JSON", reason="response_not_json",
@@ -132,6 +139,8 @@ class CallableAdventureTurnResourceCandidateProvider:
             return _parse_json_content(_response_content(self._complete(request.messages())))
         except AdventureTurnProviderError:
             raise
+        except ChatProviderOutputLimitError as error:
+            raise AdventureTurnProviderError("adventure-turn output limit", reason="provider_output_limit") from error
         except (TypeError, ValueError, json.JSONDecodeError) as error:
             raise AdventureTurnProviderError(
                 "adventure-turn resource provider response was not strict JSON", reason="response_not_json",
@@ -187,6 +196,8 @@ class ChatAdventureTurnCandidateProvider:
             response = self._provider.complete(
                 request.messages(), model=self._model, options=self._options, stream=False,
             )
+        except ChatProviderOutputLimitError as error:
+            raise AdventureTurnProviderError("adventure-turn output limit", reason="provider_output_limit") from error
         except Exception as error:
             raise AdventureTurnProviderError("adventure-turn provider request failed", reason="provider_request_failed") from error
         content = _response_content(response)
@@ -222,6 +233,8 @@ class ChatAdventureTurnMutationCandidateProvider:
             response = self._provider.complete(
                 request.messages(), model=self._model, options=self._options, stream=False,
             )
+        except ChatProviderOutputLimitError as error:
+            raise AdventureTurnProviderError("adventure-turn output limit", reason="provider_output_limit") from error
         except Exception as error:
             raise AdventureTurnProviderError(
                 "adventure-turn mutation provider request failed", reason="provider_request_failed",
@@ -236,7 +249,9 @@ class ChatAdventureTurnMutationCandidateProvider:
 
 def _response_content(response: object) -> str:
     try:
-        content = normalize_chat_completion(response).content
+        content = normalize_structured_chat_completion(response).content
+    except ChatProviderOutputLimitError as error:
+        raise AdventureTurnProviderError("adventure-turn output limit", reason="provider_output_limit") from error
     except ChatProviderResponseError as error:
         raise AdventureTurnProviderError("adventure-turn provider response has no text content", reason="response_missing_content")
     if not content.strip():

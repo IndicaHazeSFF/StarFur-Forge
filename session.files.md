@@ -1,10 +1,263 @@
 # Pending copy manifest
 
-## Pipeline (56)
+## Latest slice copy set — test discovery boundary
+
+- `tests/__init__.py`
+- `tests/test_discovery_boundary.py`
+- `tests/test_chunker.py`
+- `test_chunker.py`
+- `tests/test_research_answer_binding.py`
+- `tests/test_research_answer_policy.py`
+- `tests/test_reset.py`
+- `AGENTS.md`
+- `ROADMAP.md`
+- `CHANGELOG.md`
+- `docs/COMMANDS.md`
+- `session.files.md`
+
+Copy this set only; preserve local configuration and runtime `adventures/` and
+`data/`. The preceding participant wording smoke passed. Use explicit `-t .`
+for full discovery: tests now have package identity, manual chunker imports
+perform no corpus inspection, and shared fixtures import through `tests.*`.
+Reset fixtures restore their temporary database setting even on failure.
+Native full discovery now reaches a reproducible Windows restore-file denial;
+it is not skipped or claimed fixed. Production database/reset behavior is
+unchanged. Next gate: WSL full-suite run with no API key or model generation.
+Do not run real factory-reset/restore commands or copy any runtime data.
+Three discovery-boundary tests passed. Native full discovery reached 1,132 tests
+but was not clean: Windows restore-file denial and an intermittent API-test error
+remain open. Do not interpret this copy set as a production fix for either.
+
+## Latest slice copy set — participant proposal wording
+
+- `pipeline/adventure_participant_action.py`
+- `pipeline/adventure_participant_action_generation.py`
+- `tests/test_adventure_participant_action.py`
+- `tests/test_adventure_participant_action_generation.py`
+- `tests/test_adventure_commands.py`
+- `AGENTS.md`
+- `ROADMAP.md`
+- `CHANGELOG.md`
+- `docs/COMMANDS.md`
+- `session.files.md`
+
+Copy this set only; preserve local configuration and runtime `adventures/` and
+`data/`. The preceding source-frame compatibility smoke passed with one candidate
+and no state writes. Its action-like wording was a quality issue. This slice adds
+proposal-style generation guidance and quotes/escapes original review wording
+under an untrusted label; no summary/action rewrite, grammar authority, schema,
+profile/budget change, retry, or write behavior was introduced. Next gate: one
+participant-generation/review smoke without recording or committing anything.
+That WSL wording gate passed; the newer discovery copy set above is current.
+Local verification: 404 focused tests passed; full discovery still stops at the
+pre-existing root/test-folder `test_chunker.py` import collision.
+
+## Latest slice copy set — participant source-data framing
+
+- `pipeline/adventure_participant_action_generation.py`
+- `pipeline/adventure_participant_action_coordinator.py`
+- `tests/test_adventure_participant_action_generation.py`
+- `tests/test_adventure_participant_action_coordinator.py`
+- `tests/test_adventure_commands.py`
+- `AGENTS.md`
+- `ROADMAP.md`
+- `CHANGELOG.md`
+- `docs/COMMANDS.md`
+- `session.files.md`
+
+Copy this set only; preserve local configuration and runtime `adventures/` and
+`data/`. The preceding whole-fact selection compatibility smoke passed with
+valid no-action output and unchanged state. This slice serializes participant
+sources as bounded untrusted JSON data, checks UTF-8/source bytes before provider
+use, and reports invalid source only as `input_invalid`. It changes no output
+schema, profile budget, authority, retry, canonical state, or memory behavior.
+That WSL source-frame compatibility gate passed on 2026-10-14 with one review-only
+candidate and unchanged state; the newer wording copy set above is current.
+Local verification: 402 focused tests passed; full discovery still stops at the
+pre-existing root/test-folder `test_chunker.py` import collision.
+
+## Latest slice copy set — whole-fact participant size selection
+
+- `pipeline/adventure_participant.py`
+- `pipeline/assistant.py`
+- `tests/test_adventure_participant.py`
+- `tests/test_adventure_participant_action_coordinator.py`
+- `tests/test_adventure_commands.py`
+- `AGENTS.md`
+- `ROADMAP.md`
+- `CHANGELOG.md`
+- `docs/COMMANDS.md`
+- `session.files.md`
+
+Copy this set only; preserve local configuration and runtime `adventures/` and
+`data/`. The preceding count-only context-control WSL smoke passed. The new
+selector omits whole already-filtered facts when needed to fit the unchanged
+view character ceiling; it preserves smaller views and all complete state.
+Context inspection adds only a bounded size-omission count. No persistence,
+provider/profile budget change, retry, or autonomous action was introduced.
+That compatibility gate passed on 2026-10-14 with valid no-action output and
+unchanged state. Oversized cases run in temporary unit fixtures, not installed adventures.
+Local verification: 398 focused tests passed. Full discovery remains blocked by
+the pre-existing root/test-folder `test_chunker.py` import collision.
+
+## Latest slice copy set — participant context usage
+
+- `pipeline/adventure_participant.py`
+- `pipeline/assistant.py`
+- `pipeline/command_help.py`
+- `tests/test_adventure_participant.py`
+- `tests/test_adventure_commands.py`
+- `tests/test_command_help.py`
+- `tests/test_api.py`
+- `AGENTS.md`
+- `ROADMAP.md`
+- `CHANGELOG.md`
+- `docs/COMMANDS.md`
+- `session.files.md`
+
+Copy this set only; do not copy runtime `adventures/` or `data/`, or replace local
+configuration. The preceding participant benchmark/ledger WSL smoke passed.
+The new exact control reports only category counts and view character size from
+mounted projections; no generation, refresh, event/transcript read, policy
+change, or state write occurs. Local focused verification passed 394 tests;
+full discovery remains blocked by the existing `test_chunker.py` import collision.
+That WSL control/help gate passed on 2026-10-14; the newer copy set above is current.
+
+## Latest slice copy set — participant lifecycle benchmark
+
+- `pipeline/adventure_participant_eval.py`
+- `pipeline/experiment_ledger.py`
+- `starfur.py`
+- `tests/test_adventure_participant_eval.py`
+- `tests/test_experiment_ledger.py`
+- `AGENTS.md`
+- `ROADMAP.md`
+- `CHANGELOG.md`
+- `docs/COMMANDS.md`
+- `session.files.md`
+
+Copy this set only; preserve local configuration and do not copy runtime
+`adventures/` or `data/`. The WSL registration-access, installed participant
+thinking-off, and proposal-phase cancellation/recovery checks passed. The helper
+reported an already-registered no-op; no replacement/backup creation is claimed.
+Earlier pending-smoke notes below are historical and superseded for these checks.
+The new seven-case benchmark uses synthetic responses and temporary workspaces;
+only explicit `--record-ledger` appends a bounded result. No key, API server,
+model load, actual story generation, or production-memory access is needed.
+That WSL CLI/ledger gate passed on 2026-10-12; the newer copy set above is current.
+Local verification: 367 focused adventure, ledger, provider, application, and
+API tests passed (including the new CLI path). Required full discovery remains
+blocked by the existing root/test-folder `test_chunker.py` import collision.
+
+## Latest correction copy set — persisted transcript lock compatibility
+
+- `scripts/restore_action_smoke.py`
+- `tests/test_action_smoke_registration_repair.py`
+- `AGENTS.md`
+- `CHANGELOG.md`
+- `docs/COMMANDS.md`
+- `session.files.md`
+
+The exact-case helper now accepts the normal optional regular
+`.transcript.write.lock` file and preserves, backs up, and rechecks its bytes.
+It neither claims that a writer is stopped nor removes/acquires the lock.
+Unexpected files, linked inputs, and detected changes remain refused. Stop all
+StarFur writers, rerun preview, and apply only after preview passes. Copy no
+runtime `adventures/` or `data/`; live repair verification remains pending.
+
+## Latest slice copy set — proposal cancellation and Action Smoke repair
 
 - `pipeline/assistant.py`
+- `tests/test_chat_provider.py`
+- `scripts/restore_action_smoke.py`
+- `tests/test_action_smoke_registration_repair.py`
+- `AGENTS.md`
+- `ROADMAP.md`
+- `CHANGELOG.md`
+- `docs/COMMANDS.md`
+- `session.files.md`
+
+Copy this set without copying `adventures/` or `data/`. The exact-case repair
+helper defaults to read-only preview; stop all StarFur writers before its
+separate `--apply` step. WSL runtime registration is not repaired by these source
+edits. Proposal interruption now retains an already completed reply and returns
+the CLI to the prompt with a bounded notice, without retries or partial proposal
+writes. Live WSL repair verification, proposal-phase cancellation/recovery, and
+the preceding participant thinking-off smoke remain pending. Other runtime
+stores, grants, and provider defaults are unchanged.
+
+## Latest documentation copy set — FoxFire Dispatch / ATS Career
+
+- `ROADMAP.md`
+- `ROADMAP.v4.md`
+- `ROADMAP.v5.md`
+- `CHANGELOG.md`
+- `session.files.md`
+
+That slice was documentation only: adds the later optional ATS adventure category
+and its manual-to-adapter-to-bounded-autonomy gates. It added no smoke. The newer
+recovery/cancellation slice above supersedes its unrepaired-code note; WSL
+registration and live verification remain pending. Keep the preceding
+source/configuration copy set below available.
+
+## Latest slice copy set — structured limits and participant thinking-off
+
+Copy these files for the current WSL participant-action smoke (older entries below are
+retained as the cumulative manifest, not an instruction to recopy everything):
+
+- `pipeline/providers.py`
+- `pipeline/task_execution.py`
+- `pipeline/assistant.py`
+- `pipeline/adventure_turn_provider.py`
+- `pipeline/adventure_participant_action_coordinator.py`
+- `pipeline/research_provider.py`
+- `pipeline/research_coordinator.py`
+- `pipeline/research_relationship_coordinator.py`
+- `config/assistant.json` (preserve local overrides; the only new setting is participant `model_thinking: false`)
+- `tests/test_task_execution.py`
+- `tests/test_task_profiles.py`
+- `tests/test_chat_provider.py`
+- `tests/test_adventure_commands.py`
+- `tests/test_adventure_turn_provider.py`
+- `tests/test_adventure_participant_action_coordinator.py`
+- `tests/test_research_provider.py`
+- `tests/test_research_coordinator.py`
+- `tests/test_research_relationship_coordinator.py`
+- `AGENTS.md`
+- `ROADMAP.md`
+- `CHANGELOG.md`
+- `docs/COMMANDS.md`
+- `session.files.md`
+
+Structured generation now retains `provider_output_limit` without accepting
+partial or complete-looking limited JSON, retrying, or publishing candidates or
+reviews. The stock participant-action profile requests thinking-off with the
+same context/output/residency. Other structured defaults remain unchanged.
+The preceding mixed-paste/real-diagnostics smoke passed. Only the participant
+profile change needs a live WSL/Ollama smoke; no Tavily key, research fetch,
+transcript recording, staging, or commit is needed.
+673 focused provider-free regression tests passed locally. The required full
+discovery attempt was blocked by the pre-existing root/test-folder
+`test_chunker.py` name collision; this slice does not repair those manual
+scripts or claim that full discovery passed.
+
+## Pipeline (65)
+
+- `pipeline/adventure_participant_action.py`
+
+- `pipeline/adventure_participant_action_generation.py`
+
+- `pipeline/adventure_participant.py`
+
+- `pipeline/adventure_participant_eval.py`
+- `pipeline/experiment_ledger.py`
+
+- `pipeline/assistant.py`
+- `pipeline/adventure_turn_provider.py`
+- `pipeline/adventure_participant_action_coordinator.py`
 - `pipeline/application.py`
 - `pipeline/command_help.py`
+- `pipeline/command_input.py`
 - `pipeline/resident_snapshot.py`
 - `pipeline/sandbox_image.py`
 - `pipeline/tool_broker.py`
@@ -56,6 +309,7 @@
 - `pipeline/task_execution.py`
 - `pipeline/providers.py`
 - `pipeline/api.py`
+- `pipeline/document_annotation.py`
 - `pipeline/provider_workload_gate.py`
 - `pipeline/provider_process_gate.py`
 
@@ -68,11 +322,32 @@
 
 - `presentation/apartment.html`
 
-## Tests (52)
+## Tests (70)
+
+- `tests/__init__.py`
+- `tests/test_discovery_boundary.py`
+- `tests/test_chunker.py`
+- `tests/test_research_answer_binding.py`
+- `tests/test_research_answer_policy.py`
+- `tests/test_reset.py`
+
+- `tests/test_adventure_participant_action.py`
+
+- `tests/test_adventure_participant_action_generation.py`
+
+- `tests/test_adventure_participant.py`
+
+- `tests/test_adventure_participant_eval.py`
+- `tests/test_experiment_ledger.py`
 
 - `tests/test_api.py`
+- `tests/test_adventure_commands.py`
+- `tests/test_adventure_turn_provider.py`
+- `tests/test_adventure_participant_action_coordinator.py`
 - `tests/test_application.py`
 - `tests/test_command_help.py`
+- `tests/test_command_input.py`
+- `tests/test_assistant_context_stats.py`
 - `tests/test_resident_snapshot.py`
 - `tests/test_sandbox_image.py`
 - `tests/test_tool_status.py`
@@ -122,11 +397,15 @@
 - `tests/test_provider_workload_gate.py`
 - `tests/test_provider_process_gate.py`
 - `tests/test_chat_provider.py`
+- `tests/test_action_smoke_registration_repair.py`
+- `tests/test_document_annotation.py`
 
-## Documentation and policy (5)
+## Documentation and policy (7)
 
 - `AGENTS.md`
+- `CHANGELOG.md`
 - `ROADMAP.md`
+- `ROADMAP.v4.md`
 - `ROADMAP.v5.md`
 - `docs/COMMANDS.md`
 - `docs/SANDBOX_BACKENDS.md`
@@ -134,6 +413,14 @@
 ## Root adapter (1)
 
 - `starfur.py`
+
+## Manual inspection script (1)
+
+- `test_chunker.py`
+
+## Offline maintenance helper (1)
+
+- `scripts/restore_action_smoke.py`
 
 S9b exposes only aggregate session-local tool lifecycle counts. B12b documents
 the optional distribution boundary. B9a adds only a pure guest-image expectation
@@ -273,8 +560,9 @@ the live smoke gate. A separate provider-free resource-policy foundation now
 models interactive/balanced/background envelopes and defers when exact backend
 controls are unavailable; it is not wired to routing, monitoring, or execution.
 The stock normal-chat output ceiling is now 1024 tokens after the initial
-512-token live trial truncated visible Qwen output when provider-side reasoning
-shared that budget. Proposal and structured adventure ceilings remain smaller.
+512-token live trial truncated visible Qwen output. A later 1024-token trial
+also cut off; reasoning's contribution was not measured. Proposal and
+structured adventure ceilings remain smaller.
 Task profiles now carry descriptive workload labels for interactive chat and
 participant work, balanced adventure generation, and background research;
 route previews expose only the bounded label and no admission is implied.

@@ -15,6 +15,71 @@ from pipeline.assistant import (
 
 
 class ContextStatsTests(unittest.TestCase):
+    def test_mixed_paste_is_rejected_before_generation_and_preserves_state(self):
+        calls = []
+        session = AssistantSession(
+            self.config(), "Persona", chat=lambda **kwargs: calls.append(kwargs) or {"content": "answer"},
+            memory_loader=lambda **_kwargs: [], policy="Policy",
+        )
+        session.respond("hello")
+        snapshot = session.last_turn_diagnostics
+        messages = list(session.messages)
+        session._pending_bulk_proposal_ids = [77]
+        for text in (
+            "Write a story.\ncontext stats", "context stats\nrouting probe",
+            "hello\nremember this: an unwanted fact", "focus mode on\nhello",
+            "proposal approve all\napprove all", "adventure turn commit\ncontext stats",
+        ):
+            self.assertIn("No command or model request was run", session.respond(text))
+            self.assertEqual(1, len(calls))
+            self.assertEqual(messages, session.messages)
+            self.assertEqual([], session.proposals)
+            self.assertIs(snapshot, session.last_turn_diagnostics)
+            self.assertEqual([77], session._pending_bulk_proposal_ids)
+            self.assertFalse(session.focus_mode_enabled)
+        self.assertIn("No command or model request was run", session.command("focus mode on\nhello"))
+
+    def test_explicit_diagnostic_requests_return_only_the_real_snapshot(self):
+        calls = []
+        session = AssistantSession(
+            self.config(), "Persona", chat=lambda **kwargs: calls.append(kwargs) or {"content": "answer"},
+            memory_loader=lambda **_kwargs: [], policy="Policy",
+        )
+        self.assertEqual("No turn diagnostics are available yet.", session.respond("show context stats"))
+        self.assertEqual([], calls)
+        session.respond("hello")
+        expected = session.context_stats()
+        before = list(session.messages)
+        for text in ("show me context diagnostics", "what are my current context stats?", "display context stats"):
+            self.assertEqual(expected, session.respond(text))
+            self.assertEqual(expected, session.command(text))
+        self.assertEqual(1, len(calls))
+        self.assertEqual(before, session.messages)
+
+    def test_multiline_chat_and_fenced_command_examples_still_generate(self):
+        calls = []
+        session = AssistantSession(
+            self.config(), "Persona", chat=lambda **kwargs: calls.append(kwargs) or {"content": "answer"},
+            memory_loader=lambda **_kwargs: [], policy="Policy",
+        )
+        for text in (
+            "Write a poem.\nMemory fades with time.",
+            "Explain this command example:\n```text\ncontext stats\n```",
+            "Discuss this quoted example:\n> context stats",
+        ):
+            self.assertEqual("answer", session.respond(text))
+            self.assertEqual(text, session.messages[-2]["content"])
+        self.assertEqual(3, len(calls))
+
+    def test_valid_read_only_request_still_cancels_pending_bulk_confirmation(self):
+        session = AssistantSession(
+            self.config(), "Persona", chat=lambda **_kwargs: self.fail("must not generate"),
+            memory_loader=lambda **_kwargs: [], policy="Policy",
+        )
+        session._pending_bulk_proposal_ids = [77]
+        self.assertEqual("Bulk approval cancelled.", session.respond("show context stats"))
+        self.assertIsNone(session._pending_bulk_proposal_ids)
+
     def config(self, *, policy="off", max_memories=3):
         return AssistantConfig(
             "test-model",

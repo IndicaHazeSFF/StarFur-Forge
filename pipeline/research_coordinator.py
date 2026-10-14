@@ -11,6 +11,8 @@ from dataclasses import dataclass
 import re
 from typing import Protocol, runtime_checkable
 
+from pipeline.providers import ChatProviderOutputLimitError
+
 from pipeline.research_claims import (
     ResearchClaimSet,
     parse_research_claims,
@@ -52,6 +54,7 @@ class ResearchCoordinatorError(RuntimeError):
             "disclosure_denied",
             "provider_unavailable",
             "provider_failed",
+            "provider_output_limit",
             "response_invalid",
         }:
             raise ValueError("research coordinator failure reason is invalid")
@@ -120,6 +123,8 @@ class ResearchClaimCoordinator:
                 model=target.model,
                 schema=research_claim_json_schema(packet),
             )
+        except ChatProviderOutputLimitError as error:
+            raise ResearchCoordinatorError("provider_output_limit") from error
         except Exception as error:
             raise ResearchCoordinatorError("provider_failed") from error
         try:

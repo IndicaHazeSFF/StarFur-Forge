@@ -23,7 +23,7 @@ _PROVIDER_BUSY_STATES = frozenset({"connecting", "loading", "generating", "strea
 _ROUTE_TRACE_OUTCOMES = frozenset({
     "submitted", "completed", "route_unavailable", "provider_adapter_unavailable",
     "provider_capability_unavailable", "provider_request_failed",
-    "provider_stream_failed", "provider_stream_cancelled",
+    "provider_stream_failed", "provider_stream_cancelled", "provider_concurrency_busy",
 })
 
 
@@ -48,6 +48,9 @@ def _bounded_route_trace(value: object) -> list[dict[str, object]]:
             continue
         if len(fields["model"]) > 256 or not isinstance(fields["fallback_used"], bool) or fields["outcome"] not in _ROUTE_TRACE_OUTCOMES:
             continue
+        resource_profile = item.get("resource_profile")
+        if isinstance(resource_profile, str) and resource_profile in {"interactive", "balanced", "background"}:
+            fields["resource_profile"] = resource_profile
         result.append(fields)
     return result
 
@@ -75,6 +78,14 @@ def _resident_routing_public(value: object) -> dict[str, object]:
         "configured_task_count": count("configured_task_count"),
         "routable_task_count": count("routable_task_count"),
         "unavailable_task_count": count("unavailable_task_count"),
+        "storage": "session_ephemeral",
+    }
+
+
+def _resident_focus_mode_public(value: object) -> dict[str, object]:
+    """Render only a session-local manual resource-cooperation indicator."""
+    return {
+        "enabled": isinstance(value, Mapping) and value.get("enabled") is True,
         "storage": "session_ephemeral",
     }
 
@@ -209,6 +220,7 @@ class ResidentSnapshot:
     turn: Mapping[str, object]
     candidates: Mapping[str, object]
     routing: Mapping[str, object] = field(default_factory=dict)
+    focus_mode: Mapping[str, object] = field(default_factory=dict)
     sandbox_execution: Mapping[str, object] = field(default_factory=dict)
     tool_activity: Mapping[str, object] = field(default_factory=dict)
 
@@ -279,6 +291,7 @@ class ResidentSnapshot:
                 "ordinary_count", "mutation_count", "storage",
             })),
             "routing": _resident_routing_public(self.routing),
+            "focus_mode": _resident_focus_mode_public(self.focus_mode),
             "sandbox_execution": _resident_sandbox_public(self.sandbox_execution),
             "tool_activity": _resident_tool_status_public(self.tool_activity),
         }

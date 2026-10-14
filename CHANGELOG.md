@@ -1673,4 +1673,94 @@
 - Integration: the existing workload gate can compose the process lease without exposing it. Assistant CLI and API server accept `--enable-cross-process-provider-gate`; default startup remains application-local pending WSL smoke validation.
 - Streaming repair: routed streaming responses now retain their workload lease until iterator exhaustion or explicit close, rather than releasing capacity immediately when an iterator is returned.
 - Constraints: this adds no queue, wait, fairness, process discovery/termination, provider-stop proof, model lifecycle control, resource throttling, or Windows-native/WSL lock-interoperability claim.
-- Smoke follow-up: a live cross-process recovery completed without stranded capacity, while the initial `512`-token normal-chat ceiling truncated visible Qwen output after provider-side reasoning consumed part of the budget. Normal chat now requests `1024` output tokens; proposal and structured adventure ceilings remain unchanged.
+- Smoke follow-up: a live cross-process recovery completed without stranded capacity, while the initial `512`-token normal-chat ceiling truncated visible Qwen output. Normal chat now requests `1024` output tokens; proposal and structured adventure ceilings remain unchanged. Reasoning's contribution to the cutoff was not measured.
+
+## 2026-10-07 - Control task thinking and report output limits
+
+- Behavior: validated profiles may explicitly request boolean thinking through a support-declaring adapter; Ollama forwards top-level `think`, and stock normal chat requests `false` with its existing 1024-token output ceiling. Missing settings preserve provider defaults; unsupported controls fail before a call and never trigger hidden fallback.
+- Boundary: provider-neutral responses/chunks carry only text and an optional closed completion reason. Application response text/model/status is captured under one request lock; JSON/SSE no longer label reported output limits as natural stops or invent a stop for missing metadata.
+- Behavior: the CLI adds an output-limit notice outside response/history text. Limited chat skips memory-proposal extraction and records bounded output-limit diagnostics without automatic continuation. Ollama structured results and document annotation reject reported limits before candidate validation.
+- Verification: focused fake-provider, routing, document, application, and HTTP tests cover forwarding, support rejection, metadata reduction/privacy, stream cleanup, no retry/proposal on limited chat, and JSON/SSE completion status. Live WSL/Ollama natural-completion and limit-reporting smoke remains required; no foreground-performance or model-stop guarantee is claimed.
+- Test-run limitation: full discovery is blocked by the existing root/test-folder `test_chunker.py` collision; focused regression suites run independently without changing those unrelated manual scripts.
+
+## 2026-10-07 - Reject ambiguous pasted controls and ground diagnostics
+
+- Behavior: shared pure input framing rejects unquoted command-shaped lines in a multiline request before commands, confirmation handling, providers, history/proposals, or stale document extensions. It never executes a batch. Ordinary multiline chat and quoted/fenced examples remain data; separately delivered terminal lines remain ordinary individual requests.
+- Grounding: documented whole-message context-stat aliases return the actual Core snapshot or explicit unavailability, not generated telemetry. No output filter or general model-truth guarantee was added.
+- Safety: rejection leaves pending confirmation untouched and cannot grant/approve tools or partially run controls. Valid nonconfirming requests retain the existing bulk-confirmation cancellation semantics.
+- Verification: focused pure, session, interactive-loop, application, and JSON/SSE tests cover mixed-paste rejection, state preservation, real-stat dispatch, extension precedence, and ordinary multiline compatibility. Native WSL smoke passed: combined input was rejected and the follow-up Core diagnostic reported no turn snapshot. The preceding thinking/output-limit smoke passed; no resource-enforcement claim was added.
+
+## 2026-10-07 - Distinguish structured output limits
+
+- Behavior: a content-free typed adapter error and shared complete-result guard preserve `provider_output_limit` through structured routing, ordinary/typed/resource/participant adventure status, and local research claim/relationship failures. Complete-looking limited JSON remains rejected before task parsing.
+- Constraints: no partial candidates/reviews, automatic retries, fallback, continuation, output-budget increase, or provider payload/error-prose inspection. Local capacity releases after the failure; this is not verified provider termination.
+- Verification: focused fake adapter, executor, session, research, and all-four-adventure-command coverage exercises both raised errors and typed limited results, one-call failure, no publication, capacity recovery, and unchanged generic transport errors. No live smoke is needed for this reason-only refinement.
+
+## 2026-10-07 - Request thinking-off for bounded participant proposals
+
+- Behavior: only the stock participant-action profile additionally requests thinking-off via the existing exact supported adapter seam. Its 4096-token context request, 256-token output ceiling, interactive label, and zero-second residency request are unchanged; other structured profiles retain provider defaults.
+- Verification: fake Ollama routing coverage confirms top-level `think=false` alongside the existing schema/options/residency, with no extra call or altered budget. A focused WSL/Ollama participant smoke remains required; improved speed, quality, resource enforcement, or verified unload is not claimed.
+
+## 2026-10-08 - Plan FoxFire Dispatch / ATS Career
+
+- Planning: added an optional persistent trucking Adventure Mode category to the authoritative roadmap and concise v4/v5 proposal alignment. FoxFire Freight is a replaceable dark-carnival/neon-night-haul example carrier; each company/driver uses an isolated inspectable career.
+- Ordering: manual reviewed dispatch/job/completion first, read-only telemetry or later scoped vision next, then separately brokered custom loads/messages and bounded opt-in independent dispatch. Third-party/game-native capabilities remain feasibility-gated with manual/local fallback.
+- Boundaries: ATS-specific adapters/rules stay outside Core; proposed narrative, confirmed game observations, and external effects remain distinct. No source, runtime state, integration, permissions, or implementation status changed; current execution order and pending smoke remain unchanged.
+
+## 2026-10-09 - Handle proposal interruption and prepare exact orphan registration repair
+
+- Behavior: non-streaming transport interruption now uses the existing cancellation control flow. Proposal/repair interruption preserves an already completed reply, records the proposal as interrupted, performs no repair/retry or proposal write from that incomplete call, and returns the CLI to its prompt with an explicit notice.
+- Maintenance: added an offline preview-first helper for the inspected Action Smoke manifest/transcript-only orphan. Explicit apply backs up validated inputs, preserves other registry records and story bytes, refuses conflicts/detected changes, and restores only the missing registration; repeat apply is a no-op.
+- Constraints: no automatic or concurrent registry recovery, Core/API/tool repair endpoint, runtime reset, provider retry, verified cancellation, or new capability authority. Live WSL repair and cancellation smoke remain required; the helper was exercised only against temporary fixtures here.
+- Verification: focused fake-provider/session/application/CLI and test-owned maintenance fixtures cover interrupted primary/repair calls, no proposal persistence, capacity recovery, unchanged transcript/manifest, backups, invalid input, and changed-registry refusal. Full discovery remains blocked by the existing root/test-folder `test_chunker.py` import collision.
+
+## 2026-10-10 - Preserve the normal transcript lock during exact registration repair
+
+- Maintenance: the offline Action Smoke helper accepts the exact Core-known optional regular transcript lock file, which normal transcript writes leave in place. Preview remains read-only; explicit apply backs up and rechecks the lock without deleting, acquiring, or rewriting it.
+- Constraints: lock-file presence/content is not live ownership evidence. Stopped writers remain required; unexpected files, linked inputs, and detected changes still fail closed. No runtime repair was performed here.
+- Verification: temporary fixtures cover empty/Windows-style lock bytes, unchanged workspace bytes, backup preservation, unexpected hidden files/directories, and changed-lock refusal before registry replacement. Live WSL preview/apply remains pending.
+
+## 2026-10-11 - Record recovery smokes and benchmark participant lifecycle
+
+- Verification: WSL confirmed usable Action Smoke registration and preserved transcript history; the reported helper apply was an already-registered no-op, not a demonstrated replacement. Installed thinking-off generation produced review-only and valid no-action output with no event/transcript mutation. Proposal-phase Ctrl+C preserved the completed reply, reported interruption, left no pending proposals, and returned usable controls; this does not prove immediate provider termination.
+- Evaluation: added seven frozen provider-free participant lifecycle cases through actual session commands in temporary workspaces, including once-only transcript pairing, pacing, stale/malformed rejection, and interruption/capacity recovery. Repeatability is measured across two runs, not assumed.
+- Recording: `adventure-participant-eval` may explicitly append a fixture-fingerprinted internal manifest and closed outcomes/counts to the existing ledger. The dedicated schema rejects raw-content extras, invalid counts/rates, and contradictory case pass flags; no live-model quality, authority, or canonical state is created.
+- Planning: corrected the stale later claim that explicit workspace/roleplay entry was missing; existing C1 controls already implement it. Immediate dependency order remains unchanged. WSL CLI/ledger smoke is the next gate.
+- Local verification: 367 focused adventure, ledger, provider, application, and API tests passed. Full discovery was attempted and remains blocked by the existing `test_chunker.py` import collision; no live service was invoked.
+
+## 2026-10-12 - Inspect bounded participant context usage
+
+- Verification: the WSL participant benchmark and ledger suites passed; both seven-case CLI runs reported 100% lifecycle checks and repeatability, and the explicitly requested ledger append succeeded. These remain provider-free fixture results, not live-model quality or verified-stop evidence.
+- Behavior: added exact read-only `adventure participant context <participant-id>` plus deterministic help. It reports selected category counts/ceilings and view character size from mounted projections without storage/provider access, fact bodies, identity/reference payloads, or changes to staging, history, memory, permissions, or selection policy.
+- Boundaries: category ceilings are not one combined token budget; the report measures neither the full prompt nor runtime GPU/CPU use. It does not refresh stale projections, create durable NPC memory, or add participant detail to default resident snapshots.
+- Verification: 394 focused adventure, help, API, application, provider, and ledger tests passed, including privacy, repeated inspection, unchanged workspace bytes/staging, and stale-document-extension precedence. Full discovery still stops at the pre-existing `test_chunker.py` import collision. Focused WSL control smoke is the next gate.
+
+## 2026-10-14 - Fit participant context without partial facts
+
+- Verification: the preceding WSL count-only participant context/help/repeat/missing-participant smoke passed with unchanged events.
+- Behavior: participant views now omit whole already-filtered, category-capped facts when the unchanged 12,000-character ceiling would otherwise reject the full view. Existing category/item order is preserved; a skipped large fact does not exclude a later small one, and already-fitting views render identically.
+- Inspection: the existing count-only control additionally reports bounded size omissions. Hidden/private facts and category-cap exclusions are not included in that count; no fact body or identity payload was added.
+- Boundaries: full projections and storage remain unchanged. There is no fact truncation, summarization, inferred importance, profile/budget change, retry, autonomous action, memory write, or token/resource enforcement claim. The renderer retains its hard guard; WSL live generation compatibility remains the next gate.
+- Local verification: 398 focused adventure, application, provider, ledger, help, and API tests passed. Oversized inventory, whole-fact selection, subsequent small facts, unchanged small views, hidden exclusion, omission bounds, and one-attempt fake-provider generation are covered. Required full discovery still hits the pre-existing `test_chunker.py` import collision.
+
+## 2026-10-14 - Frame participant source text as bounded data
+
+- Verification: the preceding installed-model participant smoke completed with valid no-action output, identical empty-context usage, empty staging, and unchanged events. Large-context handling remains fixture-tested rather than a live-quality claim.
+- Behavior: participant requests now serialize view/trigger/untrusted-turn data as one versioned JSON frame. UTF-8 and a 64,000-byte source-frame preflight occur before any injected provider call; invalid input reports only `input_invalid` and can recover on a later valid explicit request without writes or retries.
+- Boundaries: JSON escaping is not prompt-injection immunity or authority. Existing policy/output validation, review-only/no-action behavior, source privacy, turn/view/profile ceilings, and explicit write controls remain unchanged. This cap is not full-prompt token accounting or host-resource enforcement. Installed-model framing compatibility is the next smoke gate.
+- Local verification: 402 focused adventure, provider, application, ledger, help, and API tests passed. Cases cover hostile delimiter/role-shaped strings staying inside one data value, exact UTF-8 byte boundaries, invalid Unicode, pre-provider denial, and later valid recovery. Full discovery remains blocked by the existing `test_chunker.py` import collision.
+
+## 2026-10-14 - Keep participant proposal wording explicitly untrusted
+
+- Verification: the preceding WSL source-frame smoke returned one review-only candidate, with empty staging and unchanged events. Its completed-action-like summary was not a Core failure or an action outcome; wording quality remained unresolved.
+- Guidance: generation now asks for a proposed next step and suggestion-style summaries rather than narration that an action happened. This remains advisory, not a safety, semantic-validation, or performance guarantee.
+- Presentation: review separates the Core-owned ID/action label from JSON-quoted/escaped `Proposed wording (untrusted)`. Original summaries, declared action kinds, and explicit noncanonical transcript behavior are preserved; no grammar classifier, rewrite, retry, permission, or canonical write was added.
+- Verification: 404 focused tests passed, including unchanged candidate text and review-only handling of action-like prose. Full discovery remains blocked by the pre-existing `test_chunker.py` import collision. Installed-model wording/compatibility smoke is next; valid no-action output remains acceptable without proving wording quality.
+
+## 2026-10-14 - Run regression discovery with explicit package identity
+
+- Verification: the preceding WSL wording smoke returned one suggestion-style, quoted untrusted candidate, with completed generation, empty staging, and unchanged events. This is one observation, not a model-wide guarantee.
+- Test boundary: added an inert `tests` package and documented explicit `-t .` discovery; shared research fixtures now use package-qualified imports. Both manual chunker scripts retain explicit invocation but guard corpus reads/output behind `main`. Reset tests register database-setting cleanup before failing operations.
+- Evidence: all three discovery-boundary regressions passed; native full discovery reached 1,132 tests with a reproducible Windows restore-file denial and an intermittent API-test error. A preceding 1,131-test run had only the restore failure. These are not clean-suite results; causes remain follow-up work, not skipped tests. Production reset/database behavior and runtime data were not repaired or changed.
+- Gate: WSL full-suite smoke is next. Do not invoke a real factory reset/restore or live provider for it.
+- Follow-up detail: focused API rerun reproduced a timeout while reading the fixed Murr PNG response. This identifies the failing boundary, not its cause; no asset, transport, timeout, or production behavior was changed to hide it.

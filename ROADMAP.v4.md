@@ -267,6 +267,12 @@ This is a functional prototype, not yet a durable simulation system. The impleme
 
 **Completed foundation:** `pipeline.adventure_initiative` now validates participant memory namespaces and bounded initiative policy/eligibility contracts. It does not yet schedule turns, call a provider, create NPC memory, or execute actions.
 
+#### Later Adventure Mode category — FoxFire Dispatch / ATS Career (PLANNED; optional)
+
+See the authoritative `ROADMAP.md` category for a persistent text-driven American Truck Simulator dispatch career. FoxFire Freight is the first replaceable dark-carnival/neon-night-haul carrier package, not Core identity. Each company/driver has an inspectable isolated adventure; StarFur owns narrative continuity, company records, and dispatch messages, while ATS owns actual game jobs and an optional adapter translates confirmed observations/effects. ATS-specific rules/protocols remain outside Core and fictional career facts never enter personal memory.
+
+Order: reviewed dispatch offer -> manual matching ATS job -> explicit completion report first; permissioned read-only telemetry/dashboard API or later scoped vision/OCR second; optional Trucky-style export/job creation and game-native messages only after compatibility/feasibility and exact broker-authority gates. Opt-in independent dispatch comes last, under bounded scheduling/grants, freshness/conflict checks, nonintrusive presentation, foreground-resource cooperation, and crash/revocation/uncertain-outcome tests. Observation is not control authority; a proposal is not an accepted/delivered job, and unknown external completion must not trigger blind replay. Manual/local-text fallback remains available when optional integrations are absent. This is later package/adapter work, not a new immediate A/B/C task, apartment gate, or initial Steam dependency; no completed status is implied.
+
 ### Stage C — Safe narrative-to-state loop (AFTER A AND B)
 
 #### C1. Bind story lifecycle explicitly

@@ -8,7 +8,7 @@ assistant memory, real-world persona state, hidden resources, or full history.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import re
 
 from pipeline.adventure_initiative import AdventureInitiativeError, AdventureParticipant
@@ -99,6 +99,7 @@ class AdventureParticipantView:
     relationships: tuple[AdventureRelationshipFact, ...]
     knowledge: tuple[AdventureKnowledgeFact, ...]
     public_resources: tuple[AdventureResourceFact, ...]
+    character_budget_omissions: int = 0
 
     def __post_init__(self) -> None:
         if not isinstance(self.adventure_id, str) or not self.adventure_id:
@@ -126,6 +127,10 @@ class AdventureParticipantView:
             raise AdventureInitiativeError("participant view resources are invalid")
         if not all(isinstance(item, AdventureResourceFact) and item.visibility == "public" for item in self.public_resources):
             raise AdventureInitiativeError("participant view may contain public resource facts only")
+        maximum_omissions = MAX_PARTICIPANT_EVENTS + MAX_PARTICIPANT_RELATIONSHIPS + MAX_PARTICIPANT_RESOURCES + self.participant.memory_policy.max_knowledge_facts
+        if (type(self.character_budget_omissions) is not int
+                or not 0 <= self.character_budget_omissions <= maximum_omissions):
+            raise AdventureInitiativeError("participant view omission count is invalid")
 
     @classmethod
     def from_session(cls, session: AdventureSessionState, participant: AdventureParticipant) -> "AdventureParticipantView":
@@ -155,7 +160,59 @@ class AdventureParticipantView:
         return cls(
             session.record.adventure_id, participant, session.event_count, events,
             relationships, knowledge, public_resources,
-        )
+        )._fit_character_budget()
+
+    def _fit_character_budget(self) -> "AdventureParticipantView":
+        """Keep whole already-filtered facts in existing category/order priority.
+
+        This is bounded presentation selection, never rewriting story truth or
+        summarizing a fact. An oversized item does not prevent a later smaller
+        item from fitting. Views already below the ceiling are unchanged.
+        """
+        try:
+            self.render()
+            return self
+        except AdventureInitiativeError:
+            pass
+        selected = replace(self, events=(), relationships=(), knowledge=(), public_resources=(),
+            character_budget_omissions=0)
+        omitted = 0
+        for category in ("events", "relationships", "knowledge", "public_resources"):
+            for item in getattr(self, category):
+                candidate = replace(selected, **{category: getattr(selected, category) + (item,)})
+                try:
+                    candidate.render()
+                except AdventureInitiativeError:
+                    omitted += 1
+                else:
+                    selected = candidate
+        result = replace(selected, character_budget_omissions=omitted)
+        result.render()  # Keep the renderer's hard guard as the final boundary.
+        return result
+
+    def context_usage(self) -> dict[str, int]:
+        """Describe this existing view only; never read storage or alter selection.
+
+        Counts are per-category ceilings, not one combined model-token budget.
+        Rendering here validates the existing character ceiling; its prose is
+        discarded and never retained in the returned diagnostic data.
+        """
+        rendered_characters = len(self.render())
+        policy = self.participant.memory_policy
+        return {
+            "selected_events": len(self.events),
+            "event_limit": min(MAX_PARTICIPANT_EVENTS, policy.max_context_facts) if policy.retain_salient_events else 0,
+            "selected_relationships": len(self.relationships),
+            "relationship_limit": MAX_PARTICIPANT_RELATIONSHIPS,
+            "selected_knowledge": len(self.knowledge),
+            "knowledge_limit": policy.max_knowledge_facts,
+            "selected_public_resources": len(self.public_resources),
+            "public_resource_limit": MAX_PARTICIPANT_RESOURCES,
+            "selected_fact_count": len(self.events) + len(self.relationships) + len(self.knowledge) + len(self.public_resources),
+            "rendered_characters": rendered_characters,
+            "character_limit": MAX_PARTICIPANT_VIEW_CHARACTERS,
+            "character_budget_omissions": self.character_budget_omissions,
+        }
 
     def render(self) -> str:
         """Render a bounded reference section; never grants action authority."""

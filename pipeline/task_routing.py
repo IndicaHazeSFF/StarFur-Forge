@@ -207,6 +207,9 @@ class TaskRouteDecision:
                     "reason": item.reason,
                     "context_size": _bounded_budget(item.profile.options.get("num_ctx")),
                     "max_output_tokens": _bounded_budget(item.profile.options.get("num_predict")),
+                    "resource_profile": item.profile.resource_profile,
+                    "model_keep_alive_seconds": item.profile.model_keep_alive_seconds,
+                    "model_thinking": item.profile.model_thinking,
                 }
                 for item in self.candidates
             ],

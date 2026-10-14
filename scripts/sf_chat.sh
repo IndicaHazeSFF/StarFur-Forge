@@ -27,10 +27,26 @@ payload=$(jq -n --arg content "$message" '{
   messages: [{role: "user", content: $content}]
 }')
 
-curl --silent --show-error --fail-with-body -X POST \
+if ! response=$(curl --silent --show-error --write-out $'\n%{http_code}' -X POST \
   -H "Authorization: Bearer ${api_key}" \
   -H "X-StarFur-Conversation: ${conversation_id}" \
   -H 'Content-Type: application/json' \
   "${api_base}/chat/completions" \
-  --data-binary "$payload" \
-  | jq --raw-output '.choices[0].message.content // .error.message // .'
+  --data-binary "$payload"); then
+  printf 'StarFur request could not reach the local API.\n' >&2
+  exit 69
+fi
+http_status=${response##*$'\n'}
+response_body=${response%$'\n'*}
+
+if [[ $http_status != 2* ]]; then
+  if jq --exit-status '.error.type == "provider_capacity_busy"' <<<"$response_body" >/dev/null; then
+    printf 'StarFur provider is busy; retry after the active request finishes.\n' >&2
+    exit 75
+  fi
+  printf 'StarFur request failed [%s]: ' "$http_status" >&2
+  jq --raw-output '.error.message // "The local API rejected the request."' <<<"$response_body" >&2
+  exit 70
+fi
+
+jq --raw-output '.choices[0].message.content // .error.message // .' <<<"$response_body"

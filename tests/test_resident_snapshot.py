@@ -45,6 +45,10 @@ class ResidentSnapshotTests(unittest.TestCase):
                 "requested_task_id": "assistant_chat", "selected_task_id": "assistant_chat",
                 "provider": "ollama", "model": "qwen3:8b", "fallback_used": False, "outcome": "submitted",
                 "raw_provider_output": "private",
+            }, {
+                "requested_task_id": "assistant_chat", "selected_task_id": "assistant_chat",
+                "provider": "ollama", "model": "qwen3:8b", "fallback_used": False,
+                "outcome": "provider_concurrency_busy",
             }, {"requested_task_id": "assistant_chat", "selected_task_id": "assistant_chat", "provider": "ollama", "model": "x" * 257, "fallback_used": False, "outcome": "submitted"}]},
             candidates={"ordinary_count": 1, "mutation_count": 0, "body": "private"},
             routing={
@@ -52,6 +56,7 @@ class ResidentSnapshotTests(unittest.TestCase):
                 "unavailable_task_count": 1, "tasks": {"private": "no"},
                 "raw_provider_payload": "private",
             },
+            focus_mode={"enabled": True, "task_names": ["private"], "monitoring": "private"},
             sandbox_execution={
                 "schema_version": 1, "configured": True, "host_status": "unsupported",
                 "supervisor_status": "unavailable", "execution_status": "unavailable",
@@ -78,13 +83,19 @@ class ResidentSnapshotTests(unittest.TestCase):
         self.assertNotIn("hidden_resource", payload["adventure"])
         self.assertNotIn("drafts", payload["adventure_turn"])
         self.assertEqual("assistant_chat", payload["adventure_turn"]["last_task_routes"][0]["requested_task_id"])
-        self.assertEqual(1, len(payload["adventure_turn"]["last_task_routes"]))
+        self.assertEqual(2, len(payload["adventure_turn"]["last_task_routes"]))
         self.assertNotIn("raw_provider_output", payload["adventure_turn"]["last_task_routes"][0])
+        self.assertEqual("provider_concurrency_busy", payload["adventure_turn"]["last_task_routes"][1]["outcome"])
         self.assertNotIn("body", payload["candidate_inbox"])
         self.assertEqual(payload["routing"], {
             "configured_task_count": 4, "routable_task_count": 3,
             "unavailable_task_count": 1, "storage": "session_ephemeral",
         })
+        self.assertEqual(payload["focus_mode"], {
+            "enabled": True, "storage": "session_ephemeral",
+        })
+        self.assertNotIn("task_names", payload["focus_mode"])
+        self.assertNotIn("monitoring", payload["focus_mode"])
         self.assertEqual(payload["sandbox_execution"], {
             "schema_version": 1, "configured": True, "host_status": "unsupported",
             "supervisor_status": "unavailable", "execution_status": "unavailable",
@@ -114,6 +125,9 @@ class ResidentSnapshotTests(unittest.TestCase):
 
         self.assertEqual(snapshot.activity, "idle")
         self.assertEqual(snapshot.public_dict()["provider"], {"configured": False})
+        self.assertEqual(snapshot.public_dict()["focus_mode"], {
+            "enabled": False, "storage": "session_ephemeral",
+        })
         self.assertEqual(snapshot.public_dict()["sandbox_execution"]["reason"], "not_configured")
 
 

@@ -16,17 +16,118 @@ from pipeline.adventure_mutation import AdventureEventEnvelope, AdventureMutatio
 from pipeline.adventure_resources import AdventureResourceCatalog, AdventureResourceDefinition
 from pipeline.adventure_initiative import AdventureParticipant, AdventureParticipantRoster, PersonaInitiativePolicy
 from pipeline.adventure_import import AdventureImportLog
-from pipeline.assistant import AssistantSession
+from pipeline.assistant import AssistantSession, GenerationInterrupted
 from pipeline.adventure_turn_candidates import parse_untrusted_adventure_turn_candidates
 from pipeline.adventure_turn_coordinator import AdventureTurnCoordinator
 from pipeline.adventure_turn_generation import AdventureTurnGenerationRequest, AdventureTurnGenerationResult
 from pipeline.adventure_turn_mutation_coordinator import AdventureTurnMutationCoordinator
 from pipeline.adventure_turn_resource_coordinator import AdventureTurnResourceCoordinator
+from pipeline.adventure_transcript import AdventureTranscriptLog
 from pipeline.command_help import detect_command_help
 from pipeline.document_intake import extract_document_memory_candidates, prepare_document_text
+from pipeline.providers import ChatCompletion
 
 
 class AdventureCommandTests(unittest.TestCase):
+    def test_action_like_participant_summary_is_review_text_not_performed_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            summary = "Murr takes the brass key."
+            session = self._session(directory, calls, chat_response={"message": {"content": json.dumps({
+                "schema_version": 1, "candidates": [{"participant_id": "murr", "action": "suggest",
+                    "summary": summary, "confidence": 0.9}]})}})
+            session.respond("adventure create Wording Fixture")
+            record = session.adventure_registry.resolve_title("Wording Fixture")
+            session.adventure_registry.configure_participant_roster(record, AdventureParticipantRoster(
+                record.adventure_id, (AdventureParticipant("murr", "Murr", "persona",
+                    f"adventure:{record.adventure_id}:participant:murr",
+                    initiative_policy=PersonaInitiativePolicy(enabled=True)),)))
+            session.respond("adventure load Wording Fixture")
+            session.respond("adventure turn begin")
+            self.assertIn("Presented 1", session.respond(
+                "adventure participant action generate murr player_turn: I offer the key."))
+            review = session.respond("adventure participant actions")
+            self.assertIn('Proposed wording (untrusted): "Murr takes the brass key."', review)
+            self.assertEqual(review, session.respond("adventure participant actions"))
+            self.assertEqual(summary, session.last_adventure_participant_action_generation["proposal"].batch.candidates[0].summary)
+            self.assertEqual(1, len(calls))
+            self.assertEqual((), session.adventure_turn.drafts)
+            self.assertEqual([], AdventureEventLog(session.adventure_registry, record).events())
+            self.assertEqual([], AdventureTranscriptLog(session.adventure_registry, record).records())
+            self.assertEqual([], session.messages)
+            self.assertEqual([], session.proposals)
+
+    def test_participant_invalid_source_fails_before_provider_and_recovers_without_state_writes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(directory, calls,
+                chat_response={"message": {"content": '{"schema_version":1,"candidates":[]}'}})
+            session.respond("adventure create Source Frame Fixture")
+            record = session.adventure_registry.resolve_title("Source Frame Fixture")
+            session.adventure_registry.configure_participant_roster(record, AdventureParticipantRoster(
+                record.adventure_id, (AdventureParticipant("murr", "Murr", "persona",
+                    f"adventure:{record.adventure_id}:participant:murr",
+                    initiative_policy=PersonaInitiativePolicy(enabled=True)),)))
+            session.respond("adventure load Source Frame Fixture")
+            session.respond("adventure turn begin")
+            for text in ("x" * 4001, "\ud800"):
+                reply = session.respond("adventure participant action generate murr player_turn: " + text)
+                self.assertIn("failed safely", reply)
+                self.assertIn("input_invalid", session.respond("adventure participant action generation status"))
+                self.assertEqual([], calls)
+                self.assertEqual((), session.adventure_turn.drafts)
+                self.assertEqual([], AdventureEventLog(session.adventure_registry, record).events())
+                self.assertEqual([], AdventureTranscriptLog(session.adventure_registry, record).records())
+            self.assertIn("Presented 0", session.respond(
+                "adventure participant action generate murr player_turn: Wait beside the hatch."))
+            self.assertEqual(1, len(calls))
+            self.assertEqual([], session.messages)
+            self.assertEqual([], session.proposals)
+
+    def test_participant_context_usage_is_passive_count_only_and_uses_mounted_snapshot(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(directory, calls)
+            self.assertIn("none loaded", session.respond("adventure participant context murr"))
+            session.respond("adventure create Context Fixture")
+            record = session.adventure_registry.resolve_title("Context Fixture")
+            session.adventure_registry.configure_participant_roster(record, AdventureParticipantRoster(
+                record.adventure_id, (AdventureParticipant("murr", "Murr", "persona",
+                    f"adventure:{record.adventure_id}:participant:murr"),)))
+            session.respond("adventure load Context Fixture")
+            session.respond("adventure record discovery: Private fixture discovery.")
+            session.respond("adventure knowledge set Murr believes: Private fixture belief.")
+            session.respond("adventure turn begin")
+            session.respond("adventure turn stage discovery: Private staged prose.")
+            before = {path.name: path.read_bytes() for path in Path(directory, record.adventure_id).iterdir() if path.is_file()}
+            mounted = session.adventure_session
+            turn = session.adventure_turn
+            with patch("pipeline.db.connect", side_effect=AssertionError("DB forbidden")), patch.object(
+                AdventureEventLog, "events", side_effect=AssertionError("full log read forbidden")
+            ), patch.object(AdventureTranscriptLog, "records", side_effect=AssertionError("transcript read forbidden")):
+                first = session.respond("adventure participant context murr")
+                self.assertEqual(first, session.respond("adventure participant context Murr"))
+                self.assertIn("Usage:", session.respond("adventure participant context"))
+                self.assertIn("not available", session.respond("adventure participant context absent"))
+                self.assertIn("Unknown or malformed", session.respond("adventure participant contexts murr"))
+                help_text = session.respond("How do I inspect participant context?")
+                self.assertIn("adventure participant context <participant-id>", help_text)
+            self.assertIn("Selected shared events: 1 / 16", first)
+            self.assertIn("Selected knowledge facts: 1 / 16", first)
+            self.assertIn("Selected facts total: 2", first)
+            self.assertIn("Whole facts omitted for character budget: 0", first)
+            self.assertIn("not the full request", first)
+            for private in ("Private", "believes", "TP-", "AE-", "adventure:", "Murr"):
+                self.assertNotIn(private, first)
+            self.assertIs(mounted, session.adventure_session)
+            self.assertIs(turn, session.adventure_turn)
+            self.assertEqual([], calls)
+            self.assertEqual([], session.messages)
+            self.assertEqual([], session.proposals)
+            after = {path.name: path.read_bytes() for path in Path(directory, record.adventure_id).iterdir() if path.is_file()}
+            self.assertEqual(before, after)
+
     def _config(self):
         return type("Config", (), {
             "chat_model": "test-model", "domain": "personal", "max_session_messages": 4,
@@ -81,6 +182,62 @@ class AdventureCommandTests(unittest.TestCase):
 
         def probe_health(self):
             return []
+
+    def test_all_structured_adventure_channels_report_limits_without_publishing_or_retry(self):
+        class LimitedProvider(self._StructuredProvider):
+            def complete_structured(self, messages, **kwargs):
+                self.calls.append(kwargs)
+                return ChatCompletion(self.content, "length")
+        channels = (
+            ("adventure turn generate The hatch opens.", "adventure turn generation status", "adventure turn candidates"),
+            ("adventure turn mutations generate The crew enters the room.", "adventure turn mutation generation status", "adventure turn mutations"),
+            ("adventure turn resources generate The hatch opens.", "adventure turn resource generation status", "adventure turn resources"),
+            ("adventure participant action generate murr player_turn: Wait by the hatch.", "adventure participant action generation status", "adventure participant actions"),
+        )
+        for generate, status, review in channels:
+            with self.subTest(generate=generate), tempfile.TemporaryDirectory() as directory:
+                provider = LimitedProvider('{"schema_version":1,"candidates":[]}')
+                session = AssistantSession(
+                    self._config(), "Persona", policy="Policy", provider=provider,
+                    adventure_registry=AdventureRegistry(directory), memory_loader=lambda **_kwargs: [],
+                )
+                session.respond("adventure create Limit Smoke")
+                record = session.adventure_registry.resolve_title("Limit Smoke")
+                session.adventure_registry.configure_resource_catalog(record, AdventureResourceCatalog((
+                    AdventureResourceDefinition("hatch", "Hatch", "enum", allowed_values=("sealed", "open")),
+                )))
+                session.adventure_registry.configure_participant_roster(record, AdventureParticipantRoster(
+                    record.adventure_id, (AdventureParticipant(
+                        "murr", "Murr", "persona", f"adventure:{record.adventure_id}:participant:murr",
+                        initiative_policy=PersonaInitiativePolicy(enabled=True, allowed_triggers=("player_turn",), allowed_actions=("suggest",)),
+                    ),),
+                ))
+                session.respond("adventure load Limit Smoke")
+                session.respond("adventure turn begin")
+                self.assertIn("failed safely", session.respond(generate))
+                self.assertIn("Failure category: provider_output_limit", session.respond(status))
+                self.assertIn("No untrusted", session.respond(review))
+                self.assertEqual(1, len(provider.calls))
+                self.assertIn("no staged events", session.respond("adventure turn inspect"))
+                self.assertIn("No authoritative", session.respond("adventure events"))
+                self.assertIn("No presentation transcript", session.respond("adventure transcript"))
+                self.assertEqual([], session.messages)
+                self.assertEqual([], session.proposals)
+
+    def test_legacy_text_candidate_route_retains_typed_limit_status_without_schema_fallback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(directory, calls, chat_response=ChatCompletion(
+                '{"schema_version":1,"candidates":[]}', "length",
+            ))
+            session.respond("adventure create Limit Smoke")
+            session.respond("adventure load Limit Smoke")
+            session.respond("adventure turn begin")
+            self.assertIn("failed safely", session.respond("adventure turn generate The crew waits."))
+            self.assertEqual("provider_output_limit", session._current_task_routes[-1]["outcome"])
+            self.assertIn("Failure category: provider_output_limit", session.respond("adventure turn generation status"))
+            self.assertEqual(1, len(calls))
+            self.assertEqual([], session.messages)
 
     def test_commands_create_list_and_inspect_metadata_without_a_model_or_memory(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -1419,7 +1576,10 @@ class AdventureCommandTests(unittest.TestCase):
             self.assertIn("Validated action candidates: 1", status)
             self.assertIn("No action was performed", status)
             recorded = session.respond("adventure participant action record TP-001")
-            self.assertIn("Recorded TP-001 as noncanonical adventure transcript AT-000001", recorded)
+            self.assertIn("Recorded TP-001 as noncanonical adventure transcript pair AT-000001 -> AT-000002", recorded)
+            self.assertIn("AT-000001 [user] The crew pauses at the hatch.", session.respond(
+                "adventure transcript"
+            ))
             self.assertIn("Murr suggests: Suggest checking the key's teeth first.", session.respond(
                 "adventure transcript"
             ))
@@ -1436,6 +1596,45 @@ class AdventureCommandTests(unittest.TestCase):
             self.assertEqual((), session.adventure_turn.drafts)
             self.assertEqual([], AdventureEventLog(session.adventure_registry, record).events())
             self.assertEqual(2, len(calls))
+
+    def test_participant_action_interrupt_bypasses_candidate_failure_and_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(directory, calls)
+            session.respond("adventure create Interrupt Ember")
+            record = session.adventure_registry.resolve_title("Interrupt Ember")
+            session.adventure_registry.configure_participant_roster(
+                record,
+                AdventureParticipantRoster(record.adventure_id, (
+                    AdventureParticipant(
+                        "murr", "Murr", "persona",
+                        f"adventure:{record.adventure_id}:participant:murr",
+                        initiative_policy=PersonaInitiativePolicy(
+                            enabled=True, allowed_triggers=("player_turn",),
+                            allowed_actions=("suggest",),
+                        ),
+                    ),
+                )),
+            )
+            session.respond("adventure load Interrupt Ember")
+            session.respond("adventure turn begin")
+
+            def interrupt(*_args, **_kwargs):
+                raise GenerationInterrupted()
+
+            session._provider_complete_prefer_structured = interrupt
+            with self.assertRaises(GenerationInterrupted):
+                session.respond(
+                    "adventure participant action generate murr player_turn: The crew pauses."
+                )
+
+            self.assertIsNone(session.last_adventure_participant_action_generation)
+            self.assertEqual((), session.adventure_turn.drafts)
+            self.assertEqual(
+                [],
+                AdventureTranscriptLog(session.adventure_registry, record).records(),
+            )
+            self.assertEqual([], AdventureEventLog(session.adventure_registry, record).events())
 
     def test_participant_action_candidates_fail_closed_when_another_session_changes_the_story(self):
         with tempfile.TemporaryDirectory() as directory:

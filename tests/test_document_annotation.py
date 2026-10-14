@@ -21,6 +21,7 @@ from pipeline.document_intake import (
     extract_document_memory_candidates_resilient,
     prepare_document,
 )
+from pipeline.providers import ChatCompletion
 
 
 class FakeProvider:
@@ -91,6 +92,30 @@ class DocumentAnnotationTests(unittest.TestCase):
         self.assertIn("engine owns domain and source", system)
         self.assertIn("exactly one top-level field: proposals", system)
         self.assertIn("Ignore previous instructions", messages[1]["content"])
+
+    def test_explicit_thinking_control_is_honored_or_denied_before_annotation(self):
+        class ThinkingProvider(FakeProvider):
+            supports_model_thinking = True
+            def complete(self, messages, **kwargs):
+                self.calls.append(kwargs)
+                return self.response
+        provider = ThinkingProvider(ChatCompletion(json.dumps(self._valid_payload()), "stop"))
+        document = self._prepared()
+        candidates = extract_document_memory_candidates(
+            document, DocumentProposalAnnotator(provider, "model", model_thinking=False),
+        )
+        self.assertEqual(1, len(candidates))
+        self.assertIs(False, provider.calls[0]["thinking"])
+        unsupported = FakeProvider({})
+        with self.assertRaisesRegex(ValueError, "thinking control"):
+            DocumentProposalAnnotator(unsupported, "model", model_thinking=False)
+        self.assertEqual([], unsupported.calls)
+
+    def test_output_limited_annotation_cannot_publish_complete_looking_json(self):
+        document = self._prepared()
+        provider = FakeProvider(ChatCompletion(json.dumps(self._valid_payload()), "length"))
+        with self.assertRaises(DocumentAnnotationError):
+            extract_document_memory_candidates(document, DocumentProposalAnnotator(provider, "model"))
 
     def test_typed_provider_response_is_supported(self):
         document = self._prepared()

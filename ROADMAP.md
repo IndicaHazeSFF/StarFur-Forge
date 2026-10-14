@@ -1,7 +1,7 @@
 # StarFur Forge Roadmap v4
 
 **Status:** Resident Intelligence Platform with an executable Persona Runtime
-**Last updated:** 2026-08-22
+**Last updated:** 2026-10-14
 
 `ROADMAP.md` is authoritative. `ROADMAP.v3.md`, `ROADMAP.v2.md`, and `ROADMAP.original.md` are preserved historical versions.
 
@@ -79,6 +79,8 @@ Presentation clients
 - **COMPLETED:** Confirmation-gated factory reset/restore with backup safeguards and lore/assistant separation.
 
 ## Versioned benchmark foundation (begin early and grow continuously)
+
+**COMPLETED TEST-DISCOVERY IDENTITY FOUNDATION (PENDING WSL FULL-SUITE SMOKE):** Full regression discovery now uses `python -m unittest discover -s tests -t . -v` with an inert `tests` package and package-qualified shared fixtures. Root/test-folder manual chunker inspectors remain explicitly runnable but cannot read manuscript content on import. Reset fixtures restore their temporary database setting even after failure. Native full discovery reaches 1,132 tests beyond the former collision, but is not clean: a reproducible Windows `factory_restore` file-replacement failure remains open before Windows release/restore readiness, alongside intermittent API-test errors requiring diagnosis. Neither failure is skipped, and this test-infrastructure slice changes no production reset/database behavior or current product dependency order.
 
 StarFur must maintain a reproducible behavioral benchmark layer above unit and integration tests. Begin the harness during the shared application/provider foundation, before routing and resident-environment work, so every later architectural change can be compared against accumulated evidence.
 
@@ -288,6 +290,14 @@ Create-your-own-adventure sessions are isolated, mountable story worlds rather t
 
 **COMPLETED DECLARED-PARTICIPANT ROSTER SLICE:** Adventure manifests may now retain one validated, immutable pre-event roster. Exact `adventure participants` and `adventure participant inspect <participant-id>` expose only a mounted roster and bounded participant-specific projections. Established-checkpoint children copy declarations but re-derive child-local namespaces. No participant can act, call a provider, write memory, or acquire authority through this read-only slice.
 
+**COMPLETED PARTICIPANT-CONTEXT USAGE SLICE (WSL CONTROL SMOKE PASSED):** Exact `adventure participant context <participant-id>` reports only selected category counts, their existing selection ceilings, and the rendered view's character count from one mounted participant perspective. The WSL control/help/missing-participant/repeat-inspection smoke passed with unchanged events. Inspection preserves state, staging, and authority; it reads no full event/transcript history and calls no provider. These are per-category limits and view size, not a combined token budget, full request size, durable NPC memory, or performance guarantee. Explicit `adventure refresh` remains separate; default resident/API snapshots gain no participant detail.
+
+**COMPLETED WHOLE-FACT PARTICIPANT SIZE SELECTION (WSL COMPATIBILITY SMOKE PASSED):** Participant views now fit already-filtered category-capped facts to the unchanged 12,000-character ceiling rather than failing the entire request for an oversized view. Existing category/item order is deterministic; a non-fitting fact is omitted intact and later smaller facts may still fit. Views already below the ceiling render identically. Count-only inspection reports size omissions without including hidden/private or category-cap omissions. The installed-model smoke completed with valid no-action output, identical empty-context usage, empty staging, and unchanged events. Oversized contexts remain temporary-fixture tested, not live-quality evidence. Complete projections and storage remain unchanged, with no fact truncation, inferred salience, summary generation, provider retry, automatic action, or token/resource guarantee.
+
+**COMPLETED PARTICIPANT SOURCE-DATA FRAMING (WSL COMPATIBILITY SMOKE PASSED):** Participant requests now encode the view, exact Core trigger, and untrusted turn text in one versioned JSON data frame instead of delimiter-based concatenation. The installed model returned one review-only candidate with empty staging and unchanged events. Its action-like suggestion wording was a quality issue, not evidence that an action occurred. UTF-8 validation and a 64,000-byte source-frame ceiling precede every injected provider attempt; invalid input has the closed `input_invalid` status and leaves review/staging/state unpublished. Turn/view/profile limits are unchanged. Escaping is not prompt-injection immunity, factual verification, or authority; strict response validation and Core policy binding remain required. This source-byte ceiling is not full-prompt token accounting or host-resource enforcement.
+
+**COMPLETED PARTICIPANT PROPOSAL-WORDING REFINEMENT (WSL SMOKE PASSED):** Generation guidance requests a proposed next step rather than completed-action narration. The installed model returned suggestion-style wording under the quoted untrusted label, with completed generation, empty staging, and unchanged events. This is one compatibility/wording observation, not a future-output guarantee. Review presentation independently quotes/escapes the original summary, so model prose is not presented as a Core assertion. No grammar classifier, summary rewrite, action relabeling, retry, or new approval/performance path exists. Transcript semantics and canonical boundaries are unchanged.
+
 **COMPLETED PARTICIPANT-PRESENCE PRESENTATION SLICE:** The resident snapshot now exposes only aggregate `participant_count` for a mounted adventure. Apartment/dashboard clients receive no participant identities, namespaces, knowledge, relationships, or perspective content; participant detail remains the explicit local inspection path.
 
 **COMPLETED DECLARED-CAST EXTRACTION CONTEXT SLICE:** The ordinary generated-turn extractor may receive only explicit roster labels (ID, kind, display name) so it can recognize the configured cast. It does not receive participant perspective/memory, namespaces, initiative policy, hidden resources, or authority; it does not generate an independent participant turn. A later action-proposal path remains required before any persona/NPC initiative.
@@ -313,6 +323,8 @@ Create-your-own-adventure sessions are isolated, mountable story worlds rather t
 **COMPLETED SESSION-LOCAL PARTICIPANT PACING SLICE:** Only an explicit transcript recording consumes a participant's declared cooldown/max-per-turn allowance; proposal generation and review alone do not. The bounded counters reset on remount/restart and are not canonical state, memory, durable initiative history, or scheduling. The focused smoke must additionally show a same-turn retry denied before provider work and a later turn eligible when policy allows.
 
 **COMPLETED PARTICIPANT-TRANSCRIPT PAIR SLICE (WSL/OLLAMA SMOKE PASSED):** Explicit recording atomically appends the captured player turn plus selected participant narration as a noncanonical `user`/`narrator` pair. That pair may later enter the existing explicit transcript candidate-review path, never direct story mutation. The smoke confirmed correct pair ordering, `AT-... -> AT-...` source provenance on the later candidate review, and an unchanged authoritative event log.
+
+**COMPLETED PARTICIPANT-LIFECYCLE FIXTURE FOUNDATION (WSL CLI/LEDGER SMOKE PASSED):** `adventure-participant-lifecycle-v1` exercises seven real session-command cases with injected synthetic responses and temporary workspaces: review-only, valid no-action, once-only transcript pairing, pacing, interruption/recovery, stale origin, and invalid envelopes. The WSL test suites passed; both default and explicit ledger runs reported 100% lifecycle checks and measured repeatability, and the opt-in record append succeeded. It never loads a model, reads production memory, or touches installed adventures. Live-model quality, restart/corruption, broader party behavior, and verified cancellation remain separate gates.
 
 **COMPLETED INITIAL C2 TRANSCRIPT-CONTRACT SLICE:** Added a closed, provider-free `AdventureTranscriptRecord` for bounded user/narrator presentation text. Transcript records are structurally distinct from canonical events and typed mutations, have no storage or automatic capture yet, and may never rebuild state, replay, memory, or prompt facts. Future retention must be explicitly configurable and permissioned.
 
@@ -484,7 +496,43 @@ workspace benchmark now verifies ordinary candidate generation/validation,
 explicit staging and append-only commit, explicit no-change output, invalid
 envelope rejection, and stale-origin rejection as separately bounded outcomes.
 
+#### Adventure Mode category — FoxFire Dispatch / ATS Career (PLANNED; optional)
+
+An optional persistent, text-driven trucking-roleplay layer for **American Truck Simulator (ATS)** lets StarFur act as a company's dispatcher and narrative/world-state keeper. **FoxFire Freight** is the first example carrier: dark-carnival atmosphere, neon-night hauls, and distinctive dispatch voices. Company identity, tone, fleet, economy rules, and dispatcher persona are replaceable scenario/package data, not a FoxFire-only product mode or hardcoded Core behavior. The same category must support other user-created carriers and drivers.
+
+- **Continuity:** use a separate, inspectable `adventure:<id>` workspace for each company/driver career. Persist validated company records, fleet/truck/trailer configuration, location, proposed/approved/accepted/completed/cancelled loads, prior jobs, game-world fuel/maintenance history, reputation, and unresolved story hooks through generic events/resources and rebuildable projections. Narrative finances/reputation must remain distinguishable from actual ATS values; fictional records never become shared personal memory or real-world expertise.
+- **Dispatch:** generate immersive messages, load offers, route notes, fuel/maintenance reminders, delivery follow-ups, and occasional bounded story events from selected current career facts. Scenario rules constrain cargo, equipment compatibility, pickup/destination, route/distance, delivery windows, operating costs, and job availability before offers are shown. Generated text is a proposal, not proof that ATS accepted a job or that a delivery occurred; missing or stale facts require clarification rather than invented telemetry. Dispatch and reminders must not demand interaction while driving or monopolize foreground game resources.
+- **Ownership:** generic Core retains validation, event/projection integrity, authority, and permissions; the adventure package owns trucking narrative and declared rules. A replaceable ATS adapter translates manual reports or explicitly authorized local telemetry into bounded, provenance-labelled observations and later exact external operations. No ATS-specific job logic, dashboard scraping, executable package code, save editing, or vendor protocol belongs in Core. ATS remains authoritative for actual game job state; the career store records confirmed observations without pretending it controls the game.
+
+Dependency-ordered milestones (all future work; no change to the current execution sequence):
+
+1. **Manual dispatch career:** after adventure persistence/replay, reviewed typed consequences, and package/setup controls, approve one dispatch offer, manually create or accept the matching ATS job, then explicitly report completion/cancellation. Keep dispatch approval, game-job acceptance, and delivery confirmation separate. Record stable dispatch/job links, source, and time; support correction, duplicate-report rejection, restart/resume, and isolation between careers. This useful first loop requires neither ATS telemetry nor vision, job injection, or autonomous tools.
+2. **Read-only ATS observations:** after adapter contracts and permissioned local context sources, optionally consume a documented local telemetry/dashboard API. A future window-scoped vision/OCR adapter may supply an alternative or redundancy once the separate screen-awareness gate exists. Prefer structured telemetry where available; show source, freshness, and uncertainty, reconcile disagreement explicitly, and pause automatic decisions when evidence conflicts or disappears. Do not count API/OCR readings of the same underlying game state as independent factual verification. Observation permission never grants control, network disclosure, or memory writes.
+3. **Custom-load handoff:** support a future Trucky-style custom-job workflow behind an optional adapter. Verify supported interfaces, licensing/terms, game/version/mod compatibility, and feasibility before promising injection. Begin with a bounded export/manual handoff; later actual job creation requires the tool broker's separately authorized, exact reviewed operation. Capability absence retains the manual loop rather than bypassing policy or manipulating unsupported game files.
+4. **Dispatch delivery:** start with StarFur-local text/inbox and optional licensed TTS; later adapters may deliver in-game email, texts, or supported notifications. Game-native channels remain feasibility-gated, with local presentation as fallback. Messaging/control grants are separate from observation. Rate limits, quiet/focus behavior, pause/revocation, and accessible noninterrupting presentation apply; no remote service is mandatory.
+5. **Bounded independent dispatcher:** after scheduler, permission, external-effect recovery, resource-admission, and adversarial smoke gates, allow opt-in operation under explicit finite standing policy: permitted company/driver, adapter/destinations, equipment/cargo/route constraints, spending/load limits, cadence, expiry, and revocation. Independence means authorized dispatch decisions, load creation, and messages within that envelope, not unrestricted control of ATS or the PC. Recheck current game state and exact operation authority at execution; uncertain completion must reconcile without blindly reinjecting a load or replaying a message. Stop safely on stale/conflicting observations, unsupported capability, cancellation, or provider failure; no provider means inspection and deterministic manual records remain available, not fabricated dispatch activity.
+
+**Acceptance / evidence:** provider-free fixtures cover career isolation, proposal versus confirmed-job separation, equipment/route constraints, missing/stale/conflicting API/OCR evidence, duplicate and out-of-order reports, corrections/replay, and zero-provider inspection. Later adapter smoke tests separately gate read-only observation, one exactly approved custom load, one message, revoke/pause, crash/uncertain-outcome reconciliation, and foreground-game resource cooperation. Do not mark telemetry, injection, game-native messaging, or autonomous dispatch implemented from a successful manual roleplay test. Optional Workshop carrier packages reuse the existing declarative validator; executable adapters are separately installed trusted integrations, never bundled authority. This category is not a basic apartment or initial Steam release dependency.
+
 ### Current dependency-ordered execution path
+
+**CURRENT RECOVERY / INTERRUPTION FOLLOW-UP:** Non-streaming proposal-phase
+Ctrl+C now follows the existing local interruption path, retains an already
+completed reply, records the proposal as interrupted, and releases StarFur's
+capacity without repair/retry or a provider-stop claim. Focused fake-provider
+tests cover primary/repair interruption and subsequent CLI recovery. The exact
+Action Smoke orphan has an offline preview/apply helper with validation and
+backups; it is not general registry crash recovery. WSL inspection now confirms
+registration is usable and existing transcript history is intact; the reported
+apply was an already-registered no-op, not evidence of a registry replacement.
+The proposal-phase Ctrl+C smoke preserved the completed reply, reported an
+interrupted proposal, left no pending proposal, and returned usable controls.
+The installed thinking-off participant profile returned both a review-only
+candidate and a valid no-action result without transcript/event mutation.
+These checks establish compatibility/recovery, not speed, quality, resource
+enforcement, or verified Ollama termination. No
+adventure-integrity milestone or current dependency order is promoted by this
+maintenance slice.
 
 The older numbered stages above preserve the project history. Active implementation now follows this dependency order so an adventure-import prototype and a read-only Murr apartment arrive early without bypassing safety boundaries:
 
@@ -522,11 +570,13 @@ runtime and leaves document annotation on its separately bounded current path
 until annotation-specific routing and benchmarks are ready.
 
 **COMPLETED PROVIDER-NEUTRAL TEXT-CONTRACT SLICE:** Core now normalizes a
-complete chat response or streamed text fragment through one text-only contract
+complete chat response or streamed text fragment through one neutral contract
 before normal chat, proposal extraction, document annotation, or adventure-turn
 extraction consumes it. Current Ollama-shaped mappings and typed test-adapter
-responses remain compatible, while raw provider payloads, transport metadata,
-and tool data remain outside Core. This is a compatibility seam, not a claim
+responses remain compatible. The later completion-status extension retains
+only an optional closed stop/length/unknown reason; raw provider payloads,
+thinking text, other transport metadata, and tool data remain outside Core.
+This is a compatibility seam, not a claim
 that alternative provider construction, cancellation, or fallback execution is
 implemented.
 
@@ -542,7 +592,7 @@ NPC and party-member memory are not arbitrary hidden chat buffers. Their normal 
 
 **ADVENTURE-OWNED NARRATIVE MEMORY (PLANNED):** Adventure continuity must use a separate automatically maintained `adventure:<id>` event/state store rather than the conservative shared assistant-memory proposal workflow. A bounded salience layer may persist meaningful choices, discoveries, promises, lies, relationship changes, character knowledge, inventory, locations, unresolved hooks, and other continuity-critical state without interrupting immersion. Decorative prose and ordinary dialogue should not become durable events. Adventure state remains isolated from shared user memory, lore memory, and persona self-memory; it is replayable, inspectable, resettable, size-bounded, and never silently promoted to real-world memory. Importing an external `details.md` file remains a reviewed document/context path until this authoritative event/state layer exists.
 
-1. **COMPLETED INITIAL EXACT-CONTROL SLICE:** Add deterministic Core controls for resume, pause, and end; `end story now` cannot be delayed or reinterpreted by the narrator. Remaining: explicit start that binds workspace + roleplay, archive/reset workflows, natural-language resume/load phrases, ambiguity handling, and documented equivalents beyond the initial exact alias. Natural-language story-intent detection may later assist discovery but must never silently create a new world when the user requested a resume.
+1. **COMPLETED INITIAL EXACT-CONTROL SLICE:** Add deterministic Core controls for resume, pause, and end; `end story now` cannot be delayed or reinterpreted by the narrator. The C1 `adventure begin <title>` and `adventure session` slices above already provide explicit workspace/roleplay entry and binding inspection. Remaining: archive/reset workflows, natural-language resume/load phrases, ambiguity handling, and documented equivalents beyond the initial exact alias. Natural-language story-intent detection may later assist discovery but must never silently create a new world when the user requested a resume.
 2. **COMPLETED INITIAL READ-ONLY SLICE:** Mount bounded, validated summary-only adventure event context without merging it into user memory, lore memory, or persona self-memory. A resident persona may narrate inside the world while retaining a separate shared-reality identity and relationship with the user. Remaining: derived state, event-authoring workflow, and replay/spine policy.
 3. Make a validated, append-only adventure event log authoritative. Record meaningful choices, discoveries, promises, lies, relationship changes, emotional transitions, state changes, and unresolved hooks as events. Derived state and snapshots may accelerate loading but must be rebuildable from events.
 4. **COMPLETED INITIAL SPINE SELECTION:** Rebuild a deterministic bounded chronology from the authoritative event log, retaining initial setup, latest high-value continuity categories, and recency. Remaining: branches, richer derived state, user-facing reset/restart semantics, and narrative contradiction/replay benchmarks. Stories should eventually replay without requiring identical prose: the model may regenerate scene wording and connective details around established events, but must not silently erase or contradict them.
@@ -959,8 +1009,59 @@ profiles now request 512/256/256-token outputs. These are editable task-profile 
 not evidence of wall-time, CPU, RAM, or GPU enforcement; later backend
 admission must still defer when requested controls cannot be enforced. The
 chat ceiling was raised from the initial 512-token trial after its live smoke
-showed that provider-side reasoning could consume enough of the shared output
-budget to truncate otherwise ordinary visible replies.
+showed visible truncation. A later 1024-token trial also cut off; the relative
+contribution of reasoning versus visible output was not measured.
+
+**COMPLETED EXPLICIT TASK-THINKING CONTROL — WSL SMOKE PASSED:** Profiles may
+request boolean `model_thinking` only through adapters declaring exact support.
+Ollama receives top-level `think`; omission preserves its default, unsupported
+controls fail without a request or hidden fallback, and stock assistant chat
+requests `false` without increasing its 1024-token ceiling. This is not a
+claim that every installed model/server supports the control or that it fixes
+all latency, output, or foreground-performance problems.
+
+**COMPLETED BOUNDED COMPLETION-STATUS BOUNDARY — WSL SMOKE PASSED:** Provider
+adapters reduce completion status to stop/length/unknown without exposing
+thinking or raw payloads. Chat diagnostics and CLI identify output-limited
+responses; JSON/SSE use `length` rather than falsely reporting `stop`, and an
+unreported/unknown reason remains unspecified at the API. Application response
+metadata is captured under the request lock. Limited normal chat does not
+trigger memory-proposal extraction or automatic continuation. Ollama structured
+results and document annotation reject reported output limits before candidate
+validation. Focused fake-provider/API tests cover these boundaries. The supplied
+WSL/Ollama smoke showed thinking-off in route preview, a natural short-response
+stop, and a limited response with explicit length status and skipped proposal
+extraction. This does not establish GPU/wall-time enforcement or prove all
+models support the setting.
+
+**COMPLETED MIXED-PASTE/DIAGNOSTIC INPUT FOUNDATION — WSL SMOKE PASSED:** One
+shared pure framing check rejects unquoted command-shaped lines in multiline
+requests before Core commands, provider use, and UI document extensions. It
+never runs a pasted command batch or guesses a mutation. Ordinary multiline
+prose and quoted/fenced examples remain chat data. Explicit whole-message
+context-stat requests return the existing Core snapshot instead of model-written
+telemetry; absent snapshots/readers report unavailability. Ambiguous requests
+preserve pending confirmation without consuming it; valid follow-up requests
+retain the existing confirmation/cancellation flow. Focused session, CLI,
+facade, and JSON/SSE tests cover the boundary. The WSL helper smoke rejected
+one combined prompt/control message and the subsequent real diagnostic request
+confirmed that no turn snapshot had been created. No new platform dependency.
+
+**COMPLETED STRUCTURED OUTPUT-LIMIT DIAGNOSTIC REFINEMENT:** A typed,
+content-free adapter error and common complete-result guard retain reported
+output limits through routing, all four adventure proposal channels, and local
+research claim/relationship review. Status uses `provider_output_limit` rather
+than generic transport/JSON failure. Even complete-looking limited JSON cannot
+produce candidates or reviews; local capacity releases without hidden retries,
+fallback, continuation, or budget changes. Fake command/provider tests cover
+the boundary; this is not provider-stop or GPU-budget evidence.
+
+**STOCK PARTICIPANT THINKING-OFF REQUEST — WSL SMOKE PENDING:** The short
+participant-action route now requests `model_thinking=false` through the same
+support-declaring adapter used by normal chat. Its 4096 context, 256 output,
+interactive label, and `keep_alive=0` remain unchanged. Other structured routes
+retain provider defaults. A focused participant-action schema smoke is required
+before extending this default; latency/quality improvements are not presumed.
 
 **COMPLETED PROVIDER-FREE ADMISSION EVALUATION:** `provider-resource-eval`
 executes four deterministic resource-policy fixtures and may explicitly record

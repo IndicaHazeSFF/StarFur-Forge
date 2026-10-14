@@ -119,7 +119,9 @@ Existing primitives:
 **COMPLETED C3 STRUCTURED-OUTPUT CONFORMANCE SLICE (WSL/OLLAMA SMOKE PASSED):**
 Ordinary and typed generated-turn tasks now supply separate Core-owned portable
 structural JSON Schemas to an exact route only when its adapter explicitly
-implements the non-streaming structured-output capability. Strict candidate
+implements the complete-result structured-output capability. The Ollama adapter
+may stream internally only to make transport interruption possible; Core still
+receives one complete result. Strict candidate
 parsers remain authoritative for closed fields, bounds, vocabulary, and version;
 schemas grant no event authority, and a structured request that fails never
 silently retries through an unconstrained text path. Legacy or
@@ -251,6 +253,16 @@ State, relationship, character-knowledge, and resource proposals get separate sc
 
 An adventure remains replayable through authoritative events, key discoveries, state, relationships, character perspectives, unresolved hooks, and scenario definitions while allowing regenerated prose. Full story documents are source material, not canonical events until explicitly mapped/committed. A portable adventure package may contain a manifest plus `details.md`, summary/transcript, and optional assets; imported state and event history remain separate from shared user memory.
 
+### Adventure Mode category — FoxFire Dispatch / ATS Career (LATER; optional package/adapter)
+
+The authoritative `ROADMAP.md` category defines a persistent text-driven American Truck Simulator dispatcher/world-state layer: immersive load offers, route notes, fuel/maintenance reminders, delivery follow-ups, and occasional story events grounded in current location, truck/trailer, job history, and company reputation. FoxFire Freight is the first customizable dark-carnival/neon-night-haul carrier; other companies, drivers, tones, and dispatcher personas use the same infrastructure.
+
+Use one inspectable `adventure:<id>` career per company/driver with event-backed company records and generic declared resources. Keep proposed/approved dispatch, actual game acceptance, delivery, and cancellation distinct and provenance-linked; fictional economy/reputation is not automatically ATS state or personal memory. Core owns generic integrity and permissions, the package owns trucking narrative/rules, and separately installed optional ATS adapters own protocol translation. No ATS-specific logic or executable carrier-package behavior belongs in Core.
+
+Milestones: (1) approve dispatch -> manually create/accept matching ATS job -> report completion, after persistence/replay and reviewed state gates; (2) authorized read-only local telemetry/dashboard API, with later separately scoped vision/OCR as an alternative or redundancy; (3) Trucky-style manual export then exact brokered custom-load injection only after interface/license/compatibility validation; (4) local inbox first, optional supported in-game emails/texts/notifications later; (5) opt-in independent dispatch only after scheduler, finite standing policy, foreground resource limits, effect idempotency/reconciliation, cancellation, and restart gates. API/OCR source freshness/conflicts must be inspectable; observation never supplies control authority. Unsupported channels retain manual/local presentation; ambiguous completion never blindly repeats injection or messaging.
+
+Fixtures and separate adapter smokes must prove career isolation, realistic declared equipment/route constraints, duplicate/out-of-order report handling, stale/conflicting observations, replay/corrections, zero-provider manual inspection, exact effect approval, revocation, uncertainty recovery, and nonintrusive game-time behavior. Details and acceptance criteria stay centralized in `ROADMAP.md`; this proposal does not adopt a new authoritative roadmap, reorder the current C3/E/F/H work, or make ATS support an initial Steam gate.
+
 ## Stage D — Behavioral evaluation (START ALONGSIDE C3)
 
 Benchmarking begins before real-model generated turns and grows continuously. Every run records benchmark version, git commit, architecture fingerprint, provider/model/quantization, context/output budgets, hardware, seed, case, expected/actual bounded result, pass/fail, retrieval/candidate scores, latency/TTFT, and available resource metrics. Raw prompts/responses remain opt-in and privacy-approved only.
@@ -274,6 +286,42 @@ provider failures), so real regressions remain comparable without retaining a
 provider response.
 
 Later ablations compare full StarFur with retrieval, association, persona runtime, structured adventure state, or other components disabled, plus a raw-model baseline.
+
+### Research and grant evidence track — LATER; optional cross-cutting capability
+
+Keep a grant- or paper-ready evaluation path available even if no application is
+ever submitted. It is evidence infrastructure, not a product promise or Steam
+gate. Each study must state a hypothesis, comparison baseline, fixed benchmark
+manifest, versioned metric definitions, stopping rule, known limitations, and
+the exact Core/provider configuration under test.
+
+Potential tracks include small-model scaffolding; trustworthy continuity;
+permission and sandbox safety; resident initiative and companion quality;
+adventure and writing co-creation; and privacy-preserving local or
+zero-provider operation. Metrics should cover quality per parameter, grounding,
+retrieval, correction/restart/cross-provider continuity, unauthorized effects,
+secret disclosure, injection resistance, interruption burden, intention
+follow-through, emotion coherence, replay/state integrity, authoring effort,
+resource cost, latency, and variance across repeated runs.
+
+Grant-ready runs must bind repository commit, architecture/policy fingerprints,
+fixture and benchmark hashes, model/provider/version/quantization,
+context/output budgets, hardware/OS/runtime, seed, run IDs, and timestamps.
+Export aggregate JSON/JSONL plus a human-readable report with distributions or
+confidence intervals where appropriate. Raw prompts, responses, private
+documents, identifiers, and credentials stay excluded unless a separately
+approved protected study requires them. Human studies require consent,
+minimization, withdrawal/deletion rules, and applicable ethics review; do not
+infer consciousness, attachment, security, or clinical benefit from engagement
+metrics alone.
+
+Add hypothesis, baseline, intervention, metric, limitation, and provenance
+fields to the research-ledger plan. Exploratory personal data stays outside the
+repository, while important failures become sanitized permanent fixtures.
+The acceptance target is a provider-free command that validates a frozen
+manifest, runs fixture comparisons, records bounded observations, and exports a
+reproducible summary without changing production state. This remains optional
+research infrastructure and never a Steam release gate.
 
 ## Stage E — Provider registry and measured routing (LATER; after C3 coordinator)
 
@@ -389,6 +437,67 @@ before the existing review boundary.
 6. Keep lifecycle reporting descriptive; add model load/unload/residency management only as a separate explicit capability with leases/cancellation/resource observations.
 
 The router chooses and executes a task. It does not become a second application layer or a hidden game director.
+
+### Foreground-friendly inference and resource cooperation — FUTURE E/S-H SLICES
+
+Local generation must not make the user's foreground application unusable.
+Define explicit `interactive`, `balanced`, and `background` resource profiles
+with bounded CPU/RAM/VRAM targets, wall-clock/output limits, concurrency, model
+load/unload behavior, cancellation, and provider cooling. Ambient, idle,
+research, and adventure-background work must yield to foreground activity;
+when a backend cannot enforce the requested budget or preemption, Core must
+defer or deny the work rather than claim cooperation. A user-selected gaming or
+focus mode may pause queued work immediately. Any process/window awareness is a
+separate opt-in signal, not silent surveillance. Benchmarks should record
+time-to-first-token, completion latency, resource peaks, cancellation time,
+provider load residency, and optional foreground frame-time impact.
+
+**COMPLETED MANUAL FOCUS-MODE GATE:** The trusted local `focus mode on/off/status`
+control is session-local and provider-free. It defers configured `balanced` and
+`background` tasks before provider use while retaining explicitly requested
+`interactive` work. It is not monitoring, priority control, automatic unload,
+or a durable preference; later awareness stays separately opt-in.
+
+The stock multi-chunk document-annotation task is `background`, so Focus Mode
+defers a new intake before provider use instead of introducing unload/reload
+between chunks. Route inspection marks each deferred workload explicitly.
+
+**COMPLETED PROVIDER-FREE RESOURCE-ADMISSION CONTRACT SLICE:** Core now has
+strict immutable contracts for `interactive`, `balanced`, and `background`
+inference envelopes, exact backend enforcement claims, and a pure admission
+decision. Missing requested controls or an explicit foreground-busy conflict
+defer work fail-closed. This performs no monitoring, routing, reservation,
+provider call, process-priority change, or model lifecycle action.
+
+Task profiles may now attach bounded `interactive`, `balanced`, or `background`
+labels to routed workloads. Current defaults classify chat/proposals and
+participant actions as interactive, adventure generation as balanced, and
+research as background. Labels remain descriptive until exact backend
+capabilities are supplied; they do not reserve resources or authorize work.
+
+**COMPLETED OPT-IN OLLAMA RESIDENCY-REQUEST PLUMBING:** A task profile may
+carry bounded `model_keep_alive_seconds`; routed Ollama calls forward it only
+as an explicit provider `keep_alive` request. An omitted value preserves the
+provider default. This neither proves model unload nor establishes admission or
+enforced CPU/RAM/VRAM/cancellation control.
+
+**COMPLETED FIRST LOW-IMPACT RELEASE-REQUEST DEFAULT:** Stock participant
+actions and background research request `keep_alive=0` after each completed
+response. Chat, document annotation, and ordinary adventure generators retain
+the provider default. A live Ollama smoke passed: after a completed Murr action,
+`ollama ps` reported no resident model. Core still cannot infer future release
+success from this request.
+
+Bounded completed-route diagnostics may expose that label for later performance
+visualization, without exposing budgets, prompts, provider payloads, or hardware
+observations.
+
+**COMPLETED INTERRUPTIBLE STRUCTURED-TRANSPORT SLICE (LIVE SMOKE REQUIRED):**
+Ollama schema requests use an internal stream so Ctrl+C can close the response
+without publishing partial candidate data; Core still validates only one
+complete result. The close is not verified-stop proof. Default participant
+actions are capped at 4096 context and 256 output tokens. Native WSL/Ollama
+interruption and foreground recovery remain the smoke gate.
 
 ## Stage F — Tools and permissions (LATER; routing stable first)
 
@@ -1028,6 +1137,41 @@ unsuitable discovery source.
 
 Permissioned one-shot screen/window/image/PDF inspection, TTS/STT, image generation, notifications, and presence signals through the provider registry. Media is bounded and provenance-bearing; generated images are noncanonical. Voice uses explicit push-to-talk/always-listen settings, confidence, cancellation, and interruption policy. Continuous surveillance is never the default.
 
+### Permissioned image-model discovery, selection, and installation — FUTURE E/G SLICE
+
+Image capability begins with a Core-owned provider/task boundary, not a model
+download button. An explicit trusted-local model-research flow may inspect
+approved public catalog metadata (initially sources such as Hugging Face; other
+catalog adapters require their own source and license policy) and return a
+bounded comparison: model identity/version, declared license, source URL,
+expected size/hash when published, compatible backend/format, approximate local
+resource fit, and declared general or specialty style capability. Catalog prose
+and model cards remain untrusted discovery data, never installation authority.
+
+Core may recommend a small suitable general-purpose or specialty candidate for
+the requested image task, but must ask whether to use that exact model, an
+already installed model, or a user-selected alternative. It never silently
+searches, downloads, installs, switches, or invokes an image model because a
+persona/provider suggested one. Discovery is separate from download; download
+is separate from install; install is separate from the later generate route.
+
+Once the modular tool broker and native isolation/install gates exist, a model
+installation proposal must bind the exact source, publisher identity where
+available, license acknowledgement, expected digest/size, destination under a
+validated model store, compatible backend, and explicit user confirmation. It
+must quarantine downloads, reject archive/path traversal and unsupported
+executables, avoid inherited credentials, preserve a bounded install audit, and
+fail closed on missing or mismatched integrity metadata. Removing or updating a
+model needs a separate explicit lifecycle policy. Hosted image APIs remain a
+distinct disclosure/consent path from local models.
+
+The first practical image prototype should use one explicitly installed local
+backend and model: prompt, generate, inspect, then explicitly save/export.
+Generated output carries model/provider/prompt-policy provenance but is neither
+canon nor memory. Later experiments compare quality, latency, VRAM, disk cost,
+license, and task fit through the existing evaluation ledger; generic and
+specialty models remain replaceable provider adapters.
+
 ### Synchronized media companionship — FUTURE G/H SLICE
 
 Add an explicit, opt-in `MediaSession` for watching a movie, episode, or other
@@ -1140,6 +1284,130 @@ without hidden effects; and privacy tests for relationship pressure, private
 context, and identity claims. Ambient Presence is a later cross-cutting H2/H3/J
 capability, not a new immediate dependency or Steam gate.
 
+### Resident continuity and grounded companionship quality — FUTURE H/J SLICES
+
+**Routine and emotional continuity.** Add a deterministic, bounded resident
+routine engine above `ResidentAction`. Time and quiet hours, energy, attention,
+valence, explicit task outcomes, approved shared experiences, and selected
+availability events may propose a finite next activity. It must prefer silence
+or no change under uncertainty, let state recover/decay naturally, and never
+invent needs or use mood to pressure the user. These are simulated resident
+state variables, not evidence of human consciousness.
+
+**Shared-experience journal.** Add an inspectable persona-local record for
+explicit experiences such as reading or watching together, a completed learning
+activity, praise, or an adventure milestone. Each entry needs bounded summary,
+provenance, and applicable user policy. Passive microphone/camera/context
+signals must never become durable memory merely because they occurred;
+promotion into durable persona development or relationship context needs a
+separate review policy.
+
+**Grounded companion moments and artifacts.** A resident claim such as
+“I learned/painted/made this” must resolve through an inspectable chain:
+goal -> explicit permission -> isolated work -> quarantined artifact -> explicit
+presentation -> optional user reaction -> independently verified learning
+record. Provider prose cannot declare work complete, establish a skill, or
+claim a shared experience happened. Apartment/activity surfaces may show only
+safe artifact metadata and explicit outcomes.
+
+**Arrival, absence, and focus.** Permissioned local signals may eventually
+support a restrained welcome-home, away, and focus transition through selected
+sources, confidence thresholds, debounce/cooldowns, quiet hours,
+fullscreen/do-not-disturb, and provider-loss policies. Continuous webcam or
+microphone surveillance is never the default; absence must never cause guilt or
+relationship pressure. Zero-provider mode may use authored local cues or stay
+quiet.
+
+**Screen Awareness control.** Treat periodic screen inspection as a separate,
+prominent, off-by-default permission rather than an implied consequence of
+Ambient Presence. A user may enable it with an explicit cadence (event-driven,
+such as a window/title change, or a selectable interval), selected
+window/application scope, active-window-only mode, and pause/quiet-hours
+controls. Prefer the least invasive signal: metadata/accessibility text before
+screenshots or OCR. Process locally when possible, show a visible observation
+status, use bounded redaction, and retain nothing by default. Screen data must
+not enter prompts, hosted-provider disclosure, shared-experience memory, or
+diagnostic logs unless the user separately enables that exact destination and
+retention policy. Revoke immediately. Webcam and microphone permissions remain
+separate controls; screen awareness never implies them.
+
+**Companion-quality evaluation.** Add fixtures and benchmarks for excessive
+questions, canned reassurance/agreement, repetition, unnecessary “as an AI”
+disclaimers, inappropriate interruption, fabricated shared experiences,
+emotion persistence/decay, quiet mode, restart/resume coherence, and
+anti-coercion safeguards. These measure behavioral quality, not consciousness.
+
+**Voice identity / Murr TTS.** Keep speech behind a replaceable TTS provider
+and declarative voice-profile/asset slot. A custom Murr voice model or dataset
+is an optional later package: it requires a commissioned voice actor agreement,
+explicit permitted training and inference uses, model/provider compatibility,
+license/attribution, source hash/version provenance, and explicit installation
+consent. Until it exists, every resident and Ambient Presence milestone must
+work with user-selected generic/local TTS, text captions, or authored
+pre-recorded lines. Never train or clone an actor voice from a sample alone, and
+never make a custom voice a Core identity, an authority source, or a dependency
+that blocks the rest of the resident experience.
+
+### Resident agency and continuity contracts — FUTURE H/J SLICES
+
+The target is a persistent simulated resident whose behavior has inspectable
+causes and continuity, not a model improvising humanhood. “Alive” behavior must
+come from Core-owned state, remembered experience, bounded initiative, actual
+outcomes, and honest uncertainty. A provider may propose expression or action,
+but it cannot invent an unseen life, retroactively create an experience, or
+claim consciousness.
+
+**Intentions and unfinished business.** Add a bounded persona-local intention
+queue with explicit sources and states such as proposed, active, waiting for
+permission/input, completed, abandoned, and failed. An intention may originate
+from a declared interest, approved routine, shared activity, verified learning
+result, or direct user invitation. It must record why it exists, its next safe
+step, applicable permission/resource limits, and the evidence for any claimed
+outcome. Only recorded intentions may support later phrases such as “I wanted
+to continue this” or “I finished this.” Restart must restore allowed unfinished
+business without replaying effects or fabricating progress.
+
+**Self-directed curiosity and interest development.** Permit Core to turn
+repeated, explicit, provenance-bearing curiosity signals into a low-risk,
+reversible persona-local interest candidate. Interest strength should use
+bounded novelty, recurrence, outcomes, and decay rather than one model remark.
+The user can inspect, encourage, mute, correct, or remove it. Interests never
+become user facts, permissions, expertise, or authorization to research or use
+resources; costly, private, networked, or tool-using exploration still enters
+the normal permission broker and verified-learning lifecycle.
+
+**Meaningful requests for user input.** A resident may ask for the user's
+opinion, preference, feedback, or decision when it affects a real intention,
+artifact, shared activity, or ambiguous choice. The request must expose the
+actual decision, allow “later,” silence, or refusal, and remain subject to
+initiative budgets, interruption policy, quiet hours, and repetition
+cooldowns. Questions must not be generated merely to prolong engagement, test
+affection, manufacture urgency, or turn every response into a prompt.
+
+**Honest self-knowledge and social repair.** Core should supply a bounded view
+of what the resident actually observed, remembered, attempted, completed, and
+could not know. The persona should acknowledge uncertainty or absence instead
+of filling continuity gaps. User corrections, declined suggestions,
+interruptions, and failed activities may produce proportionate presentation
+or a brief repair/apology, but never punishment, sulking designed to retain the
+user, or an invented emotional debt.
+
+**Cross-provider identity stability.** Replacing, unloading, or losing a model
+must not reset identity, intentions, interests, relationship continuity, or
+resident state. Core supplies the same bounded resident context to eligible
+providers; provider-specific style drift is measured and constrained. When no
+provider can continue an open-ended activity, the resident may visibly wait,
+choose an authored alternative, or state that the capability is unavailable.
+
+**Agency and continuity evaluation.** Add long-session, restart, provider-swap,
+and zero-provider fixtures that measure: appropriate versus intrusive
+initiative; follow-through on recorded intentions; refusal/defer handling;
+interest formation and decay; requests tied to real decisions; consistency
+between mood, activity, artifacts, and dialogue; truthful admission of missing
+experience; nonrepetition; and absence of fabricated off-screen activity. Test
+user inspection/removal controls and prove that no agency path bypasses tools,
+memory policy, or permissions.
+
 ## Cross-cutting zero-provider resident runtime (LATER; release gate)
 
 With chat, embedding, vision, image, speech, and hosted providers disabled, Core must still boot the selected persona, restore allowed durable resident state, run deterministic activities/reactions, render human-authored assets, and expose inspection/settings. Open-ended reasoning and generated media are optional enhancements.
@@ -1174,9 +1442,11 @@ Add a typed `AdventureParticipantView` keyed by exact adventure and participant 
 
 **Completed participant-action status slice:** trusted-local status exposes only completed/failed/stale state, route labels, generation identity, and candidate count. It invokes no provider, reveals no provider output, and adds neither action selection nor performance.
 
-**Completed participant-action transcript-presentation slice:** an explicit current `TP-###` can be copied once to optional bounded narrator transcript presentation after an origin recheck. It is not an adventure event, projection mutation, memory, initiative-history record, scheduler instruction, or game-world action. The next focused smoke must verify exact selected text, transcript-only persistence, duplicate refusal, and an empty authoritative event log.
+**Completed participant-action transcript-presentation slice (WSL/Ollama smoke passed):** an explicit current `TP-###` can be copied once to optional bounded narrator transcript presentation after an origin recheck. It is not an adventure event, projection mutation, memory, initiative-history record, scheduler instruction, or game-world action. The smoke preserved the exact current participant suggestion as an atomic user/narrator pair, generated a later review-only ordinary candidate from that exact pair, and left the authoritative event log empty.
 
 **Completed session-local participant pacing slice:** only explicit transcript recording consumes a declared cooldown/max-per-turn allowance; proposal generation and review alone do not. Counters are bounded, reset on remount/restart, and are not canonical state, memory, durable initiative history, or scheduling. The focused smoke must also show a same-turn retry denied before provider work and a later eligible turn when the policy permits it.
+
+**Completed participant-transcript pair slice (WSL/Ollama smoke passed):** explicit recording atomically appends the captured player turn plus selected participant narration as a noncanonical `user`/`narrator` pair. It may later be supplied to the existing explicit transcript candidate-review flow, never direct story mutation. The smoke confirmed correct pair ordering, exact transcript-pair source provenance on the later candidate review, and an unchanged authoritative event log.
 
 ## Stage I — Workshop and Steam productization (LATER)
 

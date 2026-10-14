@@ -118,8 +118,11 @@ from pipeline.document_review import DEFAULT_REVIEW_TTL_SECONDS
 
 from pipeline.capabilities import CapabilityManifest
 from pipeline.command_help import detect_command_help
+from pipeline.command_input import (
+    MIXED_CONTROL_INPUT_GUIDANCE, has_ambiguous_multiline_controls, is_context_stats_request,
+)
 from pipeline.providers import (
-    CallableChatProvider, ChatProvider, ChatCompletion, ChatProviderResponseError,
+    CallableChatProvider, ChatProvider, ChatCompletion, ChatProviderResponseError, ChatProviderOutputLimitError,
     DisabledChatProvider, OllamaChatProvider, StructuredChatCompletionProvider, normalize_chat_completion,
     normalize_chat_stream_chunk, provider_health_snapshot, provider_is_configured,
 )
@@ -261,6 +264,10 @@ class GenerationInterrupted(BaseException):
     """
 
 
+class ProposalGenerationInterrupted(GenerationInterrupted):
+    """Proposal-only interruption after a completed, retained chat reply."""
+
+
 def _has_explicit_user_intent(normalized_text):
     return any(phrase in normalized_text for phrase in (
         "i want", "i'd like", "i would like", "i plan", "i intend",
@@ -375,6 +382,7 @@ class AssistantSession:
         self.proposal_creator = proposal_creator
         self.stream = stream
         self.stream_writer = stream_writer
+        self.last_chat_finish_reason = None
         self.messages = []
         self.roleplay_state = RoleplaySessionState.inactive()
         self.adventure_registry = adventure_registry or AdventureRegistry(
@@ -549,10 +557,13 @@ class AssistantSession:
 
     def _finish_turn_diagnostics(self, *, completed, response, latency_seconds, proposal=None, status=None):
         context = self._current_context_diagnostics or {}
+        if completed and self.last_chat_finish_reason == "length":
+            completed, status = False, "output_limited"
         self.last_turn_diagnostics = {
             **context,
             "completed": completed,
             "turn_status": status or ("completed" if completed else "interrupted"),
+            "finish_reason": self.last_chat_finish_reason,
             "response_characters": len(response or ""),
             "response_latency_ms": round(latency_seconds * 1000, 2),
             "time_to_first_token_ms": (
@@ -583,6 +594,7 @@ class AssistantSession:
         lines = [
             "=== CONTEXT STATS ===",
             f"Turn: {snapshot.get('turn_status', 'completed' if snapshot.get('completed') else 'interrupted')}",
+            f"Finish reason: {snapshot.get('finish_reason') or 'not_reported'}",
             f"Provider: {snapshot.get('provider', 'unknown')}",
             f"Model: {snapshot.get('model', 'unknown')}",
             "Generation options: " + self._format_ollama_options(snapshot.get("ollama_options", {})),
@@ -802,6 +814,8 @@ class AssistantSession:
                 budgets.append(f"workload={public_candidate['resource_profile']}")
             if public_candidate.get("model_keep_alive_seconds") is not None:
                 budgets.append(f"keep_alive={public_candidate['model_keep_alive_seconds']}s")
+            if public_candidate.get("model_thinking") is not None:
+                budgets.append("thinking=" + ("on" if public_candidate["model_thinking"] else "off"))
             if self.focus_mode_enabled and public_candidate.get("resource_profile") in {"balanced", "background"}:
                 budgets.append("focus=deferred")
             budget_text = f" ({', '.join(budgets)})" if budgets else ""
@@ -862,6 +876,17 @@ class AssistantSession:
                 self._set_latest_task_route_outcome("completed")
                 self.provider_lifecycle.finish()
             return execution.response
+        except KeyboardInterrupt as error:
+            self._current_task_routes.append({
+                "requested_task_id": decision.requested_task_id,
+                "selected_task_id": selected.task_id,
+                "provider": selected.provider_id,
+                "model": selected.profile.model,
+                "fallback_used": decision.selected_index not in (None, 0),
+                "outcome": "provider_stream_cancelled",
+            })
+            self.provider_lifecycle.fail("Generation interrupted")
+            raise GenerationInterrupted() from error
         except RoutedTaskExecutionError as error:
             self._current_task_routes.append({
                 "requested_task_id": decision.requested_task_id,
@@ -915,6 +940,8 @@ class AssistantSession:
             self.provider_lifecycle.fail(error)
             if error.reason == "provider_concurrency_busy":
                 raise ProviderCapacityBusyError(str(error)) from error
+            if error.reason == "provider_output_limit":
+                raise ChatProviderOutputLimitError() from error
             raise RuntimeError(str(error)) from error
         except Exception as error:
             self.provider_lifecycle.fail(error)
@@ -930,7 +957,11 @@ class AssistantSession:
         """
         if self._task_uses_structured_output(task_id):
             return self._provider_complete_structured(messages, schema=schema, task_id=task_id)
-        return self._provider_complete(messages, stream=False, task_id=task_id)
+        response = self._provider_complete(messages, stream=False, task_id=task_id)
+        if isinstance(response, ChatCompletion) and response.finish_reason == "length":
+            self._set_latest_task_route_outcome("provider_output_limit")
+            raise ChatProviderOutputLimitError()
+        return response
 
     def _task_uses_structured_output(self, task_id) -> bool:
         """Return only whether the exact selected adapter has the schema seam."""
@@ -1030,21 +1061,28 @@ class AssistantSession:
 
     def _chat_complete(self, messages, *, model=None, stream=None, task_id=TASK_ASSISTANT_CHAT):
         """Return complete content while optionally rendering streamed chunks."""
+        self.last_chat_finish_reason = None
         use_stream = self.stream if stream is None else stream
         if not use_stream:
             response = self._provider_complete(messages, model=model, task_id=task_id)
             self.provider_lifecycle.finish()
-            return normalize_chat_completion(response).content
+            completion = normalize_chat_completion(response)
+            self._record_chat_finish_reason(completion.finish_reason)
+            return completion.content
         response = None
         try:
             response = self._provider_complete(messages, model=model, stream=True, task_id=task_id)
             if isinstance(response, (dict, ChatCompletion)) or not hasattr(response, "__iter__"):
                 self.provider_lifecycle.finish()
-                return normalize_chat_completion(response).content
+                completion = normalize_chat_completion(response)
+                self._record_chat_finish_reason(completion.finish_reason)
+                return completion.content
             parts = []
             for chunk in response:
                 try:
-                    piece = normalize_chat_stream_chunk(chunk).content
+                    normalized = normalize_chat_stream_chunk(chunk)
+                    self._record_chat_finish_reason(normalized.finish_reason)
+                    piece = normalized.content
                 except ChatProviderResponseError:
                     # Streaming backends can emit a final metadata-only chunk;
                     # it is not text and must not become visible conversation.
@@ -1055,21 +1093,30 @@ class AssistantSession:
                     parts.append(piece)
                     if self.stream_writer:
                         self.stream_writer(piece)
-            self._set_latest_task_route_outcome("completed", only_if_submitted=True)
+            self._set_latest_task_route_outcome(
+                "provider_output_limit" if self.last_chat_finish_reason == "length" else "completed",
+                only_if_submitted=True,
+            )
             self.provider_lifecycle.finish()
             return "".join(parts)
         except KeyboardInterrupt as error:
-            self._set_latest_task_route_outcome("provider_stream_cancelled", only_if_submitted=True)
+            self._set_latest_task_route_outcome("provider_stream_cancelled")
             self.provider_lifecycle.fail("Generation interrupted")
             raise GenerationInterrupted() from error
         except Exception as error:
-            self._set_latest_task_route_outcome("provider_stream_failed", only_if_submitted=True)
+            self._set_latest_task_route_outcome("provider_stream_failed")
             self.provider_lifecycle.fail(error)
             raise
         finally:
             close = getattr(response, "close", None)
             if callable(close):
                 close()
+
+    def _record_chat_finish_reason(self, reason):
+        if reason is not None:
+            self.last_chat_finish_reason = reason
+        if reason == "length":
+            self._set_latest_task_route_outcome("provider_output_limit")
 
     def _context_plan(self, user_text, *, external_document_context=None):
         self.trace = RetrievalTrace(self.debug_level)
@@ -2225,6 +2272,33 @@ class AssistantSession:
             return AdventureParticipantView.from_session(self.adventure_session, participant).render()
         except (AdventureInitiativeError, TypeError, ValueError) as error:
             return f"Adventure participant inspection was not available: {error}"
+
+    def adventure_participant_context(self, value):
+        """Inspect counts from one mounted perspective, without storage/provider work."""
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded."
+        if not isinstance(value, str) or not value.strip():
+            return "Usage: adventure participant context <participant-id>"
+        roster = self.adventure_session.participant_roster
+        if roster is None or not roster.participants:
+            return "No declared adventure participants are configured for the loaded workspace."
+        try:
+            participant = roster.resolve(value)
+            usage = AdventureParticipantView.from_session(self.adventure_session, participant).context_usage()
+        except (AdventureInitiativeError, TypeError, ValueError):
+            return "Adventure participant context usage was not available."
+        return "\n".join((
+            "Adventure participant context usage (read-only mounted snapshot):",
+            f"Selected shared events: {usage['selected_events']} / {usage['event_limit']}",
+            f"Selected relationship facts: {usage['selected_relationships']} / {usage['relationship_limit']}",
+            f"Selected knowledge facts: {usage['selected_knowledge']} / {usage['knowledge_limit']}",
+            f"Selected public resources: {usage['selected_public_resources']} / {usage['public_resource_limit']}",
+            f"Selected facts total: {usage['selected_fact_count']}",
+            f"Rendered view characters: {usage['rendered_characters']} / {usage['character_limit']}",
+            f"Whole facts omitted for character budget: {usage['character_budget_omissions']}",
+            "Per-category selection limits; not the full request or a model-token budget.",
+            "No provider or storage was accessed; use adventure refresh separately to reload story state.",
+        ))
 
     def adventure_participant_action_generate(self, value):
         """Request one explicitly review-only participant-action proposal."""
@@ -3954,6 +4028,8 @@ class AssistantSession:
         return "\n".join(lines)
 
     def command(self, text):
+        if has_ambiguous_multiline_controls(text):
+            return MIXED_CONTROL_INPUT_GUIDANCE
         lowered = text.strip().casefold()
         # A pasted terminal prompt can leave one or more slash characters in
         # front of a reserved command.  Treat that as a malformed Core command,
@@ -3973,7 +4049,7 @@ class AssistantSession:
         # diagnostics. Do not apply fuzzy matching to mutating commands.
         if lowered == "persona curretn":
             lowered = "persona current"
-        if lowered == "context stats":
+        if is_context_stats_request(text):
             return self.context_stats()
         if lowered in {"routing status", "route status"}:
             return self.routing_status()
@@ -4086,6 +4162,8 @@ class AssistantSession:
             return self.adventure_participant_action_record(text.strip()[len("adventure participant action record"):])
         if lowered == "adventure participant inspect" or lowered.startswith("adventure participant inspect "):
             return self.adventure_participant_inspect(text.strip()[len("adventure participant inspect"):])
+        if lowered == "adventure participant context" or lowered.startswith("adventure participant context "):
+            return self.adventure_participant_context(text.strip()[len("adventure participant context"):])
         if lowered in {"adventure participants", "adventure participant list"}:
             return self.adventure_participants()
         if lowered in {"adventure resources", "adventure resource list"}:
@@ -4374,15 +4452,20 @@ class AssistantSession:
         return content
 
     def respond(self, user_text, *, external_document_context=None):
+        # Deterministic commands finish normally; a provider call replaces this
+        # with its actual reported reason or None when no reason is supplied.
+        self.last_chat_finish_reason = "stop"
         user_text = user_text.strip()
         if not user_text:
             return ""
+        if has_ambiguous_multiline_controls(user_text):
+            return MIXED_CONTROL_INPUT_GUIDANCE
         if self._pending_bulk_proposal_ids is not None:
             if user_text == "approve all":
                 return self._approve_all_pending()
             self._pending_bulk_proposal_ids = None
             return "Bulk approval cancelled."
-        if user_text.casefold() == "context stats":
+        if is_context_stats_request(user_text):
             return self.context_stats()
         if detect_casual_roleplay_start(user_text):
             result = self.roleplay_begin()
@@ -4466,7 +4549,22 @@ class AssistantSession:
         self.messages = self.messages[-self.config.max_session_messages:]
         proposal_started = time.perf_counter()
         try:
-            self._proposal(user_text, content)
+            if self.last_chat_finish_reason == "length":
+                self._current_proposal_diagnostics = {"ran": False, "outcome": "skipped_output_limit"}
+            else:
+                self._proposal(user_text, content)
+        except GenerationInterrupted as error:
+            # The reply already completed and entered recent history. Cancel
+            # only the uncommitted proposal; never repair/retry it or pretend
+            # the completed visible reply was an interrupted partial stream.
+            self._current_proposal_diagnostics = {"ran": True, "outcome": "interrupted"}
+            if self._current_context_diagnostics is not None:
+                self._current_context_diagnostics.setdefault("phase_timings", {})["proposal_ms"] = round((time.perf_counter() - proposal_started) * 1000, 2)
+            self._finish_turn_diagnostics(
+                completed=True, response=content, latency_seconds=latency_seconds,
+                proposal=self._current_proposal_diagnostics,
+            )
+            raise ProposalGenerationInterrupted() from error
         except Exception as error:
             self._current_proposal_diagnostics = {"ran": True, "outcome": "skipped"}
             self.trace.record("proposal_error", status="rejected", error=str(error))
@@ -4552,10 +4650,14 @@ def run_interactive(
         proposal_count_before = len(session.proposals)
         try:
             answer = application.respond(user_text, trusted_local_control=True)
-        except GenerationInterrupted:
+        except GenerationInterrupted as error:
             if stream_started["value"]:
                 output_fn("")
-            output_fn("Generation interrupted.")
+            output_fn(
+                "Memory proposal generation interrupted. Completed reply kept."
+                if isinstance(error, ProposalGenerationInterrupted)
+                else "Generation interrupted."
+            )
             stream_started["value"] = False
             continue
         except Exception as error:
@@ -4568,6 +4670,8 @@ def run_interactive(
             else:
                 output_fn(f"StarFur: {answer}")
         stream_started["value"] = False
+        if session.last_chat_finish_reason == "length":
+            output_fn("Response reached its output limit. Ask for a shorter answer or continue explicitly.")
         session.trace.emit(output_fn)
         if len(session.proposals) > proposal_count_before:
             proposal = session.proposals[-1]

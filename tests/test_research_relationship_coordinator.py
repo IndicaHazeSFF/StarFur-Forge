@@ -7,6 +7,7 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from pipeline.research_claims import ResearchClaim, ResearchClaimSet
+from pipeline.providers import ChatProviderOutputLimitError
 from pipeline.research_coordinator import ResearchCoordinationResult
 from pipeline.research_disclosure import ResearchProviderTarget
 from pipeline.research_relationship_coordinator import (
@@ -83,6 +84,18 @@ class Provider:
 
 
 class ResearchRelationshipCoordinatorTests(unittest.TestCase):
+    def test_reported_output_limit_is_not_a_generic_failure_or_relationship(self):
+        review, target, decision = _inputs()
+        class Limited(Provider):
+            def propose_relationships(self, messages, **kwargs):
+                self.calls.append(1)
+                raise ChatProviderOutputLimitError()
+        provider = Limited(review)
+        with self.assertRaises(ResearchRelationshipCoordinatorError) as caught:
+            ResearchRelationshipCoordinator(provider).propose(review, target, decision)
+        self.assertEqual("provider_output_limit", caught.exception.reason)
+        self.assertEqual([1], provider.calls)
+
     def test_one_injected_attempt_returns_untrusted_bound_proposals(self):
         review, target, decision = _inputs()
         provider = Provider(review)

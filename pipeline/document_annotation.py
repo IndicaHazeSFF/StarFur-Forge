@@ -65,7 +65,10 @@ def build_document_annotation_messages(chunk: IntakeChunk, *, retry_attempt: int
 def _response_content(response: Any) -> str:
     """Read one provider-neutral text result without logging raw output."""
     try:
-        return normalize_chat_completion(response).content
+        completion = normalize_chat_completion(response)
+        if completion.finish_reason == "length":
+            raise DocumentAnnotationError("Document annotation reached its output limit.")
+        return completion.content
     except ChatProviderResponseError:
         # Preserve the existing annotation error category for missing text.
         return ""
@@ -100,10 +103,16 @@ class DocumentProposalAnnotator:
     model: str
     options: Mapping[str, Any] | None = None
     max_output_tokens: int = DOCUMENT_ANNOTATION_MAX_OUTPUT_TOKENS
+    model_thinking: bool | None = None
     _options: dict[str, Any] = field(init=False, repr=False)
     _calls: int = field(default=0, init=False, repr=False)
 
     def __post_init__(self) -> None:
+        if self.model_thinking is not None:
+            if not isinstance(self.model_thinking, bool):
+                raise ValueError("model_thinking must be a boolean")
+            if getattr(self.provider, "supports_model_thinking", False) is not True:
+                raise ValueError("Document annotation provider does not support thinking control.")
         if not isinstance(self.model, str) or not self.model.strip():
             raise ValueError("Document annotation model must be a non-empty string.")
         if isinstance(self.max_output_tokens, bool) or not isinstance(self.max_output_tokens, int) or self.max_output_tokens <= 0:
@@ -118,9 +127,10 @@ class DocumentProposalAnnotator:
         messages = build_document_annotation_messages(chunk, retry_attempt=attempt)
         self._calls += 1
         try:
-            response = self.provider.complete(
-                messages, model=self.model, options=self._options, stream=False,
-            )
+            kwargs = {"model": self.model, "options": self._options, "stream": False}
+            if self.model_thinking is not None:
+                kwargs["thinking"] = self.model_thinking
+            response = self.provider.complete(messages, **kwargs)
         except Exception as error:
             raise DocumentAnnotationError(
                 f"Document annotation provider failed for {chunk.chunk_id}: {error}"

@@ -13,26 +13,41 @@ from typing import Any, Callable, Iterable, Mapping, Protocol, runtime_checkable
 
 
 ChatMessages = Iterable[Mapping[str, str]]
+CHAT_FINISH_REASONS = frozenset({"stop", "length", "unknown"})
+
+
+def _validate_finish_reason(value) -> None:
+    if value is not None and (not isinstance(value, str) or value not in CHAT_FINISH_REASONS):
+        raise ValueError("chat finish reason is invalid")
 
 
 class ChatProviderResponseError(ValueError):
     """Raised when an adapter result has no usable text completion."""
 
 
+class ChatProviderOutputLimitError(ChatProviderResponseError):
+    """A reported output limit, with no partial content or provider payload."""
+
+    def __init__(self) -> None:
+        super().__init__("structured response reached its output limit")
+
+
 @dataclass(frozen=True)
 class ChatCompletion:
-    """Provider-neutral, text-only result handed to Core consumers.
+    """Provider-neutral text and bounded completion status for Core consumers.
 
-    This deliberately retains no provider payload, token accounting, tool-call
-    shape, or transport metadata.  Task-specific layers remain responsible for
-    their own size limits and structured-output validation.
+    This retains only text and an optional closed completion reason, never
+    provider payload, thinking text, token accounting, or tool-call data.
+    Task-specific layers remain responsible for size limits and validation.
     """
 
     content: str
+    finish_reason: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.content, str):
             raise TypeError("chat completion content must be text")
+        _validate_finish_reason(self.finish_reason)
 
 
 @dataclass(frozen=True)
@@ -40,10 +55,12 @@ class ChatStreamChunk:
     """One provider-neutral text fragment from an optional streamed result."""
 
     content: str
+    finish_reason: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.content, str):
             raise TypeError("chat stream chunk content must be text")
+        _validate_finish_reason(self.finish_reason)
 
 
 def _raw_chat_content(value: object) -> str | None:
@@ -64,7 +81,7 @@ def normalize_chat_completion(value: object) -> ChatCompletion:
     content = _raw_chat_content(value)
     if content is None:
         raise ChatProviderResponseError("chat provider response has no text content")
-    return ChatCompletion(content)
+    return ChatCompletion(content, value.finish_reason if isinstance(value, (ChatCompletion, ChatStreamChunk)) else None)
 
 
 def normalize_chat_stream_chunk(value: object) -> ChatStreamChunk:
@@ -72,7 +89,20 @@ def normalize_chat_stream_chunk(value: object) -> ChatStreamChunk:
     content = _raw_chat_content(value)
     if content is None:
         raise ChatProviderResponseError("chat provider stream chunk has no text content")
-    return ChatStreamChunk(content)
+    return ChatStreamChunk(content, value.finish_reason if isinstance(value, (ChatCompletion, ChatStreamChunk)) else None)
+
+
+def normalize_structured_chat_completion(value: object) -> ChatCompletion:
+    """Reject provider-reported truncation before any structured task parser.
+
+    Only the typed adapter seam supplies completion status. Raw dictionaries
+    cannot supply trusted terminal metadata, and unreported status stays unknown.
+    Complete-looking JSON is still ineligible when the adapter reports length.
+    """
+    completion = normalize_chat_completion(value)
+    if completion.finish_reason == "length":
+        raise ChatProviderOutputLimitError()
+    return completion
 
 
 def provider_is_configured(provider: object) -> bool:
@@ -130,17 +160,22 @@ class ChatCompletionProvider(Protocol):
         model: str | None = None,
         options: Mapping[str, Any] | None = None,
         stream: bool = False,
+        keep_alive_seconds: int | None = None,
     ) -> Any:
         """Return a provider response or a provider streaming iterator."""
 
 
 @runtime_checkable
 class StructuredChatCompletionProvider(Protocol):
-    """Optional provider capability for one non-streaming JSON-schema request.
+    """Optional provider capability for one complete JSON-schema result.
 
     Core owns the schema and still validates the returned text itself. Merely
     implementing this protocol does not grant a provider authority, select a
     task route, permit fallback, or make the response trustworthy.
+
+    An adapter may use an interruptible streaming transport internally, but it
+    must return one complete provider-neutral result to Core. Transport
+    fragments never cross this seam.
     """
 
     def complete_structured(
@@ -150,6 +185,7 @@ class StructuredChatCompletionProvider(Protocol):
         schema: Mapping[str, Any],
         model: str | None = None,
         options: Mapping[str, Any] | None = None,
+        keep_alive_seconds: int | None = None,
     ) -> Any:
         """Return one provider response constrained by a Core-owned schema."""
 
@@ -171,23 +207,94 @@ class OllamaChatProvider:
     """Thin adapter over the supported Ollama Python client API."""
 
     name = "Ollama"
+    supports_model_keep_alive_seconds = True
+    supports_model_thinking = True
 
     def __init__(self, client: Any):
         self._client = client
 
-    def complete(self, messages, *, model=None, options=None, stream=False):
+    @staticmethod
+    def _thinking_kwargs(thinking):
+        if thinking is None:
+            return {}
+        if not isinstance(thinking, bool):
+            raise ValueError("thinking control must be a boolean")
+        return {"think": thinking}
+
+    @staticmethod
+    def _finish_reason(response):
+        reason = response.get("done_reason") if isinstance(response, Mapping) else getattr(response, "done_reason", None)
+        if reason is None or reason == "":
+            return None
+        return reason if isinstance(reason, str) and reason in {"stop", "length"} else "unknown"
+
+    @classmethod
+    def _stream(cls, response):
+        try:
+            for chunk in response:
+                # Metadata and thinking-only fragments carry no answer text.
+                yield ChatStreamChunk(_raw_chat_content(chunk) or "", cls._finish_reason(chunk))
+        finally:
+            close = getattr(response, "close", None)
+            if callable(close):
+                close()
+
+    def complete(self, messages, *, model=None, options=None, stream=False, keep_alive_seconds=None, thinking=None):
         kwargs = {"model": model, "messages": messages}
+        kwargs.update(self._thinking_kwargs(thinking))
         if options:
             kwargs["options"] = dict(options)
         if stream:
             kwargs["stream"] = True
-        return self._client.chat(**kwargs)
+        if keep_alive_seconds is not None:
+            kwargs["keep_alive"] = keep_alive_seconds
+        response = self._client.chat(**kwargs)
+        if stream and not isinstance(response, Mapping) and hasattr(response, "__iter__"):
+            return self._stream(response)
+        return ChatCompletion(normalize_chat_completion(response).content, self._finish_reason(response))
 
-    def complete_structured(self, messages, *, schema, model=None, options=None):
-        kwargs = {"model": model, "messages": messages, "format": dict(schema)}
+    def complete_structured(self, messages, *, schema, model=None, options=None, keep_alive_seconds=None, thinking=None):
+        # Ollama's opaque non-streaming call can hold the CLI inside one socket
+        # read until the entire schema result is complete.  Consume its
+        # streaming transport here instead so Ctrl+C can close the response.
+        # Core still receives one complete JSON text result and independently
+        # validates it; transport fragments never become candidate data.
+        kwargs = {
+            "model": model,
+            "messages": messages,
+            "format": dict(schema),
+            "stream": True,
+        }
+        kwargs.update(self._thinking_kwargs(thinking))
         if options:
             kwargs["options"] = dict(options)
-        return self._client.chat(**kwargs)
+        if keep_alive_seconds is not None:
+            kwargs["keep_alive"] = keep_alive_seconds
+        response = self._client.chat(**kwargs)
+        if isinstance(response, Mapping) or not hasattr(response, "__iter__"):
+            reason = self._finish_reason(response)
+            if reason == "length":
+                raise ChatProviderOutputLimitError()
+            return ChatCompletion(normalize_chat_completion(response).content, reason)
+        parts: list[str] = []
+        reason = None
+        try:
+            for chunk in response:
+                reason = self._finish_reason(chunk) or reason
+                try:
+                    content = normalize_chat_stream_chunk(chunk).content
+                except ChatProviderResponseError:
+                    # Ollama may finish with a metadata-only chunk.
+                    content = ""
+                if content:
+                    parts.append(content)
+        finally:
+            close = getattr(response, "close", None)
+            if callable(close):
+                close()
+        if reason == "length":
+            raise ChatProviderOutputLimitError()
+        return ChatCompletion("".join(parts), reason)
 
     def list_models(self):
         return self._client.list()
@@ -206,7 +313,7 @@ class DisabledChatProvider:
     def __init__(self, reason: str = "Chat generation is disabled by configuration.") -> None:
         self._reason = str(reason)[:300]
 
-    def complete(self, messages, *, model=None, options=None, stream=False):
+    def complete(self, messages, *, model=None, options=None, stream=False, keep_alive_seconds=None):
         raise RuntimeError(self._reason)
 
     def list_models(self):
@@ -225,12 +332,14 @@ class CallableChatProvider:
         self._chat = chat
         self._model_lister = model_lister
 
-    def complete(self, messages, *, model=None, options=None, stream=False):
+    def complete(self, messages, *, model=None, options=None, stream=False, keep_alive_seconds=None):
         kwargs = {"model": model, "messages": messages}
         if options:
             kwargs["options"] = dict(options)
         if stream:
             kwargs["stream"] = True
+        if keep_alive_seconds is not None:
+            kwargs["keep_alive"] = keep_alive_seconds
         return self._chat(**kwargs)
 
     def list_models(self):
@@ -246,8 +355,9 @@ class CallableChatProvider:
 
 
 __all__ = [
-    "CallableChatProvider", "ChatCompletion", "ChatCompletionProvider", "ChatMessages", "ChatProvider",
-    "ChatProviderResponseError", "ChatStreamChunk", "DisabledChatProvider",
+    "CallableChatProvider", "CHAT_FINISH_REASONS", "ChatCompletion", "ChatCompletionProvider", "ChatMessages", "ChatProvider",
+    "ChatProviderResponseError", "ChatProviderOutputLimitError", "ChatStreamChunk", "DisabledChatProvider",
     "OllamaChatProvider", "StructuredChatCompletionProvider", "normalize_chat_completion", "normalize_chat_stream_chunk",
+    "normalize_structured_chat_completion",
     "provider_health_snapshot", "provider_is_configured",
 ]

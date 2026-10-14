@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import uuid
 from datetime import datetime, timezone
@@ -31,7 +32,7 @@ _METRIC_FIELDS = {
     "annotation_fallback_attempt_count", "annotation_fallback_used_count",
     "annotation_quality_recall", "annotation_quality_precision",
     "annotation_false_positive_count", "annotation_missed_target_count",
-    "routing_pass_rate",
+    "routing_pass_rate", "resource_admission_pass_rate", "participant_lifecycle_pass_rate",
 }
 _MANIFEST_FIELDS = {
     "schema_version", "benchmark_id", "workload", "model_profile",
@@ -107,6 +108,8 @@ def _bounded_text(value: Any, field: str, *, required: bool = False) -> str | No
 def _number(value: Any, field: str) -> float | int:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{field} must be numeric")
+    if field == "participant_lifecycle_pass_rate" and (not math.isfinite(value) or not 0 <= value <= 1):
+        raise ValueError("participant lifecycle rate must be finite and between zero and one")
     return value
 
 
@@ -178,6 +181,8 @@ def _sanitize_case_result(value: Mapping[str, Any]) -> dict[str, Any]:
     """Select one closed, privacy-bounded result schema by case shape."""
     if not isinstance(value, Mapping):
         raise ValueError("case result must be an object")
+    if value.get("kind") == "adventure_participant_lifecycle":
+        return _sanitize_participant_lifecycle_case_result(value)
     if {"expected", "returned"}.issubset(value):
         return _sanitize_retrieval_case_result(value)
     if {"kind", "expected_accept", "accepted", "expected_ids", "returned_ids"}.issubset(value):
@@ -190,7 +195,43 @@ def _sanitize_case_result(value: Mapping[str, Any]) -> dict[str, Any]:
         return _sanitize_document_annotation_quality_case_result(value)
     if {"kind", "expected_status", "actual_status", "expected_selected_task_id", "actual_selected_task_id", "expected_selected_provider", "actual_selected_provider", "expected_fallback_used", "actual_fallback_used", "pass"}.issubset(value):
         return _sanitize_task_routing_case_result(value)
+    if {"kind", "expected_status", "actual_status", "expected_reasons", "actual_reasons", "pass"}.issubset(value):
+        return _sanitize_provider_resource_admission_case_result(value)
     raise ValueError("case result schema is unsupported")
+
+
+def _sanitize_participant_lifecycle_case_result(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Closed fixture labels/counts only; extra content and forged passes fail."""
+    count_fields = ("provider_calls", "candidates", "transcript_records", "events", "staged", "pacing_count")
+    fields = {"name", "kind", "expected_outcome", "actual_outcome", "invariants_preserved", "pass"}
+    fields.update(f"{prefix}_{field}" for prefix in ("expected", "actual") for field in count_fields)
+    if set(value) != fields:
+        raise ValueError("participant lifecycle case must use the exact content-free schema")
+    names = {"review_only", "no_action", "record_once", "pacing", "interruption", "stale_origin", "invalid_envelope"}
+    outcomes = {"reviewed", "no_action", "recorded_once", "policy_denied_then_eligible",
+        "interrupted_then_recovered", "stale_rejected", "invalid_rejected", "unexpected"}
+    if not isinstance(value["name"], str) or value["name"] not in names or any(
+        not isinstance(value[field], str) or value[field] not in outcomes
+        for field in ("expected_outcome", "actual_outcome")
+    ):
+        raise ValueError("participant lifecycle label is unsupported")
+    result = {field: value[field] for field in ("name", "kind", "expected_outcome", "actual_outcome")}
+    for field in count_fields:
+        for prefix in ("expected", "actual"):
+            key = f"{prefix}_{field}"
+            count = value[key]
+            if isinstance(count, bool) or not isinstance(count, int) or not 0 <= count <= 16:
+                raise ValueError("participant lifecycle count is invalid")
+            result[key] = count
+    for field in ("invariants_preserved", "pass"):
+        if not isinstance(value[field], bool):
+            raise ValueError("participant lifecycle flag is invalid")
+        result[field] = value[field]
+    passed = result["invariants_preserved"] and all(result[f"expected_{field}"] == result[f"actual_{field}"]
+        for field in ("outcome", *count_fields))
+    if result["pass"] != passed:
+        raise ValueError("participant lifecycle pass contradicts measured outcomes")
+    return result
 
 
 def _sanitize_adventure_turn_case_result(value: Mapping[str, Any]) -> dict[str, Any]:
@@ -315,6 +356,40 @@ def _sanitize_task_routing_case_result(value: Mapping[str, Any]) -> dict[str, An
     return result
 
 
+def _sanitize_provider_resource_admission_case_result(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Keep closed admission outcomes without backend or host details."""
+    name = _bounded_text(value.get("name"), "case name", required=True)
+    if value.get("kind") != "provider_resource_admission":
+        raise ValueError("provider-resource admission case kind is unsupported")
+    statuses = {"admitted", "deferred"}
+    expected_status = value.get("expected_status")
+    actual_status = value.get("actual_status")
+    if expected_status not in statuses or actual_status not in statuses:
+        raise ValueError("provider-resource admission status is invalid")
+    allowed_reasons = {
+        "foreground_busy",
+        "control_unavailable:model_residency",
+        "control_unavailable:verified_cancellation",
+    }
+    result = {
+        "name": name,
+        "kind": "provider_resource_admission",
+        "expected_status": expected_status,
+        "actual_status": actual_status,
+    }
+    for field in ("expected_reasons", "actual_reasons"):
+        reasons = value.get(field)
+        if not isinstance(reasons, list) or len(reasons) > 8 or any(reason not in allowed_reasons for reason in reasons):
+            raise ValueError("provider-resource admission reasons are invalid")
+        if len(set(reasons)) != len(reasons) or reasons != sorted(reasons):
+            raise ValueError("provider-resource admission reasons must be unique and sorted")
+        result[field] = list(reasons)
+    if not isinstance(value.get("pass"), bool):
+        raise ValueError("provider-resource admission pass must be boolean")
+    result["pass"] = value["pass"]
+    return result
+
+
 def build_benchmark_result_record(
     manifest: BenchmarkRunManifest,
     result: Mapping[str, Any],
@@ -348,7 +423,7 @@ def build_benchmark_result_record(
         "annotation_fallback_attempt_count", "annotation_fallback_used_count",
         "annotation_quality_recall", "annotation_quality_precision",
         "annotation_false_positive_count", "annotation_missed_target_count",
-        "routing_pass_rate",
+        "routing_pass_rate", "resource_admission_pass_rate", "participant_lifecycle_pass_rate",
     ):
         if field in result and result[field] is not None:
             metrics[field] = _number(result[field], field)

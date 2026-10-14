@@ -5,7 +5,7 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from pipeline.research_answer_policy import evaluate_research_answer_policy
-from test_research_brief import review_record
+from tests.test_research_brief import review_record
 
 
 class ResearchAnswerPolicyTests(unittest.TestCase):

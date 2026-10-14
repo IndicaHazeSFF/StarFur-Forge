@@ -16,6 +16,7 @@ from typing import Callable
 from urllib.parse import parse_qs, urlsplit
 
 from pipeline.assistant import GenerationInterrupted, ProviderCapacityBusyError
+from pipeline.command_input import has_ambiguous_multiline_controls, is_context_stats_request
 from pipeline.adventure_import import AdventureImportError, AdventureImportLog
 from pipeline.adventure_registry import AdventureNotFoundError, AdventureRegistry
 from pipeline.application import AssistantApplication, ConversationNotFoundError, create_assistant_application
@@ -519,6 +520,8 @@ class StarFurAPI:
         reserves documented command namespaces rather than attempting to parse
         arbitrary natural language at the API boundary.
         """
+        if has_ambiguous_multiline_controls(user_text) or is_context_stats_request(user_text):
+            return True
         lowered = user_text.casefold()
         if lowered in {"context stats", "approve all", "list personas", "list models"}:
             return True
@@ -555,20 +558,19 @@ class StarFurAPI:
         if review_command is not None and not reserved_core_command:
             content = self.document_review_command(review_command)
             active = self.application.active_model_for(resolved_conversation)
-            return {"content": content, "model": active}
+            return {"content": content, "model": active, "finish_reason": "stop"}
         document_context = (
             None
             if reserved_core_command
             else self._chat_document_context(payload, user_text, resolved_conversation)
         )
-        content = self.application.respond(
+        response = self.application.respond_completion(
             user_text,
             stream_writer=stream_writer,
             conversation_id=resolved_conversation,
             external_document_context=document_context,
         )
-        active = self.application.active_model_for(resolved_conversation)
-        return {"content": content or "", "model": active}
+        return {"content": response.content, "model": response.model, "finish_reason": response.finish_reason}
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -855,7 +857,7 @@ class _Handler(BaseHTTPRequestHandler):
                 )
                 if not wrote_content["value"] and result["content"]:
                     write_chunk(result["content"])
-                finish = {"id": request_id, "object": "chat.completion.chunk", "created": created, "model": result["model"], "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}
+                finish = {"id": request_id, "object": "chat.completion.chunk", "created": created, "model": result["model"], "choices": [{"index": 0, "delta": {}, "finish_reason": result.get("finish_reason")}]}
                 self.wfile.write(b"data: " + _json_bytes(finish) + b"\n\ndata: [DONE]\n\n")
                 self.wfile.flush()
             except (GenerationInterrupted, BrokenPipeError, ConnectionResetError):
@@ -889,7 +891,7 @@ class _Handler(BaseHTTPRequestHandler):
         except Exception as error:
             self._send_json(500, {"error": {"message": str(error), "type": "server_error"}})
             return
-        self._send_json(200, {"id": request_id, "object": "chat.completion", "created": created, "model": result["model"], "choices": [{"index": 0, "message": {"role": "assistant", "content": result["content"]}, "finish_reason": "stop"}]})
+        self._send_json(200, {"id": request_id, "object": "chat.completion", "created": created, "model": result["model"], "choices": [{"index": 0, "message": {"role": "assistant", "content": result["content"]}, "finish_reason": result.get("finish_reason")}]})
 
 
 class StarFurHTTPServer(ThreadingHTTPServer):

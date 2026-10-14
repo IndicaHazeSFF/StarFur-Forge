@@ -29,6 +29,7 @@ TRANSCRIPT_SCHEMA_VERSION = 1
 TRANSCRIPT_ROLES = frozenset({"user", "narrator"})
 TRANSCRIPT_SOURCE_CORE_EXPLICIT = "core_explicit"
 MAX_TRANSCRIPT_TEXT_LENGTH = 8_000
+MAX_TRANSCRIPT_APPEND_RECORDS = 16
 TRANSCRIPT_FILENAME = "transcript.jsonl"
 TRANSCRIPT_WRITE_LOCK_FILENAME = ".transcript.write.lock"
 _RECORD_ID_PATTERN = re.compile(r"^AT-[0-9]{6}$")
@@ -173,18 +174,34 @@ class AdventureTranscriptLog:
 
     def append(self, role: object, text: object) -> AdventureTranscriptRecord:
         """Explicitly append presentation text without creating a story event."""
+        return self.append_many(((role, text),))[0]
+
+    def append_many(self, entries: object) -> tuple[AdventureTranscriptRecord, ...]:
+        """Atomically append one bounded explicit presentation batch.
+
+        Every entry is validated before the one replacement write, so a
+        malformed second item cannot leave a partial transcript pair behind.
+        This remains presentation-only storage and never touches the event log.
+        """
+        if not isinstance(entries, tuple) or not 1 <= len(entries) <= MAX_TRANSCRIPT_APPEND_RECORDS:
+            raise AdventureTranscriptError("transcript append batch is invalid")
+        if any(not isinstance(entry, tuple) or len(entry) != 2 for entry in entries):
+            raise AdventureTranscriptError("transcript append batch is invalid")
         with self._write_guard():
             existing = self.records()
-            sequence = len(existing) + 1
-            record = AdventureTranscriptRecord(
-                sequence=sequence,
-                record_id=f"AT-{sequence:06d}",
-                role=role,
-                text=text,
-                recorded_at=self._now().astimezone(UTC).isoformat(),
+            recorded_at = self._now().astimezone(UTC).isoformat()
+            records = tuple(
+                AdventureTranscriptRecord(
+                    sequence=len(existing) + sequence,
+                    record_id=f"AT-{len(existing) + sequence:06d}",
+                    role=role,
+                    text=text,
+                    recorded_at=recorded_at,
+                )
+                for sequence, (role, text) in enumerate(entries, start=1)
             )
-            self._replace_records((*existing, record))
-            return record
+            self._replace_records((*existing, *records))
+            return records
 
     @contextmanager
     def _write_guard(self) -> Iterator[None]:
@@ -249,6 +266,7 @@ __all__ = [
     "AdventureTranscriptError",
     "AdventureTranscriptLog",
     "AdventureTranscriptRecord",
+    "MAX_TRANSCRIPT_APPEND_RECORDS",
     "MAX_TRANSCRIPT_TEXT_LENGTH",
     "TRANSCRIPT_FILENAME",
     "TRANSCRIPT_ROLES",

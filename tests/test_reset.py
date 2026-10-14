@@ -13,6 +13,10 @@ class MissingCollectionChroma(FakeChroma):
  def delete_collection(self,name): raise RuntimeError("Collection [starfur_canon] does not exist")
 
 class ResetTests(unittest.TestCase):
+ def setUp(self):
+  # Restore the module setting even when Windows refuses a test-owned file replacement.
+  previous_path = db.DB_PATH
+  self.addCleanup(setattr, db, "DB_PATH", previous_path)
  def test_confirmation_and_scoped_reset_with_backup(self):
   with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
    old=db.DB_PATH; db.DB_PATH=Path(td)/"db.sqlite"; db.create_assistant_memory("User","preference","Blue mug"); result=factory_reset(db.DB_PATH,scope="assistant-and-semantic",confirmation=CONFIRMATION,chroma_client=FakeChroma(),backup_dir=Path(td)/"backups",allow_production=True); self.assertTrue(Path(result["backup"]).exists()); self.assertEqual(db.list_assistant_memories(),[]); db.DB_PATH=old

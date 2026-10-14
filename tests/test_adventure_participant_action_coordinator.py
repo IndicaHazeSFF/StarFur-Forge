@@ -12,7 +12,9 @@ from pipeline.adventure_initiative import AdventureParticipant, AdventurePartici
 from pipeline.adventure_participant_action_coordinator import (
     AdventureParticipantActionCoordinator,
     AdventureParticipantActionCoordinatorError,
+    CallableAdventureParticipantActionCandidateProvider,
 )
+from pipeline.providers import ChatCompletion, ChatProviderOutputLimitError
 from pipeline.adventure_registry import AdventureRegistry
 from pipeline.adventure_session import AdventureSessionState
 
@@ -28,6 +30,66 @@ class _Provider:
 
 
 class AdventureParticipantActionCoordinatorTests(unittest.TestCase):
+    def test_source_frame_preflight_denies_before_injected_provider(self):
+        from unittest.mock import patch
+        from pipeline.adventure_participant_action_generation import AdventureParticipantActionGenerationRequest
+        from pipeline.adventure_participant import AdventureParticipantView
+        for text, ceiling in (("Wait.", 1), ("\ud800", 64000)):
+            provider = _Provider({"schema_version": 1, "candidates": []})
+            with patch("pipeline.adventure_participant_action_generation.MAX_PARTICIPANT_ACTION_SOURCE_BYTES", ceiling):
+                with self.assertRaises(AdventureParticipantActionCoordinatorError) as caught:
+                    AdventureParticipantActionCoordinator(provider).propose(self._session(),
+                        participant_id="murr", trigger="player_turn", user_text=text,
+                        turns_since_last_action=None, actions_this_turn=0)
+            self.assertEqual("input_invalid", caught.exception.reason)
+            self.assertEqual([], provider.requests)
+        session = self._session()
+        request = AdventureParticipantActionGenerationRequest.from_view(
+            AdventureParticipantView.from_session(session, session.participant_roster.resolve("murr")),
+            trigger="player_turn", user_text="Wait.", turns_since_last_action=None, actions_this_turn=0)
+        calls = []
+        adapter = CallableAdventureParticipantActionCandidateProvider(lambda messages: calls.append(messages))
+        with patch("pipeline.adventure_participant_action_generation.MAX_PARTICIPANT_ACTION_SOURCE_BYTES", 1):
+            with self.assertRaises(AdventureParticipantActionCoordinatorError) as caught:
+                adapter.propose(request)
+        self.assertEqual("input_invalid", caught.exception.reason)
+        self.assertEqual([], calls)
+
+    def test_large_context_reaches_one_provider_attempt_as_whole_fact_bounded_view(self):
+        from dataclasses import replace
+        from pipeline.adventure_resource_state import AdventureResourceFact
+        source = self._session()
+        large = AdventureResourceFact("cargo", "Cargo", "inventory",
+            tuple((f"item_{index:04d}_" + "x" * 49, 1) for index in range(200)), "public", "AE-000002")
+        source = replace(source, resource_facts=(large,), context_resource_facts=(large,))
+        provider = _Provider({"schema_version": 1, "candidates": []})
+        proposal = AdventureParticipantActionCoordinator(provider).propose(source,
+            participant_id="murr", trigger="player_turn", user_text="Wait beside the hatch.",
+            turns_since_last_action=None, actions_this_turn=0)
+        self.assertEqual(1, len(provider.requests))
+        self.assertEqual((), proposal.batch.candidates)
+        self.assertEqual(1, proposal.request.participant_view.character_budget_omissions)
+        self.assertIn("The crew finds a brass key.", proposal.request.messages()[1]["content"])
+        self.assertNotIn("item_", proposal.request.messages()[1]["content"])
+        self.assertEqual((large,), source.resource_facts)
+        self.assertLessEqual(len(proposal.request.participant_view.render()), 12000)
+
+    def test_limited_callback_cannot_produce_review_candidates(self):
+        for raised in (False, True):
+            calls = []
+            def complete(_messages):
+                calls.append(1)
+                if raised:
+                    raise ChatProviderOutputLimitError()
+                return ChatCompletion('{"schema_version":1,"candidates":[]}', "length")
+            with self.assertRaises(AdventureParticipantActionCoordinatorError) as caught:
+                AdventureParticipantActionCoordinator(CallableAdventureParticipantActionCandidateProvider(complete)).propose(
+                    self._session(), participant_id="murr", trigger="player_turn", user_text="Wait.",
+                    turns_since_last_action=None, actions_this_turn=0,
+                )
+            self.assertEqual("provider_output_limit", caught.exception.reason)
+            self.assertEqual([1], calls)
+
     def _session(self, *, enabled=True):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)

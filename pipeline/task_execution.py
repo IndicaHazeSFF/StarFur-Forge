@@ -12,7 +12,10 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from pipeline.provider_registry import ChatProviderRegistry
-from pipeline.providers import StructuredChatCompletionProvider
+from pipeline.providers import (
+    ChatProviderOutputLimitError, StructuredChatCompletionProvider,
+    normalize_structured_chat_completion,
+)
 from pipeline.task_routing import TaskRouteDecision, TaskRoutePlanner
 from pipeline.provider_workload_gate import ProviderWorkloadGate
 
@@ -119,6 +122,17 @@ class RoutedChatExecutor:
         self._providers = providers
         self._workload_gate = workload_gate
 
+    @staticmethod
+    def _thinking_kwargs(provider, profile):
+        if profile.model_thinking is None:
+            return {}
+        if getattr(provider, "supports_model_thinking", False) is not True:
+            raise RoutedTaskExecutionError(
+                "selected provider does not support thinking control",
+                reason="provider_thinking_control_unavailable",
+            )
+        return {"thinking": profile.model_thinking}
+
     def _acquire_workload_lease(self, decision: TaskRouteDecision):
         """Claim one optional process-local capacity lease before provider use."""
         selected = decision.selected
@@ -184,12 +198,14 @@ class RoutedChatExecutor:
                 "selected provider does not support model residency control",
                 reason="provider_residency_control_unavailable",
             )
+        thinking_kwargs = self._thinking_kwargs(provider, selected.profile)
         lease = self._acquire_workload_lease(decision)
         try:
             kwargs = {
                 "model": selected.profile.model,
                 "options": dict(selected.profile.options) or None,
                 "stream": stream,
+                **thinking_kwargs,
             }
             if selected.profile.model_keep_alive_seconds is not None:
                 kwargs["keep_alive_seconds"] = selected.profile.model_keep_alive_seconds
@@ -245,16 +261,25 @@ class RoutedChatExecutor:
                 "selected provider does not support model residency control",
                 reason="provider_residency_control_unavailable",
             )
+        thinking_kwargs = self._thinking_kwargs(provider, selected.profile)
         lease = self._acquire_workload_lease(decision)
         try:
             kwargs = {
                 "schema": dict(schema),
                 "model": selected.profile.model,
                 "options": dict(selected.profile.options) or None,
+                **thinking_kwargs,
             }
             if selected.profile.model_keep_alive_seconds is not None:
                 kwargs["keep_alive_seconds"] = selected.profile.model_keep_alive_seconds
-            response = provider.complete_structured(messages, **kwargs)
+            response = normalize_structured_chat_completion(
+                provider.complete_structured(messages, **kwargs),
+            )
+        except ChatProviderOutputLimitError as error:
+            raise RoutedTaskExecutionError(
+                "structured provider response reached its output limit",
+                reason="provider_output_limit",
+            ) from error
         except Exception as error:
             raise RoutedTaskExecutionError("routed provider request failed", reason="provider_request_failed") from error
         finally:
