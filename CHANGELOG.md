@@ -1764,3 +1764,36 @@
 - Evidence: all three discovery-boundary regressions passed; native full discovery reached 1,132 tests with a reproducible Windows restore-file denial and an intermittent API-test error. A preceding 1,131-test run had only the restore failure. These are not clean-suite results; causes remain follow-up work, not skipped tests. Production reset/database behavior and runtime data were not repaired or changed.
 - Gate: WSL full-suite smoke is next. Do not invoke a real factory reset/restore or live provider for it.
 - Follow-up detail: focused API rerun reproduced a timeout while reading the fixed Murr PNG response. This identifies the failing boundary, not its cause; no asset, transport, timeout, or production behavior was changed to hide it.
+
+## 2026-10-14 - Close owned SQLite scopes and isolate HTTP fixtures
+
+- Evidence: the WSL 1,132-test discovery run passed but reported unclosed SQLite handles; SQLite's raw connection context manager does not close on exit. The warnings were not treated as clean lifecycle evidence.
+- Ownership: added `db.transaction()` for repository-owned commit/rollback/final-close scopes, migrated DB CRUD, review/reset callers and affected fixtures, and close initialization failures. Raw `db.connect()` remains caller-owned; schemas, approval/provenance semantics and explicit transaction behavior are unchanged.
+- Test boundary: the fixed PNG route uses exact test-owned bytes rather than installed artwork; HTTP fixture clients close in `finally`, including failed reads. No production asset, transport, authentication or timeout change was made; fixture hardening does not establish the earlier timeout's root cause.
+- Verification: six retained-handle/transaction-failure tests and a failed-read cleanup regression added. Native API (44), temporary reset/restore (3), and full discovery (1,139) pass with no observed resource warnings. The previous temporary Windows restore-file failure no longer reproduces; production/concurrent restore remains outside this evidence.
+- Gate: one provider-free WSL regression checklist remains, tracked in `2026-10-14.sprint.md` and `session.files.md`. No runtime reset/repair, live provider, new permission, speculative subsystem, stage-order change, git staging or commit was performed.
+
+## 2026-10-14 - Bound benchmark metadata and new ledger appends
+
+- Contract: existing v1 manifests now validate exact types/version/fields, bounded UTF-8/control-free labels, integer seed/context, aware timestamps and immutable copied coarse hardware metadata. New ledger builds/appends share that parser; unsupported keys and malformed metadata fail before I/O. Plan timestamps may be explicitly fixed for repeatability.
+- Compatibility: valid v1 serialized fields and existing fixture/CLI metadata remain supported; unsupported arbitrary hardware keys are now denied rather than copied. Historical ledger reads/writes were not performed or retrovalidated. Public labels are caller declarations, not a secret classifier or measured hardware evidence.
+- Tests: metadata rejection, immutable input/output snapshots, round trips, deterministic plans, and tampered append/no-file/unchanged-file assertions pass under provider-free fixtures.
+
+## 2026-10-14 - Add pure controlled model-comparison eligibility
+
+- Foundation: added bounded immutable evidence/decision contracts for fixed-workload model scaling. Fixture/policy/metric/runtime, commit/architecture, seed, hardware and context bindings must match; only declared model/provider/quantization/resolved-model identity varies. Missing metadata is not guessed; duplicate IDs cannot count a run twice.
+- Boundary: returns only closed reasons/counts and `metadata_compatible`, never measurement verification, ranking, answer quality, statistical significance or execution authority. No CLI/API, normal chat, ledger reader/export, hardware discovery or live model is connected. Ablations/different-resource comparisons remain separate.
+- Tests: 12 deterministic synthetic comparison cases cover each mismatch, incomplete metadata, repeat runs, identity, strict hash/type checks and output privacy.
+
+## 2026-10-14 - Reject malformed ledger measurements before writes
+
+- Validation: all numeric measurements must be finite and bounded; rates stay in [0, 1], count metrics are nonnegative integers and durations nonnegative. Strict JSON serialization occurs before directory creation/append. No raw values are included in numeric rejection messages.
+- Verification: 22 benchmark/comparison and 20 ledger tests pass; full native regression passes 1,163 tests with no observed ResourceWarning/unraisable output. Twenty-four new tests were added across these three independent slices; no tests were skipped.
+- Handoff: `2026-10-14.benchmark-foundation.sprint.md` records completion/deferred integration and one shared provider-free WSL regression gate for both sprints. No runtime data/ledger, live providers, current product dependency order or permission was changed; no git staging or commit was performed.
+
+## 2026-10-19 - Close WSL gates and harden participant-policy types
+
+- Verification: the user-reported strict WSL ResourceWarning run passed all 1,163 tests again, after two earlier full passes and all six lifecycle tests. The maintenance and independent benchmark-foundation regression gates are cleared; no production restore, hardware attestation or live-model quality claim is added.
+- Validation: governed participant memory/pacing limits, runtime counters and roster versions now reject booleans and equal-valued floats. Trigger/action strings are checked before hash membership; malformed structured values fail through `AdventureInitiativeError` rather than incidental type errors.
+- Compatibility: valid v1/v2 declarations, disabled defaults, eligibility/cooldown rules, prompt/profile budgets and review-only authority remain unchanged. No new command, model call, policy expansion, state write or runtime repair was added.
+- Tests: six new rejection/boundary regression methods; 13 initiative, 28 participant and full native strict regression (1,169 tests) pass, with no observed resource/unraisable warnings. The focused provider-free WSL check is tracked in `session.files.md`; no live-model smoke is required for this validation-only change.

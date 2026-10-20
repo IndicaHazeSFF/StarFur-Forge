@@ -1,4 +1,5 @@
 import http.client
+import base64
 import json
 import sys
 import tempfile
@@ -54,6 +55,13 @@ class APITests(unittest.TestCase):
         self.sessions = [self.session]
         self.annotation_chunks = []
         self.proposal_writes = []
+        self.asset_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.asset_directory.cleanup)
+        # A fixed route test must not depend on installed user artwork/size.
+        self.asset_payload = base64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII="
+        )
+        (Path(self.asset_directory.name) / "idle.png").write_bytes(self.asset_payload)
         # Document-review handoff tests inject proposal IDs instead of writing
         # proposals.  Keep public-reference rendering independent from any
         # developer's real assistant database, where an injected numeric ID
@@ -86,8 +94,8 @@ class APITests(unittest.TestCase):
             session_factory=session_factory,
             max_conversations=2,
             persona_asset_resolver=PersonaAssetResolver((InstalledPersonaAssetPackage(
-                PersonaAssetManifest("murr", {"idle": "Assets/Murr/Murr_S_Idle.png"}),
-                Path(__file__).resolve().parents[1],
+                PersonaAssetManifest("murr", {"idle": "idle.png"}),
+                Path(self.asset_directory.name),
             ),)),
         )
         self.adventure_directory = tempfile.TemporaryDirectory()
@@ -132,11 +140,13 @@ class APITests(unittest.TestCase):
             headers["Authorization"] = "Bearer local-test"
         if extra_headers:
             headers.update(extra_headers)
-        connection.request(method, path, json.dumps(body) if body is not None else None, headers)
-        response = connection.getresponse()
-        raw = response.read()
-        connection.close()
-        return response.status, raw
+        try:
+            connection.request(method, path, json.dumps(body) if body is not None else None, headers)
+            response = connection.getresponse()
+            raw = response.read()
+            return response.status, raw
+        finally:
+            connection.close()
 
     def test_health_and_models_are_openai_compatible(self):
         status, raw = self.request("GET", "/health")
@@ -318,11 +328,20 @@ class APITests(unittest.TestCase):
 
         self.assertEqual(status, 200)
         self.assertTrue(raw.startswith(b"\x89PNG\r\n\x1a\n"))
-        self.assertGreater(len(raw), 1000)
+        self.assertEqual(self.asset_payload, raw)
         self.assertEqual(self.session.calls, [])
 
         status, _ = self.request("GET", f"{MURR_IDLE_ASSET_PATH}?path=other", auth=False)
         self.assertEqual(status, 400)
+
+    def test_http_fixture_closes_client_after_read_timeout(self):
+        from unittest.mock import MagicMock
+        connection = MagicMock()
+        connection.getresponse.return_value.read.side_effect = TimeoutError("synthetic read timeout")
+        with patch("http.client.HTTPConnection", return_value=connection):
+            with self.assertRaises(TimeoutError):
+                self.request("GET", MURR_IDLE_ASSET_PATH, auth=False)
+        connection.close.assert_called_once_with()
 
     def test_chat_uses_latest_user_message_and_does_not_accept_unknown_model(self):
         status, raw = self.request("POST", "/v1/chat/completions", {

@@ -92,6 +92,69 @@ class AdventureInitiativeTests(unittest.TestCase):
         with self.assertRaisesRegex(AdventureInitiativeError, "initiative policy is invalid"):
             PersonaInitiativePolicy.from_dict(payload)
 
+    def test_memory_limits_reject_booleans_and_non_integer_values(self):
+        for field in ("max_context_facts", "max_knowledge_facts"):
+            for value in (True, False, 1.0, "16", None):
+                with self.subTest(field=field, value=value), self.assertRaises(AdventureInitiativeError):
+                    AdventureParticipantMemoryPolicy(**{field: value})
+                payload = AdventureParticipantMemoryPolicy().to_dict()
+                payload[field] = value
+                with self.assertRaises(AdventureInitiativeError):
+                    AdventureParticipantMemoryPolicy.from_dict(payload)
+
+    def test_initiative_limits_reject_booleans_and_non_integer_values(self):
+        for field in ("cooldown_turns", "max_actions_per_turn"):
+            for value in (True, False, 1.0, "1", None):
+                with self.subTest(field=field, value=value), self.assertRaises(AdventureInitiativeError):
+                    PersonaInitiativePolicy(**{field: value})
+                payload = PersonaInitiativePolicy().to_dict()
+                payload[field] = value
+                with self.assertRaises(AdventureInitiativeError):
+                    PersonaInitiativePolicy.from_dict(payload)
+
+    def test_roster_versions_require_supported_integers_not_equal_values(self):
+        for version in (True, False, 1.0, 2.0, "1", None, [], {}):
+            with self.subTest(version=version), self.assertRaises(AdventureInitiativeError):
+                AdventureParticipantRoster.from_dict("quiet-ember", {
+                    "schema_version": version, "participants": [],
+                })
+
+    def test_policy_trigger_and_action_values_fail_with_contract_errors(self):
+        for field in ("allowed_triggers", "allowed_actions"):
+            for values in (([],), ({},), (None,), (True,), (), ("unsupported",)):
+                with self.subTest(field=field, values=values), self.assertRaises(AdventureInitiativeError):
+                    PersonaInitiativePolicy(**{field: values})
+                payload = PersonaInitiativePolicy().to_dict()
+                payload[field] = list(values)
+                with self.assertRaises(AdventureInitiativeError):
+                    PersonaInitiativePolicy.from_dict(payload)
+
+    def test_evaluator_rejects_malformed_trigger_and_counter_types(self):
+        baseline = dict(trigger="player_turn", turns_since_last_action=None, actions_this_turn=0)
+        for trigger in ([], {}, None, True, "unsupported"):
+            with self.subTest(trigger=trigger), self.assertRaises(AdventureInitiativeError):
+                evaluate_initiative(PersonaInitiativePolicy(enabled=True), **{**baseline, "trigger": trigger})
+        for field in ("turns_since_last_action", "actions_this_turn"):
+            for value in (True, False, 1.0, "1", -1):
+                with self.subTest(field=field, value=value), self.assertRaises(AdventureInitiativeError):
+                    evaluate_initiative(PersonaInitiativePolicy(enabled=True), **{**baseline, field: value})
+
+    def test_valid_integer_boundaries_and_legacy_disabled_default_are_preserved(self):
+        for limit in (1, 64):
+            policy = AdventureParticipantMemoryPolicy(limit, limit)
+            self.assertEqual(policy, AdventureParticipantMemoryPolicy.from_dict(policy.to_dict()))
+        for cooldown in (0, 100):
+            for maximum in (1, 4):
+                policy = PersonaInitiativePolicy(enabled=True, cooldown_turns=cooldown, max_actions_per_turn=maximum)
+                self.assertEqual(policy, PersonaInitiativePolicy.from_dict(policy.to_dict()))
+                self.assertTrue(evaluate_initiative(policy, trigger="player_turn",
+                    turns_since_last_action=cooldown, actions_this_turn=0).allowed)
+        for version in (1, 2):
+            roster = AdventureParticipantRoster.from_dict("quiet-ember", {
+                "schema_version": version, "participants": [],
+            })
+            self.assertEqual((), roster.participants)
+
 
 if __name__ == "__main__":
     unittest.main()

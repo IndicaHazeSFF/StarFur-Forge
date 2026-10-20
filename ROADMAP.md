@@ -1,7 +1,7 @@
 # StarFur Forge Roadmap v4
 
 **Status:** Resident Intelligence Platform with an executable Persona Runtime
-**Last updated:** 2026-10-14
+**Last updated:** 2026-10-19
 
 `ROADMAP.md` is authoritative. `ROADMAP.v3.md`, `ROADMAP.v2.md`, and `ROADMAP.original.md` are preserved historical versions.
 
@@ -80,7 +80,11 @@ Presentation clients
 
 ## Versioned benchmark foundation (begin early and grow continuously)
 
-**COMPLETED TEST-DISCOVERY IDENTITY FOUNDATION (PENDING WSL FULL-SUITE SMOKE):** Full regression discovery now uses `python -m unittest discover -s tests -t . -v` with an inert `tests` package and package-qualified shared fixtures. Root/test-folder manual chunker inspectors remain explicitly runnable but cannot read manuscript content on import. Reset fixtures restore their temporary database setting even after failure. Native full discovery reaches 1,132 tests beyond the former collision, but is not clean: a reproducible Windows `factory_restore` file-replacement failure remains open before Windows release/restore readiness, alongside intermittent API-test errors requiring diagnosis. Neither failure is skipped, and this test-infrastructure slice changes no production reset/database behavior or current product dependency order.
+**WSL REGRESSION GATE PASSED — 2026-10-19:** The user-reported strict ResourceWarning run passed all 1,163 tests again, following the preceding two complete WSL runs and six focused lifecycle tests. Both maintenance and benchmark-foundation gates are cleared. This is provider-free regression evidence, not a live-model quality, installed-asset throughput, production restore or concurrent-ledger guarantee.
+
+**COMPLETED TEST-DISCOVERY IDENTITY FOUNDATION (WSL PASSED):** Full regression discovery uses `python -m unittest discover -s tests -t . -v` with an inert `tests` package and package-qualified shared fixtures. Manual chunker imports perform no corpus inspection; reset fixtures restore their temporary database setting even after failure. The WSL 1,132-test run passed but exposed unclosed SQLite handles; it was not a clean resource-lifecycle result.
+
+**COMPLETED CONNECTION-LIFECYCLE / REGRESSION-FIXTURE MAINTENANCE (WSL REGRESSION PASSED):** Repository-owned transactions now commit/roll back and close deterministically, while raw `db.connect()` remains explicitly caller-owned and initialization failures close. Retained-handle tests cover success/failure and compatibility. Native temporary reset/restore and the full 1,139-test suite pass without observed connection warnings. The fixed PNG route test now uses exact test-owned bytes, and HTTP clients close even on failed reads; no production transport, timeout, or installed art was changed. Earlier native restore-file denial no longer reproduces in its temporary fixture; the earlier HTTP timeout cause is not proven by fixture hardening. Production/concurrent restore and installed-asset transport readiness remain separate release checks. No tests were skipped, no runtime data was repaired, and immediate product dependencies are unchanged. `2026-10-14.sprint.md` records the maintenance evidence; the current combined provider-free WSL gate is in `2026-10-14.benchmark-foundation.sprint.md`.
 
 StarFur must maintain a reproducible behavioral benchmark layer above unit and integration tests. Begin the harness during the shared application/provider foundation, before routing and resident-environment work, so every later architectural change can be compared against accumulated evidence.
 
@@ -305,6 +309,8 @@ Create-your-own-adventure sessions are isolated, mountable story worlds rather t
 **COMPLETED PARTICIPANT-ACTION ENVELOPE SLICE:** A strict `TP-###` candidate contract now represents only an untrusted possible action for a named participant. It is intentionally inert until a later coordinator binds it to an explicit declared roster member and independently evaluated initiative policy; it cannot call a provider, perform/schedule an action, or create story/transcript/memory state.
 
 **COMPLETED DECLARED-INITIATIVE-POLICY SLICE:** Roster schema v2 can declare bounded per-participant initiative settings while preserving schema-v1 disabled-default compatibility. The manifest contains no dynamic action history, and enabled declarations remain non-authoritative until Core evaluates the exact trigger/cooldown/limit and provides a separate review path.
+
+**IMPLEMENTED PARTICIPANT-POLICY TYPE HARDENING:** Integer memory/pacing limits, runtime counters and roster versions reject booleans and equal-valued floats. Trigger/action values are string-checked before membership so malformed structured values return the contract error instead of an incidental type error. Valid v1/v2 declarations, disabled defaults, prompt/profile settings and review-only authority are unchanged. Six focused regression methods cover rejection and valid boundaries. No live-model smoke is required for this validator-only slice; its provider-free WSL regression remains pending.
 
 **COMPLETED PARTICIPANT-ACTION POLICY-BINDING SLICE:** Core can now bind a parsed `TP-###` batch to one exact declared participant and a caller-supplied eligibility check. Passing this gate means only “safe to review”; it stores no action history and is not a grant, confirmation, schedule, event/transcript/memory write, or performed action. A session-local coordinator/inbox is still required.
 
@@ -958,6 +964,8 @@ The full instrumentation ledger and cross-system comparison reports mature after
 
 **ADVENTURE-TURN RESULT SLICE COMPLETED:** The same bounded ledger accepts adventure-turn benchmark cases and separates generation completion, candidate validation, Core-use/staging, and canonical-commit outcomes. It stores only bounded statuses/counts and rates, never turn text, provider payloads, or narrative prose.
 
+**COMPLETED REPRODUCIBILITY-METADATA HARDENING (WSL REGRESSION PASSED):** The existing v1 manifest shape now has shared exact validation, typed/bounded labels and numeric fields, aware timestamps, immutable hardware snapshots and a coarse hardware-key allowlist. New ledger builds/appends reuse that contract and reject malformed, non-finite or out-of-range measurements before file creation/append. Explicit plan timestamps support deterministic construction. No historical ledger is rewritten or retroactively verified; labels are declarations, not automatic secret detection or host attestation.
+
 Adventure-turn failures use a closed operational category set (empty, non-JSON,
 oversized, invalid-envelope, stale-origin, unavailable-profile, or provider
 failure) so permanent regressions remain comparable without retaining a model
@@ -968,6 +976,8 @@ Extend this into an append-only local experiment ledger with versioned structure
 Required tools include deterministic benchmark suites, router decision traces, reproducible run manifests, comparison reports, and exportable research summaries. Metrics must be bounded, privacy-aware, and tied to a decision or hypothesis. This instrumentation should be reusable by routing, retrieval, Persona Runtime, autonomous learning, and the discussion sandbox.
 
 ### Research and grant evidence track (planned; optional)
+
+**COMPLETED FIRST CONTROLLED-COMPARISON CONTRACT (WSL REGRESSION PASSED):** A pure `benchmark_comparison` guard accepts two to 32 declared runs only when fixture/policy/metric/runtime, workload, architecture, full commit, seed, hardware and context controls match. Provider/model/quantization/resolved-model identity may vary; distinct-ID replicates are allowed. Incomplete metadata remains insufficient, and mismatches remain incompatible; output is closed reasons/counts only. The guard neither measures/hashes data nor scores/ranks results or verifies truth/security. Existing reports, ledger readers, CLI/API, providers and normal chat are not wired to it. Automated capture, comparison exports, ablations, variance/significance and human studies remain later work. This independent foundation does not reorder adventure work or create a Steam gate; see `2026-10-14.benchmark-foundation.sprint.md`.
 
 Keep the experiment ledger capable of supporting a future grant, paper,
 portfolio, or research collaboration even if no application is submitted. Each

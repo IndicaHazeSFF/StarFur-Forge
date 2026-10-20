@@ -1,4 +1,4 @@
-from contextlib import contextmanager
+from contextlib import closing
 from pathlib import Path
 import sqlite3
 import sys
@@ -18,29 +18,13 @@ OTHER_SOURCE = "canon/chapters/02-approach.md"
 class SourceCleanupTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
         self.db_path = Path(self.temp_dir.name) / "starfur.db"
         self.original_db_path = db.DB_PATH
-        self.original_connect = db.connect
+        self.addCleanup(setattr, db, "DB_PATH", self.original_db_path)
         db.DB_PATH = self.db_path
 
-        @contextmanager
-        def connect_and_close():
-            connection = sqlite3.connect(db.DB_PATH)
-            connection.row_factory = sqlite3.Row
-            connection.execute("PRAGMA foreign_keys = ON")
-
-            try:
-                yield connection
-                connection.commit()
-            except Exception:
-                connection.rollback()
-                raise
-            finally:
-                connection.close()
-
-        db.connect = connect_and_close
-
-        with sqlite3.connect(self.db_path) as connection:
+        with closing(sqlite3.connect(self.db_path)) as connection, connection:
             connection.executescript(
                 """
                 CREATE TABLE entities (
@@ -86,13 +70,6 @@ class SourceCleanupTests(unittest.TestCase):
                 """
             )
 
-        connection.close()
-
-    def tearDown(self):
-        db.DB_PATH = self.original_db_path
-        db.connect = self.original_connect
-        self.temp_dir.cleanup()
-
     def test_cleanup_removes_only_rebuildable_source_records(self):
         result = db.clear_source_derived_memory(SOURCE)
 
@@ -105,7 +82,7 @@ class SourceCleanupTests(unittest.TestCase):
             },
         )
 
-        with sqlite3.connect(self.db_path) as connection:
+        with closing(sqlite3.connect(self.db_path)) as connection, connection:
             self.assertEqual(
                 connection.execute("SELECT COUNT(*) FROM entities").fetchone()[0],
                 1,

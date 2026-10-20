@@ -1,5 +1,6 @@
 from pathlib import Path
 import sqlite3
+from contextlib import closing
 import tempfile
 import unittest
 
@@ -75,7 +76,7 @@ class AssistantMemoryTests(unittest.TestCase):
     def test_schema_is_additive_and_lore_domain_unchanged(self):
         db.create_assistant_memory("User", "routine", "Works on StarFur", domain="personal")
         self.assertIsNotNone(db.get_assistant_memory(1, domain="personal"))
-        with db.connect() as connection:
+        with db.transaction() as connection:
             tables = {row["name"] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         self.assertIn("assistant_memories", tables)
         self.assertEqual(DEFAULT_PROJECT_DOMAIN, "project:crown-of-claws")
@@ -94,7 +95,7 @@ class AssistantMemoryTests(unittest.TestCase):
 
     def test_visibility_scope_migrates_additively_from_legacy_assistant_tables(self):
         legacy_path = Path(self.temp.name) / "legacy.sqlite"
-        with sqlite3.connect(legacy_path) as connection:
+        with closing(sqlite3.connect(legacy_path)) as connection, connection:
             connection.execute("""CREATE TABLE assistant_memories (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, domain TEXT NOT NULL,
                 subject TEXT NOT NULL, memory_type TEXT NOT NULL, summary TEXT NOT NULL,
@@ -114,7 +115,7 @@ class AssistantMemoryTests(unittest.TestCase):
                 reviewed_by TEXT, review_note TEXT, approved_memory_id INTEGER
             )""")
         db.DB_PATH = legacy_path
-        with db.connect() as connection:
+        with db.transaction() as connection:
             memory_columns = {row["name"] for row in connection.execute("PRAGMA table_info(assistant_memories)")}
             proposal_columns = {row["name"] for row in connection.execute("PRAGMA table_info(assistant_memory_proposals)")}
         self.assertIn("visibility_scope", memory_columns)

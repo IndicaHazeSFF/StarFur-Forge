@@ -1,5 +1,111 @@
 # Pending copy manifest
 
+## Latest slice copy set — participant-policy type validation
+
+- `pipeline/adventure_initiative.py`
+- `tests/test_adventure_initiative.py`
+- `AGENTS.md`
+- `ROADMAP.md`
+- `CHANGELOG.md`
+- `docs/COMMANDS.md`
+- `2026-10-14.sprint.md`
+- `2026-10-14.benchmark-foundation.sprint.md`
+- `session.files.md`
+
+The previous combined WSL gate passed all 1,163 tests repeatedly, including
+the latest reported 24.515 s run; all six lifecycle tests passed separately.
+Both preceding sprint gates are closed. Historical pending notes below are
+superseded; no production restore or live-model quality guarantee is implied.
+
+This slice rejects boolean/non-integer limits, counters and roster versions,
+and rejects malformed trigger/action values through the contract error.
+Valid policy semantics, v1 disabled defaults, prompts, budgets and authority
+are unchanged. No new command, provider call, runtime data change or repair.
+Native: 13 initiative, 28 participant and all 1,169 tests pass without observed
+resource warnings. No tests skipped, no live-model smoke required.
+
+Copy only this set; preserve local config, installed art, `data/`, `adventures/`.
+Quick provider-free WSL check from the repository root:
+
+```bash
+python3 -W error::ResourceWarning -m unittest discover -s tests -t . -p "test_adventure_initiative.py" -q
+```
+
+Expected: 13 tests OK. No key, server or model loading needed. An optional full
+run now includes 1,169 tests. Nothing is staged or committed.
+
+## Latest combined sprint copy set — maintenance and benchmark foundation
+
+- `pipeline/db.py`
+- `pipeline/review_proposals.py`
+- `pipeline/reset.py`
+- `pipeline/benchmark.py`
+- `pipeline/benchmark_comparison.py`
+- `pipeline/experiment_ledger.py`
+- `tests/test_db_connection_lifecycle.py`
+- `tests/test_assistant_memory.py`
+- `tests/test_assistant_proposal_idempotency.py`
+- `tests/test_assistant_proposal_inspection.py`
+- `tests/test_memory_domains.py`
+- `tests/test_source_cleanup.py`
+- `tests/test_api.py`
+- `tests/test_benchmark.py`
+- `tests/test_benchmark_comparison.py`
+- `tests/test_experiment_ledger.py`
+- `AGENTS.md`
+- `ROADMAP.md`
+- `CHANGELOG.md`
+- `docs/COMMANDS.md`
+- `2026-10-14.sprint.md`
+- `2026-10-14.benchmark-foundation.sprint.md`
+- `session.files.md`
+
+This historical combined set passed its WSL gate; the newer slice above is current. Preserve
+local configuration, installed art, `data/` and `adventures/`. The preceding
+SQLite/API work remains WSL-gated; these independent additions do not claim its
+gate passed. Manifests/new appends now use strict immutable metadata; a pure
+model-scaling eligibility guard rejects incomplete/incompatible declarations;
+new ledger measurements must be finite and valid before append. No live runner,
+comparison CLI/export, private context, provider call, runtime data change or
+new permission was added. Historical ledger data was not accessed or rewritten.
+Native full discovery passes 1,163 tests without observed resource warnings.
+One combined WSL full-suite check in the benchmark sprint replaces the previous
+checklist; it includes all six connection tests. No key or live-model smoke.
+Nothing is staged or committed. Details/deferred integration are recorded in
+`2026-10-14.benchmark-foundation.sprint.md`.
+
+## Latest sprint copy set — SQLite ownership and HTTP fixtures
+
+- `pipeline/db.py`
+- `pipeline/review_proposals.py`
+- `pipeline/reset.py`
+- `tests/test_db_connection_lifecycle.py`
+- `tests/test_assistant_memory.py`
+- `tests/test_assistant_proposal_idempotency.py`
+- `tests/test_assistant_proposal_inspection.py`
+- `tests/test_memory_domains.py`
+- `tests/test_source_cleanup.py`
+- `tests/test_api.py`
+- `AGENTS.md`
+- `ROADMAP.md`
+- `CHANGELOG.md`
+- `docs/COMMANDS.md`
+- `2026-10-14.sprint.md`
+- `session.files.md`
+
+This historical maintenance set is included in the combined set above. Preserve local
+configuration, installed art, `data/`, and `adventures/`. The preceding WSL
+discovery run passed 1,132 tests but exposed unclosed SQLite handles. Owned
+transactions now close deterministically, initialization failure closes, and raw
+`db.connect()` remains caller-owned. API fixtures use test-owned PNG bytes and
+close HTTP clients even on failed reads; no production HTTP or asset change.
+Native lifecycle (6), temporary reset/restore (3), API (44), and full suite
+(1,139) pass without observed resource warnings; WSL recheck is pending.
+Its two historical commands are replaced by the combined full-suite gate. No API key,
+model loading, new live-model smoke, production reset/restore, or runtime copy
+is needed. Nothing is staged or committed. Independent speculative groundwork
+was intentionally deferred rather than accumulating more verification gates.
+
 ## Latest slice copy set — test discovery boundary
 
 - `tests/__init__.py`
@@ -27,6 +133,9 @@ Do not run real factory-reset/restore commands or copy any runtime data.
 Three discovery-boundary tests passed. Native full discovery reached 1,132 tests
 but was not clean: Windows restore-file denial and an intermittent API-test error
 remain open. Do not interpret this copy set as a production fix for either.
+This historical gate is superseded by the maintenance sprint above: WSL full
+discovery passed, and native temporary restore now passes after connection
+ownership repair. Production restore and installed-art transport are not claimed.
 
 ## Latest slice copy set — participant proposal wording
 
@@ -241,7 +350,16 @@ discovery attempt was blocked by the pre-existing root/test-folder
 `test_chunker.py` name collision; this slice does not repair those manual
 scripts or claim that full discovery passed.
 
-## Pipeline (65)
+## Pipeline (71)
+
+- `pipeline/adventure_initiative.py`
+
+- `pipeline/benchmark.py`
+- `pipeline/benchmark_comparison.py`
+
+- `pipeline/db.py`
+- `pipeline/review_proposals.py`
+- `pipeline/reset.py`
 
 - `pipeline/adventure_participant_action.py`
 
@@ -322,7 +440,19 @@ scripts or claim that full discovery passed.
 
 - `presentation/apartment.html`
 
-## Tests (70)
+## Tests (77)
+
+- `tests/test_adventure_initiative.py`
+
+- `tests/test_benchmark.py`
+- `tests/test_benchmark_comparison.py`
+
+- `tests/test_db_connection_lifecycle.py`
+- `tests/test_assistant_memory.py`
+- `tests/test_assistant_proposal_idempotency.py`
+- `tests/test_assistant_proposal_inspection.py`
+- `tests/test_memory_domains.py`
+- `tests/test_source_cleanup.py`
 
 - `tests/__init__.py`
 - `tests/test_discovery_boundary.py`
@@ -379,8 +509,6 @@ scripts or claim that full discovery passed.
 - `tests/test_research_relationship_review.py`
 - `tests/test_research_relationship_brief.py`
 - `tests/test_research_brief.py`
-- `tests/test_research_answer_policy.py`
-- `tests/test_research_answer_binding.py`
 - `tests/test_factual_research_policy.py`
 - `tests/test_research_discovery.py`
 - `tests/test_tool_web_search.py`
@@ -400,7 +528,11 @@ scripts or claim that full discovery passed.
 - `tests/test_action_smoke_registration_repair.py`
 - `tests/test_document_annotation.py`
 
-## Documentation and policy (7)
+## Documentation and policy (9)
+
+- `2026-10-14.benchmark-foundation.sprint.md`
+
+- `2026-10-14.sprint.md`
 
 - `AGENTS.md`
 - `CHANGELOG.md`

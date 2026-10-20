@@ -28,7 +28,7 @@ class AssistantProposalIdempotencyTests(unittest.TestCase):
         base = {"subject":"Roger","memory_type":"goal","summary":"Build StarFur","details":"","importance":0.5,"confidence":0.5,"retention":"long_term"}
         a = db.upsert_assistant_memory_proposal(base, source_reference="turn-1")
         db.upsert_assistant_memory_proposal(base, source_reference="turn-1")
-        with db.connect() as connection:
+        with db.transaction() as connection:
             count = connection.execute("SELECT COUNT(*) FROM assistant_memory_proposal_evidence WHERE proposal_id = ?", (a["proposal_id"],)).fetchone()[0]
         self.assertEqual(count, 1)
 

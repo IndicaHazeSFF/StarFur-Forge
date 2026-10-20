@@ -34,7 +34,7 @@ class AdventureParticipantMemoryPolicy:
     def __post_init__(self) -> None:
         for field in ("max_context_facts", "max_knowledge_facts"):
             value = getattr(self, field)
-            if not isinstance(value, int) or not 1 <= value <= 64:
+            if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 64:
                 raise AdventureInitiativeError(f"{field} must be between 1 and 64")
         if not isinstance(self.retain_salient_events, bool):
             raise AdventureInitiativeError("retain_salient_events must be boolean")
@@ -134,7 +134,10 @@ class AdventureParticipantRoster:
     def from_dict(cls, adventure_id: object, value: object) -> "AdventureParticipantRoster":
         """Validate package data and derive the only accepted memory namespaces."""
         fields = {"schema_version", "participants"}
-        if not isinstance(value, dict) or set(value) != fields or value["schema_version"] not in {1, 2}:
+        if not isinstance(value, dict) or set(value) != fields:
+            raise AdventureInitiativeError("participant roster is invalid")
+        version = value["schema_version"]
+        if isinstance(version, bool) or not isinstance(version, int) or version not in {1, 2}:
             raise AdventureInitiativeError("participant roster is invalid")
         schema_version = value["schema_version"]
         entries = value["participants"]
@@ -177,13 +180,14 @@ class PersonaInitiativePolicy:
             raise AdventureInitiativeError("initiative flags must be boolean")
         for field, allowed in (("allowed_triggers", INITIATIVE_TRIGGERS), ("allowed_actions", INITIATIVE_ACTIONS)):
             values = getattr(self, field)
-            if not isinstance(values, tuple) or not values or any(value not in allowed for value in values):
+            if (not isinstance(values, tuple) or not 1 <= len(values) <= len(allowed)
+                    or any(not isinstance(value, str) or value not in allowed for value in values)):
                 raise AdventureInitiativeError(f"{field} contains an unsupported value")
             if len(set(values)) != len(values):
                 raise AdventureInitiativeError(f"{field} must not repeat values")
-        if not isinstance(self.cooldown_turns, int) or not 0 <= self.cooldown_turns <= 100:
+        if isinstance(self.cooldown_turns, bool) or not isinstance(self.cooldown_turns, int) or not 0 <= self.cooldown_turns <= 100:
             raise AdventureInitiativeError("cooldown_turns must be between 0 and 100")
-        if not isinstance(self.max_actions_per_turn, int) or not 1 <= self.max_actions_per_turn <= 4:
+        if isinstance(self.max_actions_per_turn, bool) or not isinstance(self.max_actions_per_turn, int) or not 1 <= self.max_actions_per_turn <= 4:
             raise AdventureInitiativeError("max_actions_per_turn must be between 1 and 4")
 
     def to_dict(self) -> dict[str, object]:
@@ -229,11 +233,12 @@ def evaluate_initiative(policy: PersonaInitiativePolicy, *, trigger: str,
     """Check whether Core may offer one bounded initiative opportunity."""
     if not isinstance(policy, PersonaInitiativePolicy):
         raise TypeError("policy must be PersonaInitiativePolicy")
-    if trigger not in INITIATIVE_TRIGGERS:
+    if not isinstance(trigger, str) or trigger not in INITIATIVE_TRIGGERS:
         raise AdventureInitiativeError("initiative trigger is unsupported")
-    if not isinstance(actions_this_turn, int) or actions_this_turn < 0:
+    if isinstance(actions_this_turn, bool) or not isinstance(actions_this_turn, int) or actions_this_turn < 0:
         raise AdventureInitiativeError("actions_this_turn must be non-negative")
-    if turns_since_last_action is not None and (not isinstance(turns_since_last_action, int) or turns_since_last_action < 0):
+    if turns_since_last_action is not None and (isinstance(turns_since_last_action, bool)
+            or not isinstance(turns_since_last_action, int) or turns_since_last_action < 0):
         raise AdventureInitiativeError("turns_since_last_action must be non-negative or None")
     if not policy.enabled:
         return InitiativeDecision(False, "initiative disabled")

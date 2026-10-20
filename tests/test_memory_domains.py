@@ -42,9 +42,10 @@ class MemoryDomainTests(unittest.TestCase):
             old = db.DB_PATH
             db.DB_PATH = path
             try:
-                row = db.connect().execute(
-                    "SELECT domain FROM entity_facts WHERE id = 1"
-                ).fetchone()
+                with db.transaction() as connection:
+                    row = connection.execute(
+                        "SELECT domain FROM entity_facts WHERE id = 1"
+                    ).fetchone()
                 self.assertEqual(row["domain"], domains.DEFAULT_PROJECT_DOMAIN)
                 self.assertIsNotNone(db.get_entity_by_name("Ceph"))
                 self.assertIsNone(db.get_entity_by_name("Ceph", domain="personal"))

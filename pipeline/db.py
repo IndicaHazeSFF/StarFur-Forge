@@ -1,4 +1,5 @@
 from pathlib import Path
+from contextlib import contextmanager
 import hashlib
 import re
 import sqlite3
@@ -260,22 +261,39 @@ def ensure_assistant_memories_schema(connection):
 
 def connect():
     """
-    Open a connection to the StarFur database.
+    Open a caller-owned raw connection; callers must close it explicitly.
+
+    Prefer transaction() for repository-owned scoped work. The raw SQLite
+    context manager commits/rolls back but does not close the connection.
     """
     connection = sqlite3.connect(DB_PATH)
-
-    connection.row_factory = sqlite3.Row
-
-    connection.execute(
-        "PRAGMA foreign_keys = ON"
-    )
-
-    ensure_entity_facts_schema(connection)
-    ensure_memory_domains_schema(connection)
-    ensure_assistant_memories_schema(connection)
-    connection.commit()
-
+    try:
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys = ON")
+        ensure_entity_facts_schema(connection)
+        ensure_memory_domains_schema(connection)
+        ensure_assistant_memories_schema(connection)
+        connection.commit()
+    except BaseException:
+        connection.close()
+        raise
     return connection
+
+
+@contextmanager
+def transaction():
+    """Own one connection, preserve SQLite transaction behavior, always close.
+
+    Yielded connections are borrowed for this scope only. Return materialized
+    rows/values, never a live cursor or connection for use after the scope.
+    This neither closes other callers' handles nor coordinates live restores.
+    """
+    connection = connect()
+    try:
+        with connection:
+            yield connection
+    finally:
+        connection.close()
 
 
 def get_entities(entity_type=None, domain=DEFAULT_PROJECT_DOMAIN):
@@ -284,7 +302,7 @@ def get_entities(entity_type=None, domain=DEFAULT_PROJECT_DOMAIN):
 
     Optionally filter by entity type.
     """
-    with connect() as connection:
+    with transaction() as connection:
 
         domain = normalize_domain(domain)
 
@@ -318,7 +336,7 @@ def get_entities(entity_type=None, domain=DEFAULT_PROJECT_DOMAIN):
 def get_entity_names_and_aliases(domain=DEFAULT_PROJECT_DOMAIN):
     """Return confirmed canonical names and aliases for proposal review."""
     domain = normalize_domain(domain)
-    with connect() as connection:
+    with transaction() as connection:
         rows = connection.execute(
             """
             SELECT canonical_name AS name FROM entities WHERE status = 'confirmed' AND domain = ?
@@ -338,7 +356,7 @@ def get_entity_by_name(name, domain=DEFAULT_PROJECT_DOMAIN):
     """
     domain = normalize_domain(domain)
 
-    with connect() as connection:
+    with transaction() as connection:
 
         row = connection.execute(
             """
@@ -382,7 +400,7 @@ def create_entity(
     """
     Create a confirmed canon entity.
     """
-    with connect() as connection:
+    with transaction() as connection:
 
         cursor = connection.execute(
             """
@@ -411,7 +429,7 @@ def add_alias(entity_id, alias):
     """
     Add an alias to an existing entity.
     """
-    with connect() as connection:
+    with transaction() as connection:
 
         connection.execute(
             """
@@ -442,7 +460,7 @@ def add_appearance(
 
     Duplicate appearances are ignored.
     """
-    with connect() as connection:
+    with transaction() as connection:
 
         connection.execute(
             """
@@ -482,7 +500,7 @@ def create_proposal(
 
     This DOES NOT modify confirmed canon.
     """
-    with connect() as connection:
+    with transaction() as connection:
 
         cursor = connection.execute(
             """
@@ -519,7 +537,7 @@ def get_pending_proposals():
     """
     Return proposals awaiting human review.
     """
-    with connect() as connection:
+    with transaction() as connection:
 
         rows = connection.execute(
             """
@@ -537,7 +555,7 @@ def database_stats():
     """
     Return basic StarFur database statistics.
     """
-    with connect() as connection:
+    with transaction() as connection:
 
         tables = [
             "entities",
@@ -571,7 +589,7 @@ def clear_source_appearances(source):
 
     Confirmed entities themselves are never removed.
     """
-    with connect() as connection:
+    with transaction() as connection:
         cursor = connection.execute(
             """
             DELETE FROM appearances
@@ -593,7 +611,7 @@ def clear_pending_source_proposals(source):
     Approved and rejected proposals are preserved as
     human-review history.
     """
-    with connect() as connection:
+    with transaction() as connection:
         cursor = connection.execute(
             """
             DELETE FROM proposals
@@ -615,7 +633,7 @@ def clear_source_entity_facts(source):
     Confirmed facts are preserved.
     """
 
-    with connect() as conn:
+    with transaction() as conn:
         cursor = conn.execute(
             """
             DELETE FROM entity_facts
@@ -670,7 +688,7 @@ def add_entity_fact(
     Duplicate facts from the same source/chunk are ignored.
     """
 
-    with connect() as conn:
+    with transaction() as conn:
         conn.execute(
             """
             INSERT OR IGNORE INTO entity_facts (
@@ -703,7 +721,7 @@ def get_entity_facts(entity_id, domain=DEFAULT_PROJECT_DOMAIN):
     Return all recorded facts for an entity.
     """
 
-    with connect() as conn:
+    with transaction() as conn:
         rows = conn.execute(
             """
             SELECT
@@ -731,7 +749,7 @@ def get_all_entity_facts():
     Return entity facts grouped by entity ID.
     """
 
-    with connect() as connection:
+    with transaction() as connection:
         rows = connection.execute(
             """
             SELECT
@@ -772,7 +790,7 @@ def create_assistant_memory(subject, memory_type, summary, details=None, importa
     visibility_scope = normalize_memory_visibility_scope(visibility_scope)
     if not 0 <= importance <= 1 or not 0 <= confidence <= 1:
         raise ValueError("importance and confidence must be between 0 and 1")
-    with connect() as connection:
+    with transaction() as connection:
         cursor = connection.execute(
             """INSERT INTO assistant_memories
             (domain, subject, memory_type, summary, details, importance, confidence, retention, source, visibility_scope)
@@ -784,7 +802,7 @@ def create_assistant_memory(subject, memory_type, summary, details=None, importa
 
 
 def get_assistant_memory(memory_id, domain="personal"):
-    with connect() as connection:
+    with transaction() as connection:
         row = connection.execute(
             "SELECT * FROM assistant_memories WHERE id = ? AND domain = ?",
             (memory_id, normalize_domain(domain)),
@@ -807,7 +825,7 @@ def list_assistant_memories(domain="personal", status="active", memory_type=None
     if limit <= 0:
         raise ValueError("limit must be positive")
     params.append(limit)
-    with connect() as connection:
+    with transaction() as connection:
         rows = connection.execute(
             f"SELECT * FROM assistant_memories WHERE {' AND '.join(clauses)} ORDER BY updated_at DESC, id DESC LIMIT ?",
             params,
@@ -840,7 +858,7 @@ def create_assistant_memory_association(
         raise ValueError("association strength must be between 0 and 1")
     if not isinstance(source, str) or not source.strip():
         raise ValueError("association source must be a non-empty string")
-    with connect() as connection:
+    with transaction() as connection:
         memory_count = connection.execute(
             "SELECT COUNT(*) FROM assistant_memories WHERE domain = ? AND id IN (?, ?)",
             (domain, source_memory_id, target_memory_id),
@@ -858,7 +876,7 @@ def create_assistant_memory_association(
 
 
 def get_assistant_memory_association(association_id, domain="personal"):
-    with connect() as connection:
+    with transaction() as connection:
         row = connection.execute(
             "SELECT * FROM assistant_memory_associations WHERE id = ? AND domain = ?",
             (association_id, normalize_domain(domain)),
@@ -885,7 +903,7 @@ def list_assistant_memory_associations(domain="personal", memory_id=None, status
         clauses.append("(source_memory_id = ? OR target_memory_id = ?)")
         params.extend((memory_id, memory_id))
     params.append(limit)
-    with connect() as connection:
+    with transaction() as connection:
         rows = connection.execute(
             f"SELECT * FROM assistant_memory_associations WHERE {' AND '.join(clauses)} ORDER BY created_at, id LIMIT ?",
             params,
@@ -908,7 +926,7 @@ def update_assistant_memory_association(association_id, *, domain="personal", st
     if not changes:
         raise ValueError("No association changes supplied")
     assignments = ", ".join(f"{column} = ?" for column in changes)
-    with connect() as connection:
+    with transaction() as connection:
         cursor = connection.execute(
             f"UPDATE assistant_memory_associations SET {assignments}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND domain = ?",
             [*changes.values(), association_id, normalize_domain(domain)],
@@ -1057,7 +1075,7 @@ def search_assistant_memories(query, domain="personal", status="active", limit=2
         clauses.append("status = ?")
         params.append(normalize_memory_status(status))
     params.append(limit)
-    with connect() as connection:
+    with transaction() as connection:
         rows = connection.execute(
             f"SELECT * FROM assistant_memories WHERE {' AND '.join(clauses)} ORDER BY updated_at DESC, id DESC LIMIT ?",
             params,
@@ -1085,7 +1103,7 @@ def update_assistant_memory(memory_id, domain="personal", **changes):
         return get_assistant_memory(memory_id, domain)
     assignments = ", ".join(f"{key} = ?" for key in changes)
     values = list(changes.values()) + [memory_id, normalize_domain(domain)]
-    with connect() as connection:
+    with transaction() as connection:
         connection.execute(
             f"UPDATE assistant_memories SET {assignments}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND domain = ?",
             values,
@@ -1107,13 +1125,13 @@ def create_assistant_memory_proposal(proposal, domain="personal", observation_te
     visibility_scope = normalize_memory_visibility_scope(proposal.get("visibility_scope"))
     for field in ("importance", "confidence"):
         if isinstance(proposal[field], bool) or not isinstance(proposal[field], (int, float)) or not 0 <= proposal[field] <= 1: raise ValueError("Invalid proposal score")
-    with connect() as connection:
+    with transaction() as connection:
         cursor = connection.execute("INSERT INTO assistant_memory_proposals (domain, subject, memory_type, summary, details, importance, confidence, retention, source, visibility_scope) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (domain, proposal["subject"], proposal["memory_type"], proposal["summary"], proposal.get("details"), proposal["importance"], proposal["confidence"], proposal["retention"], proposal.get("source", "assistant_turn_proposal"), visibility_scope))
         connection.commit()
         return cursor.lastrowid
 
 def list_assistant_memory_proposals(domain="personal", status="pending"):
-    with connect() as connection:
+    with transaction() as connection:
         rows = connection.execute("SELECT * FROM assistant_memory_proposals WHERE domain = ? AND (? IS NULL OR status = ?) ORDER BY created_at, id", (normalize_domain(domain), status, status)).fetchall()
     return [dict(row) for row in rows]
 
@@ -1123,7 +1141,7 @@ def assistant_public_id(kind, record_id, domain="personal"):
     prefix = "M" if kind == "memory" else "P" if kind == "proposal" else None
     if table is None:
         raise ValueError("Unknown assistant record kind")
-    with connect() as connection:
+    with transaction() as connection:
         row = connection.execute(
             f"SELECT id FROM {table} WHERE domain = ? ORDER BY created_at, id",
             (normalize_domain(domain),),
@@ -1145,7 +1163,7 @@ def resolve_assistant_id(reference, kind, domain="personal"):
         return None
     ordinal = int(match.group(2))
     table = "assistant_memories" if kind == "memory" else "assistant_memory_proposals"
-    with connect() as connection:
+    with transaction() as connection:
         rows = connection.execute(
             f"SELECT id FROM {table} WHERE domain = ? ORDER BY created_at, id",
             (normalize_domain(domain),),
@@ -1154,7 +1172,7 @@ def resolve_assistant_id(reference, kind, domain="personal"):
 
 
 def get_assistant_memory_proposal(proposal_id, domain="personal"):
-    with connect() as connection:
+    with transaction() as connection:
         row = connection.execute("SELECT * FROM assistant_memory_proposals WHERE id = ? AND domain = ?", (proposal_id, normalize_domain(domain))).fetchone()
     return dict(row) if row else None
 
@@ -1163,7 +1181,7 @@ def update_assistant_memory_proposal_visibility_scope(proposal_id, visibility_sc
     """Set user-controlled scope metadata on one pending proposal only."""
     scope = normalize_memory_visibility_scope(visibility_scope)
     domain = normalize_domain(domain)
-    with connect() as connection:
+    with transaction() as connection:
         cursor = connection.execute(
             """UPDATE assistant_memory_proposals
                SET visibility_scope = ?, updated_at = CURRENT_TIMESTAMP
@@ -1177,7 +1195,7 @@ def update_assistant_memory_proposal_visibility_scope(proposal_id, visibility_sc
 
 def inspect_assistant_memory_proposal(proposal_id, domain="personal"):
     """Return a proposal and oldest-first evidence without changing any state."""
-    with connect() as connection:
+    with transaction() as connection:
         proposal = connection.execute("SELECT * FROM assistant_memory_proposals WHERE id = ? AND domain = ?", (proposal_id, normalize_domain(domain))).fetchone()
         if not proposal:
             return None
@@ -1185,7 +1203,7 @@ def inspect_assistant_memory_proposal(proposal_id, domain="personal"):
     return {"proposal": dict(proposal), "evidence": [dict(row) for row in evidence]}
 
 def reject_assistant_memory_proposal(proposal_id, domain="personal", reviewed_by="user", review_note=None):
-    with connect() as connection:
+    with transaction() as connection:
         cursor = connection.execute("UPDATE assistant_memory_proposals SET status = 'rejected', reviewed_at = CURRENT_TIMESTAMP, reviewed_by = ?, review_note = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND domain = ? AND status = 'pending'", (reviewed_by, review_note, proposal_id, normalize_domain(domain)))
         if cursor.rowcount != 1: raise ValueError("Proposal is missing or not pending")
         connection.commit()
@@ -1193,7 +1211,7 @@ def reject_assistant_memory_proposal(proposal_id, domain="personal", reviewed_by
 
 def approve_assistant_memory_proposal(proposal_id, domain="personal", reviewed_by="user", review_note=None):
     domain = normalize_domain(domain)
-    with connect() as connection:
+    with transaction() as connection:
         proposal = connection.execute("SELECT * FROM assistant_memory_proposals WHERE id = ? AND domain = ?", (proposal_id, domain)).fetchone()
         if not proposal or proposal["status"] not in ("pending", "approved"):
             raise ValueError("Proposal is missing or not pending")
@@ -1208,7 +1226,7 @@ def approve_assistant_memory_proposal(proposal_id, domain="personal", reviewed_b
     return get_assistant_memory(memory_id, domain)
 
 def inspect_assistant_memory(memory_id, domain="personal"):
-    with connect() as connection:
+    with transaction() as connection:
         memory = connection.execute("SELECT * FROM assistant_memories WHERE id = ? AND domain = ?", (memory_id, normalize_domain(domain))).fetchone()
         if not memory: return None
         evidence = connection.execute("SELECT id, proposal_id, memory_id, source, source_reference, evidence_hash, raw_excerpt, observed_at FROM assistant_memory_proposal_evidence WHERE memory_id = ? ORDER BY observed_at, id", (memory_id,)).fetchall()
@@ -1231,7 +1249,7 @@ def upsert_assistant_memory_proposal(proposal, domain="personal", source_referen
     key = assistant_observation_key(domain, identity_subject, proposal["memory_type"], observation_identity) if observation_identity is not None else assistant_proposal_key(domain, proposal["subject"], proposal["memory_type"], proposal["summary"])
     evidence_text = observation_text if observation_text is not None else (source_reference or proposal["summary"])
     evidence_hash = hashlib.sha256((source + "|" + normalize_proposal_text(evidence_text)).encode("utf-8")).hexdigest()
-    with connect() as connection:
+    with transaction() as connection:
         connection.execute("BEGIN")
         row = connection.execute("SELECT * FROM assistant_memory_proposals WHERE domain = ? AND proposal_key = ? AND status = 'pending'", (domain, key)).fetchone()
         if row is None and source == "external_document_annotation" and source_reference:

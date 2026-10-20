@@ -277,6 +277,68 @@ class ExperimentLedgerTests(unittest.TestCase):
         self.assertNotIn("profiles", case)
         self.assertNotIn("providers", case)
 
+    def test_manifest_revalidation_rejects_tampering_before_creating_a_file(self):
+        variants = (
+            ("hardware", {"raw_prompt": "synthetic private marker"}),
+            ("hardware", {"ram_gb": float("nan")}),
+            ("seed", 1.5), ("started_at", "yesterday"),
+            ("schema_version", "starfur-benchmark-v99"),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "not-created" / "ledger.jsonl"
+            for field, value in variants:
+                record = build_benchmark_result_record(sample_manifest(), sample_result())
+                record["manifest"][field] = value
+                with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                    append_benchmark_result(path, record)
+                self.assertFalse(path.parent.exists())
+
+    def test_invalid_append_preserves_existing_ledger_bytes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ledger.jsonl"
+            record = build_benchmark_result_record(sample_manifest(), sample_result())
+            append_benchmark_result(path, record)
+            original = path.read_bytes()
+            record["manifest"]["model_profile"]["api_key"] = "synthetic private marker"
+            with self.assertRaises(ValueError):
+                append_benchmark_result(path, record)
+            self.assertEqual(original, path.read_bytes())
+
+    def test_nonfinite_unbounded_and_mistyped_metrics_fail_before_append(self):
+        variants = (("latency_ms", float("nan")), ("latency_ms", float("inf")),
+            ("latency_ms", -1), ("latency_ms", 10**16), ("latency_ms", 10**1000),
+            ("precision_at_k", 1.1), ("recall_at_k", -0.1), ("top1_hit_rate", float("-inf")),
+            ("irrelevant_result_count", 1.5), ("annotation_candidate_count", -1),
+            ("latency_ms", True))
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "not-created" / "ledger.jsonl"
+            for field, value in variants:
+                result = sample_result()
+                result[field] = value
+                with self.subTest(field=field), self.assertRaises(ValueError):
+                    build_benchmark_result_record(sample_manifest(), result)
+                record = build_benchmark_result_record(sample_manifest(), sample_result())
+                record["metrics"][field] = value
+                with self.subTest(field=field), self.assertRaises(ValueError):
+                    append_benchmark_result(path, record)
+                self.assertFalse(path.parent.exists())
+
+    def test_nested_retrieval_nonfinite_score_is_rejected(self):
+        result = sample_result()
+        result["results"][0]["retrieval"][0]["score"] = float("nan")
+        with self.assertRaises(ValueError):
+            build_benchmark_result_record(sample_manifest(), result)
+
+    def test_valid_measurements_keep_original_values(self):
+        result = sample_result()
+        result.update(latency_ms=12.5, time_to_first_token_ms=0, annotation_candidate_count=3)
+        record = build_benchmark_result_record(sample_manifest(), result)
+        with tempfile.TemporaryDirectory() as directory:
+            saved = append_benchmark_result(Path(directory) / "ledger.jsonl", record)
+        self.assertEqual(12.5, saved["metrics"]["latency_ms"])
+        self.assertEqual(0, saved["metrics"]["time_to_first_token_ms"])
+        self.assertEqual(3, saved["metrics"]["annotation_candidate_count"])
+
 
 if __name__ == "__main__":
     unittest.main()

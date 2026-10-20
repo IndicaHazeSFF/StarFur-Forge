@@ -24,7 +24,7 @@ def factory_reset(db_path, *, scope="assistant-and-semantic", confirmation=None,
         if backup:
             backup_path = backup_dir_path / "starfur.db"
             shutil.copy2(path, backup_path)
-        with db.connect() as connection:
+        with db.transaction() as connection:
             for table in ASSISTANT_TABLES: counts[table]=connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
             connection.execute("BEGIN")
             for table in ASSISTANT_TABLES: connection.execute(f"DELETE FROM {table}")

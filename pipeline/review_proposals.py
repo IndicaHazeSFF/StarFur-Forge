@@ -1,5 +1,5 @@
 from pipeline.db import (
-    connect,
+    transaction,
     create_entity,
     get_entity_by_name,
     get_pending_proposals,
@@ -9,7 +9,7 @@ from pipeline.canon_writer import create_entity_file
 
 
 def mark_proposal(proposal_id, status):
-    with connect() as connection:
+    with transaction() as connection:
         connection.execute(
             """
             UPDATE proposals
@@ -77,7 +77,7 @@ def approve_proposal(proposal):
     except Exception:
         # Don't leave SQLite thinking the entity was
         # successfully confirmed if canon persistence failed.
-        with connect() as connection:
+        with transaction() as connection:
             connection.execute(
                 """
                 DELETE FROM entities
@@ -147,7 +147,7 @@ def edit_proposal(proposal):
     if not description:
         description = current_description
 
-    with connect() as connection:
+    with transaction() as connection:
         connection.execute(
             """
             UPDATE proposals

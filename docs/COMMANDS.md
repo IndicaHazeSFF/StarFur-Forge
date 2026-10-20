@@ -20,14 +20,51 @@ work when imported. Actual chunker unit coverage lives in
 tests use injected fakes and temporary state, including test-owned reset/restore
 fixtures. Do not run real factory-reset/restore commands for this smoke.
 
-Known native-Windows follow-up: the temporary restore test reproduces a file
-replacement denial in `factory_restore`. It is not skipped or claimed fixed.
-Intermittent API-test errors, including an HTTP connection reset, were observed
-across native full runs; their cause is not diagnosed or claimed fixed. Report
-any recurrence. Full discovery now reaches these tests rather than
-stopping at the import collision.
-A focused API rerun also reproduced a timeout reading the fixed Murr PNG
-response. Its cause remains open; this slice does not alter the asset or transport.
+The WSL 1,132-test run passed but exposed unclosed SQLite handles. Scoped
+repository transactions now close deterministically; raw `db.connect()` callers
+still own explicit closure. Native temporary restore and the full 1,139-test
+suite pass with no observed connection warnings. API tests use a tiny test-owned
+PNG and close clients on failed reads; production assets, transport and timeouts
+are unchanged. This is not a production/concurrent-restore or installed-asset
+transport guarantee; report any recurring platform failure rather than skipping it.
+
+The combined maintenance/benchmark WSL gate passed all 1,163 tests repeatedly,
+and all six lifecycle tests passed separately. The next validator-only slice
+has one focused provider-free WSL check after copying `session.files.md`:
+
+    python3 -W error::ResourceWarning -m unittest discover -s tests -t . -p "test_adventure_initiative.py" -q
+
+Expected: 13 tests OK. Optional full discovery now includes 1,169 tests.
+No live-model smoke is required: valid policy semantics/prompts are unchanged.
+There should be no unclosed database or unraisable-warning output. Inspect stderr as well as the final OK:
+destructor warnings are not always ordinary assertion failures. Synthetic
+annotation retry/progress and temporary reindex messages are expected fixture
+output, not a request to run live analysis or ingestion. No key, model load,
+Assistant session, or real factory reset/restore is needed for this gate.
+
+### Benchmark metadata and comparison foundations
+
+Existing explicit `--record-ledger` options still opt into recording; none is
+needed for the regression check above. New manifest construction/appends now
+reject malformed or unsupported metadata before writes. `--hardware-profile`
+remains a user-supplied non-sensitive label, not automatic host discovery.
+Programmatic hardware fields are limited to `profile`, `os`, `architecture`,
+`cpu`, `gpu`, `runtime`, `python_version`, `ram_gb`, `vram_gb`, `logical_cores`.
+Never put credentials, prompts, host/user identity or private paths in labels.
+Nested values/unknown keys, invalid timestamps/types and non-finite numbers deny.
+Historical ledgers are not rewritten or retroactively verified.
+
+`pipeline.benchmark_comparison` is an API-only, provider-free foundation, not a
+new user command or a live benchmarking runner. It checks supplied fixed-workload
+model-scaling declarations and returns `metadata_compatible`, `incompatible`, or
+`insufficient_metadata` with closed reasons/counts. Hash commitments and labels
+are declarations, not independently measured/verified evidence. Policy/metric
+bindings must represent the full fixed experiment settings (including generation
+budgets/options, preparation/retrieval policy and metric definitions); the guard
+does not generate those commitments or score accuracy, significance or performance.
+Missing identities/defaults cannot be silently filled. Existing reports and
+normal chat do not invoke the guard; later capture/export/runner integration
+requires its own reviewed slice. See `2026-10-14.benchmark-foundation.sprint.md`.
 
 Run commands from:
 
