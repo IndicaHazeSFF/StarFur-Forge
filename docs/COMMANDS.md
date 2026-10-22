@@ -2,6 +2,32 @@
 
 Temporary operator reference while StarFur Forge is under development.
 
+## Slice / WSL test handoff workflow
+
+Until revoked, development uses this loop: implement scoped slice(s), list only
+their changed/new files in `session.files.md`, copy the queued files to the
+existing WSL checkout before a needed test, verify exact copies, run the focused
+test, and repeat. Existing older files may be overwritten; this is not a mirror
+or deletion sync. Unrelated dirty files, local config, credentials, runtime
+`data/`, `adventures/` and Chroma are excluded. Conflicting independent WSL edits
+or unsafe linked paths stop for review. See AGENTS.md for the exact roots/scope.
+
+The manifest is a pending queue. Verified copies leave it; failed/unverified
+copies remain. Once all copies are verified, clear the queue and copy/verify the
+final manifest too. Later edits re-enter the queue; test failures are recorded,
+not erased by a successful copy. Durable history stays in CHANGELOG/sprint docs.
+Focused provider-free suites and disposable `starfur.py assistant` terminal
+smokes are authorized; other operations and visual/audio/game-performance
+checks still require the user. Execution approval controls remain in effect.
+
+Pause immediately for copy failures, post-copy hash mismatches, unexpected file
+changes, path/permission problems or possible runtime-data impact. Preserve the
+pending queue and wait for the user; do not force, retry or work around them.
+Ordinary JSON/assertion/traceback code failures may be fixed and retested within
+the current job, including matching tests. A traceback involving corruption,
+security boundaries, unexpected external effects or broader authority still
+requires a pause. Job scope, not the number of files, controls that distinction.
+
 ## Provider-free regression checks
 
 Run full discovery from the repository root with an explicit top level:
@@ -29,8 +55,8 @@ are unchanged. This is not a production/concurrent-restore or installed-asset
 transport guarantee; report any recurring platform failure rather than skipping it.
 
 The combined maintenance/benchmark WSL gate passed all 1,163 tests repeatedly,
-and all six lifecycle tests passed separately. The next validator-only slice
-has one focused provider-free WSL check after copying `session.files.md`:
+and all six lifecycle tests passed separately. The validator-only slice's focused
+WSL check also passed directly after its two source/test hashes matched Windows:
 
     python3 -W error::ResourceWarning -m unittest discover -s tests -t . -p "test_adventure_initiative.py" -q
 
@@ -817,6 +843,7 @@ Prepare or inspect isolated CYOA workspace metadata with exact Core commands:
     adventure participants
     adventure participant inspect <participant-id>
     adventure participant context <participant-id>
+    adventure participant initiative status <participant-id>
     adventure participant action generate <participant-id> <trigger>: <completed user-turn text>
     adventure participant actions
     adventure participant action generation status
@@ -996,6 +1023,13 @@ Inspection uses the mounted snapshot without reading full history; run `adventur
 refresh` separately to reload changes written elsewhere. Neither command grants
 participant initiative, and usage inspection leaves pending/staged work intact.
 
+`adventure participant initiative status <participant-id>` is a read-only
+inspection of one declared policy and this session's current participant-action
+pacing counters. It lists the eligibility decision for each declared trigger,
+but does not schedule an initiative opportunity, call a provider, create a
+proposal/transcript/memory/event, or make the participant autonomous. Its
+pacing counters are session-local and reset when the assistant session restarts.
+
 `adventure participant action generate <participant-id> <trigger>: <completed
 user-turn text>` is an explicit, model-backed request for untrusted `TP-###`
 action candidates. The model receives a versioned JSON data frame, not a
@@ -1008,13 +1042,21 @@ immunity, permission, or a full-prompt token/resource budget.
 
 The request proposes only untrusted
 action candidates for one roster participant. It requires an active staged
-adventure turn plus that participant's declared, eligible policy. `adventure
+adventure turn, an active story session explicitly bound with `adventure begin
+<title>`, and that participant's declared, eligible policy. A plain `adventure
+load` remains useful for inspection/replay but cannot authorize participant
+action generation. `adventure
 participant actions` reopens only the session-local review output. Each candidate
 summary appears as JSON-quoted/escaped `Proposed wording (untrusted)` beneath
 its ID/action label. Even wording such as "Murr takes the key" is an untrusted
 proposal, not a Core assertion of a completed action. Generation guidance asks
 for proposed-next-step wording, but the parser does not guess grammar, rewrite
 the summary, or change the declared action kind.
+
+Participant-action review output belongs to one exact session-local story
+binding. Ending roleplay, switching/unloading the workspace, or beginning a new
+story session invalidates that review before it can be reopened or copied to a
+transcript; regenerate under the current binding instead.
 
 `adventure participant action generation status` reports bounded completed,
 failed, or stale status without provider output. A candidate is not an action:
@@ -1119,10 +1161,20 @@ archives, resets, or changes an adventure workspace.
 one existing workspace and starts roleplay with that workspace title as its
 session label. It creates no workspace or event and cannot infer a story from
 ordinary chat.
+
+Loading a *different* workspace with `adventure load <title>` ends any active
+roleplay session before the new workspace is mounted. This prevents a roleplay
+label and its fictional context from silently crossing into another adventure;
+use `adventure begin <title>` to load and bind the new story session explicitly.
+Likewise, `adventure unload` ends a currently active roleplay session while
+leaving the stored workspace unchanged.
+
 `adventure session` is a read-only lifecycle view showing the active persona,
-loaded workspace, session-local roleplay label, branch origin when present, and
-whether a turn is staged. It does not reveal prompts, narrative event text, or
-private persona runtime data.
+loaded workspace, session-local roleplay label, whether its private Core story
+binding is active, branch origin when present, and whether a turn is staged. A
+matching roleplay label alone is not a story binding. It does not reveal
+prompts, narrative event text, binding identifiers, or private persona runtime
+data.
 This slice never captures narration, automatically creates events, starts
 roleplay, writes shared assistant memory, runs a replay engine, or creates an
 adventure database/index. A duplicate normalized title is rejected; future

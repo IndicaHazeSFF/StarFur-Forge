@@ -84,6 +84,18 @@ def detect_command_help(query: str) -> CommandHelp | None:
         )
 
     if _contains_any(value, (
+        "how do i inspect participant initiative", "how can i inspect participant initiative",
+        "how do i check participant initiative", "how can i check participant initiative",
+        "is murr allowed to act", "can murr act in this adventure",
+    )):
+        return CommandHelp(
+            intent="adventure_participant_initiative",
+            title="To inspect a participant's current initiative eligibility, use:",
+            commands=("adventure participants", "adventure participant initiative status <participant-id>"),
+            notes=("This is read-only session pacing information. It neither schedules initiative nor contacts a provider or creates an action proposal.",),
+        )
+
+    if _contains_any(value, (
         "how do i use participant actions", "how can i use participant actions",
         "how do i make murr suggest", "how can murr suggest",
         "how do i generate a participant action", "how can i generate a participant action",
@@ -96,12 +108,14 @@ def detect_command_help(query: str) -> CommandHelp | None:
                 "adventure participants",
                 "adventure participant inspect <participant-id>",
                 "adventure participant context <participant-id>",
+                "adventure participant initiative status <participant-id>",
+                "adventure begin <title>",
                 "adventure turn begin",
                 "adventure participant action generate <participant-id> <trigger>: <completed user-turn text>",
                 "adventure participant actions",
                 "adventure participant action generation status",
             ),
-            notes=("Participant action candidates are untrusted review output only. They cannot perform an action, stage an event, write a transcript or memory, or run autonomously.",),
+            notes=("Use `adventure begin <title>` to bind the loaded story session before generation. Participant action candidates are untrusted review output only. They cannot perform an action, stage an event, write a transcript or memory, or run autonomously.",),
         )
 
     if _contains_any(value, (

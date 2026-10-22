@@ -1797,3 +1797,51 @@
 - Validation: governed participant memory/pacing limits, runtime counters and roster versions now reject booleans and equal-valued floats. Trigger/action strings are checked before hash membership; malformed structured values fail through `AdventureInitiativeError` rather than incidental type errors.
 - Compatibility: valid v1/v2 declarations, disabled defaults, eligibility/cooldown rules, prompt/profile budgets and review-only authority remain unchanged. No new command, model call, policy expansion, state write or runtime repair was added.
 - Tests: six new rejection/boundary regression methods; 13 initiative, 28 participant and full native strict regression (1,169 tests) pass, with no observed resource/unraisable warnings. The focused provider-free WSL check is tracked in `session.files.md`; no live-model smoke is required for this validation-only change.
+
+## 2026-10-20 - Verify WSL participant slice and scope incremental handoffs
+
+- Verification: after the user copied the two updated participant-policy files, their WSL SHA-256 hashes matched the Windows sources. Direct execution through the existing WSL virtual environment passed all 13 focused tests with ResourceWarning escalation. No provider call or production-data operation was performed.
+- Workflow: the user authorizes copying only current queued job files into the exact WSL StarFur checkout, overwriting their older counterparts before necessary/prudent tests. `session.files.md` now holds only pending copies, not cumulative history; verified entries clear and failed/unverified entries remain. Later corrections re-enter the queue, while durable test/change evidence is retained.
+- Boundaries: focused provider-free and disposable assistant terminal smokes remain authorized; unrelated files/runtime state/config/secrets, deletion/mirroring, installs, services and other actions are excluded. Tool approval boundaries still apply. These are development permissions, not Core/persona authority.
+
+## 2026-10-20 - Pause on operational handoff surprises
+
+- Workflow: user-approved stop rule pauses on copy failures, post-copy hash mismatches, unexpected file changes, path/permission problems or possible runtime-data impact. Preserve the remaining queue and wait for user direction; do not force, retry or work around the failure.
+- Debugging: ordinary JSON/assertion/traceback failures may be fixed and retested within the current job, including matching tests. Corruption, security-boundary failures, unexpected external effects or fixes requiring broader authority still require a pause. Scope, not file count, is the limit.
+- Documentation only: updated guidance/operator notes and retained their pending copy entries. No source, runtime state, WSL copies, tests, staging or Git commit changed.
+## 2026-10-21 - Inspect participant initiative without activating it
+
+- Behavior: added the exact read-only `adventure participant initiative status <participant-id>` control. It reports the mounted participant's declared initiative policy plus current session-local pacing/eligibility for each declared trigger.
+- Boundaries: the control does not schedule initiative, call a provider, create a proposal/transcript/memory/event, or grant participant authority. Pacing remains restart-ephemeral.
+- Verification: focused provider-free command/help regression coverage asserts no database/log reads, provider call, session mutation, or workspace-byte change. A scoped WSL terminal smoke is the next gate.
+
+## 2026-10-21 - End mismatched roleplay when switching adventure workspaces
+
+- Behavior: `adventure load <title>` now ends an active roleplay session when it actually switches to a different workspace. `adventure begin <title>` continues to load then explicitly bind roleplay to the selected title.
+- Boundaries: no event, transcript, memory, provider request, branch mutation, or automatic roleplay start is added. Loading the already mounted workspace remains a no-op.
+- Verification: focused provider-free command coverage exercises the cross-workspace transition and preserves both event logs. A disposable WSL smoke is the next gate.
+
+## 2026-10-21 - End roleplay when unmounting an adventure workspace
+
+- Behavior: `adventure unload` now ends a currently active roleplay session after unmounting its workspace; stored adventure records remain unchanged.
+- Boundaries: this is lifecycle cleanup only. It writes no event, transcript, memory, branch, provider, or persistent roleplay state.
+- Verification: focused provider-free command coverage preserves the event log; a disposable WSL smoke is the next gate.
+
+## 2026-10-21 - Require an explicit story binding for participant-action generation
+
+- Behavior: `adventure participant action generate` now fails before provider use unless the current session has the exact Core-owned adventure binding created by `adventure begin <title>`. A bare workspace load or separately started roleplay cannot produce participant-action review output.
+- Constraints: the binding is session-ephemeral and private; this adds no autonomous action, transcript/event/memory write, provider fallback, or new persistent adventure state.
+- Verification: focused command/help tests cover denial without a binding, successful generation after the explicit begin path, and unchanged no-write behavior.
+
+## 2026-10-21 - Expire participant-action reviews with their story session
+
+- Behavior: participant-action review batches now retain the session-local story generation that created them. Ending or replacing the bound roleplay session makes review, status, and transcript-recording stale before any copy occurs.
+- Constraints: stale handling never retries generation, replays a provider request, writes an adventure event/memory, or treats a prior review as current after re-entry.
+- Verification: focused command coverage ends roleplay after a generated candidate and proves review invalidation leaves transcript/event history untouched.
+
+## 2026-10-21 - Expose passive story-binding status
+
+- Behavior: `adventure session` now reports whether its roleplay state has the private Core-owned binding required for a current story session. An independently started roleplay with the same display label remains visibly unbound.
+- Constraints: the view exposes no binding identity, prompt, participant context, or authority and performs no provider/storage work.
+- Verification: focused command coverage checks unmounted, label-only roleplay, and explicit `adventure begin` states.
+

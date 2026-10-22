@@ -42,7 +42,7 @@ class AdventureCommandTests(unittest.TestCase):
                 record.adventure_id, (AdventureParticipant("murr", "Murr", "persona",
                     f"adventure:{record.adventure_id}:participant:murr",
                     initiative_policy=PersonaInitiativePolicy(enabled=True)),)))
-            session.respond("adventure load Wording Fixture")
+            session.respond("adventure begin Wording Fixture")
             session.respond("adventure turn begin")
             self.assertIn("Presented 1", session.respond(
                 "adventure participant action generate murr player_turn: I offer the key."))
@@ -68,7 +68,7 @@ class AdventureCommandTests(unittest.TestCase):
                 record.adventure_id, (AdventureParticipant("murr", "Murr", "persona",
                     f"adventure:{record.adventure_id}:participant:murr",
                     initiative_policy=PersonaInitiativePolicy(enabled=True)),)))
-            session.respond("adventure load Source Frame Fixture")
+            session.respond("adventure begin Source Frame Fixture")
             session.respond("adventure turn begin")
             for text in ("x" * 4001, "\ud800"):
                 reply = session.respond("adventure participant action generate murr player_turn: " + text)
@@ -83,6 +83,76 @@ class AdventureCommandTests(unittest.TestCase):
             self.assertEqual(1, len(calls))
             self.assertEqual([], session.messages)
             self.assertEqual([], session.proposals)
+
+    def test_participant_action_requires_explicit_bound_story_session_before_provider_use(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(directory, calls, chat_response={"message": {"content": json.dumps({
+                "schema_version": 1,
+                "candidates": [{
+                    "participant_id": "murr", "action": "suggest",
+                    "summary": "Suggest using the key.", "confidence": 0.8,
+                }],
+            })}})
+            session.respond("adventure create Binding Fixture")
+            record = session.adventure_registry.resolve_title("Binding Fixture")
+            session.adventure_registry.configure_participant_roster(record, AdventureParticipantRoster(
+                record.adventure_id, (AdventureParticipant("murr", "Murr", "persona",
+                    f"adventure:{record.adventure_id}:participant:murr",
+                    initiative_policy=PersonaInitiativePolicy(enabled=True)),)))
+            session.respond("adventure load Binding Fixture")
+            session.respond("adventure turn begin")
+
+            denied = session.respond(
+                "adventure participant action generate murr player_turn: I offer the key."
+            )
+            self.assertIn("requires an active story session bound", denied)
+            self.assertIn("story_session_binding_required", session.respond(
+                "adventure participant action generation status"
+            ))
+            self.assertEqual([], calls)
+            self.assertEqual([], AdventureTranscriptLog(session.adventure_registry, record).records())
+            self.assertEqual([], AdventureEventLog(session.adventure_registry, record).events())
+
+            session.respond("adventure turn abort")
+            self.assertIn("story session started", session.respond("adventure begin Binding Fixture"))
+            session.respond("adventure turn begin")
+            self.assertIn("Presented 1", session.respond(
+                "adventure participant action generate murr player_turn: I offer the key."
+            ))
+            self.assertEqual(1, len(calls))
+
+    def test_participant_action_review_is_invalidated_when_its_story_session_ends(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(directory, calls, chat_response={"message": {"content": json.dumps({
+                "schema_version": 1,
+                "candidates": [{
+                    "participant_id": "murr", "action": "suggest",
+                    "summary": "Suggest using the key.", "confidence": 0.8,
+                }],
+            })}})
+            session.respond("adventure create Review Lifetime Fixture")
+            record = session.adventure_registry.resolve_title("Review Lifetime Fixture")
+            session.adventure_registry.configure_participant_roster(record, AdventureParticipantRoster(
+                record.adventure_id, (AdventureParticipant("murr", "Murr", "persona",
+                    f"adventure:{record.adventure_id}:participant:murr",
+                    initiative_policy=PersonaInitiativePolicy(enabled=True)),)))
+            session.respond("adventure begin Review Lifetime Fixture")
+            session.respond("adventure turn begin")
+            self.assertIn("Presented 1", session.respond(
+                "adventure participant action generate murr player_turn: I offer the key."
+            ))
+            self.assertEqual(1, len(calls))
+
+            self.assertIn("Roleplay mode ended", session.respond("roleplay end"))
+            self.assertIn("stale after story-session", session.respond("adventure participant actions"))
+            self.assertEqual(
+                "No untrusted participant-action candidates are available for this workspace.",
+                session.respond("adventure participant action record TP-001"),
+            )
+            self.assertEqual([], AdventureTranscriptLog(session.adventure_registry, record).records())
+            self.assertEqual([], AdventureEventLog(session.adventure_registry, record).events())
 
     def test_participant_context_usage_is_passive_count_only_and_uses_mounted_snapshot(self):
         from unittest.mock import patch
@@ -120,6 +190,48 @@ class AdventureCommandTests(unittest.TestCase):
             self.assertIn("not the full request", first)
             for private in ("Private", "believes", "TP-", "AE-", "adventure:", "Murr"):
                 self.assertNotIn(private, first)
+            self.assertIs(mounted, session.adventure_session)
+            self.assertIs(turn, session.adventure_turn)
+            self.assertEqual([], calls)
+            self.assertEqual([], session.messages)
+            self.assertEqual([], session.proposals)
+            after = {path.name: path.read_bytes() for path in Path(directory, record.adventure_id).iterdir() if path.is_file()}
+            self.assertEqual(before, after)
+
+    def test_participant_initiative_status_is_passive_and_reports_declared_pacing(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(directory, calls)
+            self.assertIn("none loaded", session.respond("adventure participant initiative status murr"))
+            session.respond("adventure create Initiative Status Fixture")
+            record = session.adventure_registry.resolve_title("Initiative Status Fixture")
+            session.adventure_registry.configure_participant_roster(record, AdventureParticipantRoster(
+                record.adventure_id, (AdventureParticipant("murr", "Murr", "persona",
+                    f"adventure:{record.adventure_id}:participant:murr",
+                    initiative_policy=PersonaInitiativePolicy(
+                        enabled=True, allowed_triggers=("player_turn", "world_event"),
+                        allowed_actions=("suggest",), cooldown_turns=2, max_actions_per_turn=1,
+                    )),),
+            ))
+            session.respond("adventure load Initiative Status Fixture")
+            session.respond("adventure turn begin")
+            before = {path.name: path.read_bytes() for path in Path(directory, record.adventure_id).iterdir() if path.is_file()}
+            mounted = session.adventure_session
+            turn = session.adventure_turn
+            with patch("pipeline.db.connect", side_effect=AssertionError("DB forbidden")), patch.object(
+                AdventureEventLog, "events", side_effect=AssertionError("event log forbidden")
+            ), patch.object(AdventureTranscriptLog, "records", side_effect=AssertionError("transcript forbidden")):
+                status = session.respond("adventure participant initiative status MURR")
+                self.assertIn("Declared: enabled", status)
+                self.assertIn("allowed triggers: player_turn, world_event", status)
+                self.assertIn("Pacing: turns since last recorded participant action: none recorded in this session", status)
+                self.assertIn("player_turn: eligible", status)
+                self.assertIn("world_event: eligible", status)
+                self.assertIn("Usage:", session.respond("adventure participant initiative status"))
+                self.assertIn("not available", session.respond("adventure participant initiative status absent"))
+                self.assertIn("adventure participant initiative status <participant-id>", session.respond(
+                    "How do I inspect participant initiative?"))
             self.assertIs(mounted, session.adventure_session)
             self.assertIs(turn, session.adventure_turn)
             self.assertEqual([], calls)
@@ -212,7 +324,7 @@ class AdventureCommandTests(unittest.TestCase):
                         initiative_policy=PersonaInitiativePolicy(enabled=True, allowed_triggers=("player_turn",), allowed_actions=("suggest",)),
                     ),),
                 ))
-                session.respond("adventure load Limit Smoke")
+                session.respond("adventure begin Limit Smoke")
                 session.respond("adventure turn begin")
                 self.assertIn("failed safely", session.respond(generate))
                 self.assertIn("Failure category: provider_output_limit", session.respond(status))
@@ -782,7 +894,7 @@ class AdventureCommandTests(unittest.TestCase):
                     ),
                 )),
             )
-            session.respond("adventure load Party Ember")
+            session.respond("adventure begin Party Ember")
             session.respond("adventure record discovery: The crew finds a brass key.")
             session.respond("adventure relationship set Vespera trust: cautious")
 
@@ -1363,6 +1475,39 @@ class AdventureCommandTests(unittest.TestCase):
             self.assertEqual("Usage: adventure begin <title>", session.respond("adventure begin"))
             self.assertEqual([], calls)
 
+    def test_loading_a_different_workspace_ends_prior_roleplay_binding_without_writing_events(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(directory, calls)
+            session.respond("adventure create First Ember")
+            session.respond("adventure create Second Ember")
+            first = session.adventure_registry.resolve_title("First Ember")
+            second = session.adventure_registry.resolve_title("Second Ember")
+            self.assertIn("story session started", session.respond("adventure begin First Ember"))
+            switched = session.respond("adventure load Second Ember")
+            self.assertIn("Adventure workspace loaded: Second Ember", switched)
+            self.assertIn("Roleplay mode ended because a different adventure workspace was loaded", switched)
+            self.assertFalse(session.roleplay_state.active)
+            self.assertIn("Roleplay: inactive", session.respond("adventure session"))
+            self.assertEqual([], AdventureEventLog(session.adventure_registry, first).events())
+            self.assertEqual([], AdventureEventLog(session.adventure_registry, second).events())
+            self.assertEqual([], calls)
+
+    def test_unloading_a_workspace_ends_its_active_roleplay_binding_without_writing_events(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            session = self._session(directory, calls)
+            session.respond("adventure create Unload Ember")
+            record = session.adventure_registry.resolve_title("Unload Ember")
+            self.assertIn("story session started", session.respond("adventure begin Unload Ember"))
+            unloaded = session.respond("adventure unload")
+            self.assertIn("Adventure workspace unloaded: Unload Ember", unloaded)
+            self.assertIn("Roleplay mode ended", unloaded)
+            self.assertFalse(session.adventure_session.active)
+            self.assertFalse(session.roleplay_state.active)
+            self.assertEqual([], AdventureEventLog(session.adventure_registry, record).events())
+            self.assertEqual([], calls)
+
     def test_session_status_reports_only_the_current_lifecycle_binding(self):
         with tempfile.TemporaryDirectory() as directory:
             calls = []
@@ -1373,11 +1518,19 @@ class AdventureCommandTests(unittest.TestCase):
             self.assertIn("Workspace: none loaded", unbound)
             self.assertIn("Persona:", unbound)
             self.assertIn("Roleplay: inactive", unbound)
+            self.assertIn("Story binding: inactive", unbound)
             session.respond("adventure create Quiet Ember")
+            session.respond("adventure load Quiet Ember")
+            session.respond("roleplay begin Quiet Ember")
+            labelled_only = session.respond("adventure session")
+            self.assertIn("Roleplay: active (Quiet Ember)", labelled_only)
+            self.assertIn("Story binding: inactive", labelled_only)
+            session.respond("roleplay end")
             session.respond("adventure begin Quiet Ember")
             bound = session.respond("adventure session status")
             self.assertIn("Workspace: Quiet Ember", bound)
             self.assertIn("Roleplay: active (Quiet Ember)", bound)
+            self.assertIn("Story binding: active", bound)
             self.assertIn("Branch: root workspace", bound)
             self.assertNotIn("static identity", bound.casefold())
             self.assertEqual([], calls)
@@ -1560,7 +1713,7 @@ class AdventureCommandTests(unittest.TestCase):
                     ),
                 )),
             )
-            session.respond("adventure load Party Ember")
+            session.respond("adventure begin Party Ember")
             session.respond("adventure turn begin")
 
             generated = session.respond(
@@ -1616,7 +1769,7 @@ class AdventureCommandTests(unittest.TestCase):
                     ),
                 )),
             )
-            session.respond("adventure load Interrupt Ember")
+            session.respond("adventure begin Interrupt Ember")
             session.respond("adventure turn begin")
 
             def interrupt(*_args, **_kwargs):
@@ -1655,7 +1808,7 @@ class AdventureCommandTests(unittest.TestCase):
                     ),
                 )),
             )
-            session.respond("adventure load Party Ember")
+            session.respond("adventure begin Party Ember")
             session.respond("adventure turn begin")
 
             def complete_during_external_write(*_args, **_kwargs):

@@ -385,6 +385,11 @@ class AssistantSession:
         self.last_chat_finish_reason = None
         self.messages = []
         self.roleplay_state = RoleplaySessionState.inactive()
+        # A roleplay label alone is not an adventure binding.  Only the
+        # explicit adventure-begin lifecycle path may set this session-local
+        # identifier, and it is cleared whenever roleplay ends.
+        self._roleplay_adventure_id = None
+        self._story_session_generation = 0
         self.adventure_registry = adventure_registry or AdventureRegistry(
             getattr(config, "adventure_root", PROJECT_ROOT / "adventures")
         )
@@ -1515,10 +1520,35 @@ class AssistantSession:
             "it does not start work or change memory."
         )
 
-    def _set_roleplay_state(self, state):
+    def _set_roleplay_state(self, state, *, adventure_id=None):
         self.roleplay_state = state
+        self._roleplay_adventure_id = adventure_id if state.active else None
+        self._story_session_generation += 1
         self.messages.clear()
         self.last_memory_ids = []
+
+    def _has_active_adventure_roleplay_binding(self):
+        """Return whether the mounted workspace owns this roleplay session.
+
+        Roleplay titles are presentation labels, not durable adventure identity.
+        The private binding is assigned only by ``adventure begin`` and is
+        deliberately invalidated by every ordinary roleplay end/switch path.
+        """
+        record = self.adventure_session.record if self.adventure_session.active else None
+        return bool(
+            record is not None
+            and self.roleplay_state.active
+            and self.roleplay_state.title == record.title
+            and self._roleplay_adventure_id == record.adventure_id
+        )
+
+    def _participant_action_review_is_current(self, generation):
+        """Return whether a participant review still belongs to this story session."""
+        return bool(
+            isinstance(generation, dict)
+            and generation.get("story_session_generation") == self._story_session_generation
+            and self._has_active_adventure_roleplay_binding()
+        )
 
     def roleplay_begin(self, title=None):
         try:
@@ -1996,15 +2026,19 @@ class AssistantSession:
             participant_roster = self.adventure_registry.participant_roster(record)
         except (AdventureEventLogError, AdventureRegistryError) as error:
             return f"Adventure event log error: {error}"
+        prior_roleplay_active = self.roleplay_state.active
         self._set_adventure_session(self.adventure_session.mount(
             record, events, resource_catalog=resource_catalog, participant_roster=participant_roster,
         ))
+        if prior_roleplay_active:
+            self._set_roleplay_state(self.roleplay_state.end())
         event_note = "No authoritative events are recorded yet."
         if events:
             event_note = f"Loaded {len(events)} authoritative event(s) as bounded replay context."
+        roleplay_note = " Roleplay mode ended because a different adventure workspace was loaded." if prior_roleplay_active else ""
         return (
             f"Adventure workspace loaded: {record.title}. Recent conversation context was cleared. "
-            f"{event_note} No roleplay mode was started."
+            f"{event_note} No roleplay mode was started.{roleplay_note}"
         )
 
     def adventure_refresh(self):
@@ -2042,8 +2076,12 @@ class AssistantSession:
         if not self.adventure_session.active:
             return "No adventure workspace is loaded."
         title = self.adventure_session.record.title
+        had_roleplay = self.roleplay_state.active
         self._set_adventure_session(self.adventure_session.unmount())
-        return f"Adventure workspace unloaded: {title}. Recent conversation context was cleared."
+        if had_roleplay:
+            self._set_roleplay_state(self.roleplay_state.end())
+        roleplay_note = " Roleplay mode ended." if had_roleplay else ""
+        return f"Adventure workspace unloaded: {title}. Recent conversation context was cleared.{roleplay_note}"
 
     def adventure_resume(self, title):
         """Resume means an explicit load; narrative mode remains an explicit choice."""
@@ -2069,7 +2107,9 @@ class AssistantSession:
         ):
             return loaded
         record = self.adventure_session.record
-        self._set_roleplay_state(self.roleplay_state.begin(record.title))
+        self._set_roleplay_state(
+            self.roleplay_state.begin(record.title), adventure_id=record.adventure_id,
+        )
         return (
             f"Adventure story session started: {record.title}. "
             "The workspace is loaded and roleplay mode is active; no events were created."
@@ -2087,7 +2127,7 @@ class AssistantSession:
         if not loaded.startswith("Adventure workspace loaded:"):
             return f"Fresh adventure workspace was created but could not be loaded: {loaded}"
         if self.roleplay_state.active:
-            self.roleplay_state = self.roleplay_state.end()
+            self._set_roleplay_state(self.roleplay_state.end())
         prior = f" Previous adventure preserved: {previous_title}." if previous_title else ""
         return f"Fresh adventure started: {title.strip()}.{prior} No prior events, state, checkpoint, or roleplay session was carried over."
 
@@ -2137,7 +2177,7 @@ class AssistantSession:
         if not loaded.startswith("Adventure workspace loaded:"):
             return f"Established-premise workspace was created but could not be loaded: {loaded}"
         if self.roleplay_state.active:
-            self.roleplay_state = self.roleplay_state.end()
+            self._set_roleplay_state(self.roleplay_state.end())
         return (
             f"Established-premise adventure started: {child.title}. Forked from {parent.title} / "
             f"{checkpoint.checkpoint_id}; copied {len(prefix)} authoritative event(s). "
@@ -2152,7 +2192,7 @@ class AssistantSession:
         had_roleplay = self.roleplay_state.active
         self._set_adventure_session(self.adventure_session.unmount())
         if had_roleplay:
-            self.roleplay_state = self.roleplay_state.end()
+            self._set_roleplay_state(self.roleplay_state.end())
         roleplay_note = " Roleplay mode ended." if had_roleplay else ""
         return f"Adventure paused: {title}. Stored events were preserved.{roleplay_note}"
 
@@ -2167,7 +2207,7 @@ class AssistantSession:
             self.messages.clear()
             self.last_memory_ids = []
             self.last_turn_diagnostics = None
-        self.roleplay_state = self.roleplay_state.end()
+        self._set_roleplay_state(self.roleplay_state.end())
         label = f": {title}" if title else ""
         return f"Adventure session ended{label}. Stored events were preserved; no workspace was deleted or archived."
 
@@ -2206,6 +2246,7 @@ class AssistantSession:
             "Adventure session binding:",
             f"Persona: {persona}",
             f"Roleplay: {roleplay} (session-ephemeral)",
+            f"Story binding: {'active' if self._has_active_adventure_roleplay_binding() else 'inactive'} (session-ephemeral)",
             f"Turn staging: {'active' if self.adventure_turn.active else 'inactive'}",
         ]
         if not self.adventure_session.active:
@@ -2300,6 +2341,52 @@ class AssistantSession:
             "No provider or storage was accessed; use adventure refresh separately to reload story state.",
         ))
 
+    def adventure_participant_initiative_status(self, value):
+        """Explain current Core initiative eligibility without offering an action.
+
+        This is deliberately a passive view over the mounted roster and this
+        session's pacing counters. It does not schedule an idle tick, contact a
+        provider, preserve an action, or establish any participant authority.
+        """
+        if not self.adventure_session.active:
+            return "Adventure workspace: none loaded."
+        if not isinstance(value, str) or not value.strip():
+            return "Usage: adventure participant initiative status <participant-id>"
+        roster = self.adventure_session.participant_roster
+        if roster is None or not roster.participants:
+            return "No declared adventure participants are configured for the loaded workspace."
+        try:
+            participant = roster.resolve(value)
+            turns_since_last_action, actions_this_turn = self._participant_action_counters(
+                participant.participant_id,
+            )
+            policy = participant.initiative_policy
+            decisions = tuple(
+                (trigger, evaluate_initiative(
+                    policy,
+                    trigger=trigger,
+                    turns_since_last_action=turns_since_last_action,
+                    actions_this_turn=actions_this_turn,
+                ))
+                for trigger in policy.allowed_triggers
+            )
+        except (AdventureInitiativeError, TypeError, ValueError):
+            return "Adventure participant initiative status was not available."
+        elapsed = "none recorded in this session" if turns_since_last_action is None else str(turns_since_last_action)
+        lines = [
+            f"Adventure participant initiative status for {participant.participant_id} (read-only):",
+            f"Declared: {'enabled' if policy.enabled else 'disabled'}; allowed triggers: {', '.join(policy.allowed_triggers)}; allowed actions: {', '.join(policy.allowed_actions)}.",
+            f"Pacing: turns since last recorded participant action: {elapsed}; actions this staged turn: {actions_this_turn} / {policy.max_actions_per_turn}; cooldown: {policy.cooldown_turns} turn(s).",
+        ]
+        lines.extend(
+            f"{trigger}: {'eligible' if decision.allowed else 'ineligible'} ({decision.reason})"
+            for trigger, decision in decisions
+        )
+        lines.append(
+            "This inspection does not schedule initiative, call a provider, create a proposal, transcript, memory, or story event. Pacing is session-local and resets on restart."
+        )
+        return "\n".join(lines)
+
     def adventure_participant_action_generate(self, value):
         """Request one explicitly review-only participant-action proposal."""
         usage = "Usage: adventure participant action generate <participant-id> <trigger>: <completed user-turn text>"
@@ -2308,6 +2395,14 @@ class AssistantSession:
         if not self.adventure_session.active or self.adventure_session.record != self.adventure_turn.record:
             self.adventure_turn = self.adventure_turn.abort()
             return "Adventure turn staging was discarded because its workspace is no longer loaded."
+        if not self._has_active_adventure_roleplay_binding():
+            self.last_adventure_participant_action_generation = {
+                "status": "failed", "reason": "story_session_binding_required",
+            }
+            return (
+                "Participant-action proposal generation requires an active story session bound to the "
+                "loaded adventure. Abort this turn, then use adventure begin <title> first."
+            )
         if not isinstance(value, str) or ":" not in value:
             return usage
         head, _, user_text = value.partition(":")
@@ -2319,6 +2414,8 @@ class AssistantSession:
         try:
             if not self._adventure_generation_origin_is_current():
                 raise AdventureParticipantActionCoordinatorError(reason="stale_authoritative_origin")
+            if not self._has_active_adventure_roleplay_binding():
+                raise AdventureParticipantActionCoordinatorError(reason="story_session_binding_stale")
             turns_since_last_action, actions_this_turn = self._participant_action_counters(participant_id)
             profile = self._task_profile(TASK_ADVENTURE_PARTICIPANT_ACTION_GENERATION)
             coordinator = AdventureParticipantActionCoordinator(
@@ -2356,6 +2453,7 @@ class AssistantSession:
             "model": profile.model,
             "provider": self._provider_name,
             "event_count": self.adventure_session.event_count,
+            "story_session_generation": self._story_session_generation,
             "recorded_candidate_ids": frozenset(),
         }
         return (
@@ -2373,9 +2471,13 @@ class AssistantSession:
         proposal = generation.get("proposal")
         if proposal is None or proposal.request.participant_view.adventure_id != self.adventure_session.record.adventure_id:
             return "No untrusted participant-action candidates are available for this workspace."
-        if generation.get("event_count") != self.adventure_session.event_count or not self._adventure_generation_origin_is_current():
+        if (
+            generation.get("event_count") != self.adventure_session.event_count
+            or not self._adventure_generation_origin_is_current()
+            or not self._participant_action_review_is_current(generation)
+        ):
             self.last_adventure_participant_action_generation = None
-            return "Participant-action candidates are stale after authoritative story changes; regenerate them before review."
+            return "Participant-action candidates are stale after story-session or authoritative-story changes; regenerate them before review."
         return render_participant_action_candidate_batch(proposal.batch)
 
     def adventure_participant_action_generation_status(self):
@@ -2394,7 +2496,11 @@ class AssistantSession:
         proposal = generation.get("proposal")
         if proposal is None or not self.adventure_session.active:
             return "Participant-action generation: none."
-        if generation.get("event_count") != self.adventure_session.event_count or not self._adventure_generation_origin_is_current():
+        if (
+            generation.get("event_count") != self.adventure_session.event_count
+            or not self._adventure_generation_origin_is_current()
+            or not self._participant_action_review_is_current(generation)
+        ):
             self.last_adventure_participant_action_generation = None
             return "Participant-action generation: stale. Regenerate before review."
         return "\n".join((
@@ -2438,9 +2544,13 @@ class AssistantSession:
         proposal = generation.get("proposal")
         if proposal is None or proposal.request.participant_view.adventure_id != self.adventure_session.record.adventure_id:
             return "No untrusted participant-action candidates are available for this workspace."
-        if generation.get("event_count") != self.adventure_session.event_count or not self._adventure_generation_origin_is_current():
+        if (
+            generation.get("event_count") != self.adventure_session.event_count
+            or not self._adventure_generation_origin_is_current()
+            or not self._participant_action_review_is_current(generation)
+        ):
             self.last_adventure_participant_action_generation = None
-            return "Participant-action candidates are stale after authoritative story changes; regenerate them before recording."
+            return "Participant-action candidates are stale after story-session or authoritative-story changes; regenerate them before recording."
         candidate = next((item for item in proposal.batch.candidates if item.candidate_id == candidate_id), None)
         if candidate is None:
             return "Participant-action candidate was not recorded: candidate was not found."
@@ -4160,6 +4270,8 @@ class AssistantSession:
             return self.adventure_participant_action_generation_status()
         if lowered == "adventure participant action record" or lowered.startswith("adventure participant action record "):
             return self.adventure_participant_action_record(text.strip()[len("adventure participant action record"):])
+        if lowered == "adventure participant initiative status" or lowered.startswith("adventure participant initiative status "):
+            return self.adventure_participant_initiative_status(text.strip()[len("adventure participant initiative status"):])
         if lowered == "adventure participant inspect" or lowered.startswith("adventure participant inspect "):
             return self.adventure_participant_inspect(text.strip()[len("adventure participant inspect"):])
         if lowered == "adventure participant context" or lowered.startswith("adventure participant context "):

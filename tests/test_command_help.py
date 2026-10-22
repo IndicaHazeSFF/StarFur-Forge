@@ -20,6 +20,12 @@ class CommandHelpTests(unittest.TestCase):
         self.assertIn("adventure participant context <participant-id>",
             detect_command_help("How do I use participant actions?").commands)
 
+    def test_participant_initiative_help_returns_exact_passive_control(self):
+        payload = detect_command_help("How do I inspect participant initiative?")
+        self.assertEqual("adventure_participant_initiative", payload.intent)
+        self.assertEqual(("adventure participants", "adventure participant initiative status <participant-id>"), payload.commands)
+        self.assertIn("neither schedules initiative", payload.render())
+
     def test_proposal_help_is_exact_and_id_aware(self):
         payload = detect_command_help("How do I view new memory proposals? And how do I approve proposals?")
         self.assertEqual(payload.intent, "proposal_review")
@@ -80,6 +86,7 @@ class CommandHelpTests(unittest.TestCase):
         payload = detect_command_help("How do I make Murr suggest an adventure action?")
         self.assertEqual(payload.intent, "adventure_participant_actions")
         rendered = payload.render()
+        self.assertIn("adventure begin <title>", rendered)
         self.assertIn("adventure participant action generate <participant-id> <trigger>: <completed user-turn text>", rendered)
         self.assertIn("adventure participant actions", rendered)
         self.assertIn("cannot perform an action", rendered)
