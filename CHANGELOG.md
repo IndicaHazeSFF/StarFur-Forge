@@ -1863,3 +1863,57 @@
 - Stops: material design/scope choices, missing operator inputs, visual/audio/performance checks, sync/path/hash conflicts, runtime corruption, actual security failures, and unexpected external effects still require Roger. Repeated unclear failures require an evidence-based handoff.
 - Interruption: a request to finish the slice includes focused verification and authorized synchronization; abrupt Stop/quota interruptions require state inspection on resume and never imply completion.
 
+## 2026-10-23 - Bind participant completions to the requesting staged turn
+
+- Fix: participant-action generation captures its staged-turn request ID and rejects output after that turn is aborted/replaced. Review/status/record also require the original active turn, preventing old narration from entering a later turn's transcript.
+- Compatibility: editing drafts within the same transaction keeps its identity valid. No retry, event/memory write, autonomous action, or public binding identifier is added.
+- Verification: all 72 command tests passed locally and in WSL. Four disposable WSL smokes passed for abort/replacement during completion, stable draft edits, and explicit recovery; the eleven-case v2 benchmark retained 100% checks and repeatability PASS. No production state or live provider was accessed.
+
+## 2026-10-23 - Align fictional-mode guidance with mounted adventure history
+
+- Fix: replace the obsolete prompt claim that no adventure database/replay history exists. Roleplay guidance now defers established facts to the separately supplied Core adventure context and preserves the no-hidden-knowledge, no-label-based-storage-access, fictional-memory, and qualitative-meter boundaries.
+- Scope: prompt guidance only; no new context source, storage access, event/memory writer, provider route, or lifecycle command.
+- Verification: all ten roleplay tests passed locally and in WSL. A disposable WSL fake-provider smoke confirmed the recorded discovery and corrected guidance coexist in the assembled prompt, with the event log unchanged and no transcript/proposal write. This is prompt-assembly evidence, not live-model adherence.
+
+## 2026-10-23 - Explain explicit participant recording and consequence generation
+
+- Help: participant-action guidance now includes the existing explicit noncanonical transcript-recording control and the separately requested transcript-to-candidate extraction/review path. It no longer implies the explicit recording exception is unavailable.
+- Decision: retain separate consequence generation as selected by the user; recording cannot start extraction, stage consequences, or commit story state automatically.
+- Verification: all 24 help tests passed locally and in WSL; the disposable WSL help check returned deterministic guidance without a provider call.
+
+## 2026-10-23 - Exercise the complete explicit participant-to-event handoff
+
+- Regression: one disposable fake-provider flow binds a story/turn, reviews a participant suggestion, explicitly records its noncanonical pair, separately extracts/reviews a consequence candidate, stages it, and commits one event with the original turn and transcript provenance.
+- Boundary: asserts no consequence provider call at recording and no canonical write before explicit commit. No runtime behavior, new command, or automatic action is introduced.
+- Verification: all 73 command tests passed locally and in WSL. A disposable WSL fake-provider handoff smoke confirmed separate extraction, no event before explicit commit, and retained turn/transcript provenance on the one committed fixture event. No production state was accessed.
+
+## 2026-10-23 - Distinguish participant policy eligibility from lifecycle prerequisites
+
+- Status: passive initiative inspection now reports active/inactive story binding and matching staged turn separately from declared-policy/pacing eligibility. It explicitly avoids implying generation permission or provider readiness.
+- Boundary: session state only; no storage/provider work or private binding/request identifiers are exposed.
+- Verification: all 73 command tests passed locally and in WSL. A disposable WSL smoke exercised bound/active-turn, missing-turn, and ended-binding states with database/event-log reads blocked and zero provider calls; the regression also covers loaded-only policy eligibility.
+
+## 2026-10-23 - Validate document source and chunk before adventure import staging
+
+- Validation: the import writer now independently checks candidate source identity and prepared-chunk membership before acquiring its writer lock. Same-domain candidates from another source/chunk cannot be attributed to the supplied document.
+- Boundary: new staging only; valid exact retries remain idempotent, rejected selections leave existing log bytes intact, and no historical records, canonical events, or shared memories are rewritten.
+- Verification: six import and 44 API tests passed locally and in WSL. A disposable WSL smoke confirmed foreign-source rejection before lock creation, valid idempotent staging, and no canonical event; tests also preserve existing bytes on rejected selection.
+
+## 2026-10-23 - Keep document candidate dismissal bound to canonical IDs
+
+- Fix: single/batch review selection shares bounded canonical ASCII ordinal validation. Short or alternate-padded IDs and Unicode digits can no longer index the same candidate under a different ephemeral status key and bypass dismissal.
+- Compatibility: case and outer whitespace still normalize; rejected candidates remain rejected, and valid handoffs keep their existing explicit confirmation/pending-proposal path. No runtime repair or historical record rewrite is performed.
+- Documentation: corrected a stale 15-minute review-TTL statement in AGENTS.md to the existing configured 24-hour default; runtime expiry behavior is unchanged.
+- Verification: nine review and 44 API tests passed locally and in WSL. A disposable WSL smoke confirmed dismissal cannot be bypassed through single/batch aliases and canonical case/space selection still supports explicit handoff, with database/provider access blocked.
+
+## 2026-10-23 - Decide persistent annotation-job retention
+
+- Planning decision: future long-running annotation jobs retain private source/results across restart for 24 hours from original submission, with explicit deletion. Access, recovery, and resume do not renew retention; interrupted provider work requires explicit resume, never automatic replay.
+- Sequence: pure lifecycle/retention contracts first, isolated private storage/recovery next, then explicit controls and a capacity/Focus-Mode-aware worker. Existing review, proposal, memory, and adventure authority remain separate. No durable job storage, worker, or runtime migration is implemented by this decision.
+
+## 2026-10-23 - Define inert annotation-job retention and restart policy
+
+- Foundation: immutable versioned content-free job metadata derives expiry from original submission. Pure recovery fences queued/running work as interrupted; pure resume accepts only unexpired interrupted intent and never renews the deadline. Unsupported schemas/states, naive timestamps, backwards clocks, and overflow deny.
+- Boundary: no storage, source/results, worker, provider, command/API, authorization, or deletion is connected. Expiry is logical access denial, not erasure or verified provider stop; existing ephemeral reviews are unchanged.
+- Verification: five focused tests passed on Windows and WSL; all 1,188 provider-free WSL tests passed with ResourceWarning promoted to an error. No live provider, durable job store, or production data operation was used.
+

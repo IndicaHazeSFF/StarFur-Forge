@@ -198,6 +198,59 @@ class AdventureCommandTests(unittest.TestCase):
                 self.assertEqual((), session.adventure_turn.drafts)
                 self.assertEqual([], session.proposals)
 
+    def test_participant_completion_stays_with_exact_staged_turn(self):
+        for transition in ("abort", "replace", "stage_only"):
+            with self.subTest(transition=transition), tempfile.TemporaryDirectory() as directory:
+                calls = []
+                session = self._session(directory, calls)
+                session.respond("adventure create Turn Binding Fixture")
+                record = session.adventure_registry.resolve_title("Turn Binding Fixture")
+                session.adventure_registry.configure_participant_roster(record, AdventureParticipantRoster(
+                    record.adventure_id, (AdventureParticipant("murr", "Murr", "persona",
+                        f"adventure:{record.adventure_id}:participant:murr",
+                        initiative_policy=PersonaInitiativePolicy(enabled=True)),)))
+                session.respond("adventure begin Turn Binding Fixture")
+                session.respond("adventure turn begin")
+                original_request_id = session.adventure_turn.request_id
+                payload = {"message": {"content": json.dumps({
+                    "schema_version": 1, "candidates": [{
+                        "participant_id": "murr", "action": "suggest",
+                        "summary": "Suggest inspecting the key.", "confidence": 0.8,
+                    }],
+                })}}
+
+                def complete_after_transition(*args, **kwargs):
+                    calls.append(True)
+                    if transition == "stage_only":
+                        session.respond("adventure turn stage discovery: A staged fixture discovery.")
+                    else:
+                        session.respond("adventure turn abort")
+                        if transition == "replace":
+                            session.respond("adventure turn begin")
+                    return payload
+
+                session._provider_complete_prefer_structured = complete_after_transition
+                result = session.respond(
+                    "adventure participant action generate murr player_turn: I offer the key."
+                )
+                if transition == "stage_only":
+                    self.assertIn("Presented 1", result)
+                    self.assertEqual(original_request_id, session.adventure_turn.request_id)
+                    self.assertIn("TP-001", session.respond("adventure participant actions"))
+                    session.respond("adventure turn abort")
+                    self.assertIn("stale", session.respond("adventure participant actions"))
+                else:
+                    self.assertIn("failed safely", result)
+                    self.assertEqual({"status": "failed", "reason": "staged_turn_binding_stale"},
+                        session.last_adventure_participant_action_generation)
+                    self.assertIn("No untrusted", session.respond("adventure participant actions"))
+                    denied_record = session.respond("adventure participant action record TP-001")
+                    self.assertTrue("No untrusted" in denied_record or "inactive" in denied_record)
+                self.assertEqual([True], calls)
+                self.assertEqual([], AdventureTranscriptLog(session.adventure_registry, record).records())
+                self.assertEqual([], AdventureEventLog(session.adventure_registry, record).events())
+                self.assertEqual([], session.proposals)
+
     def test_participant_context_usage_is_passive_count_only_and_uses_mounted_snapshot(self):
         from unittest.mock import patch
         with tempfile.TemporaryDirectory() as directory:
@@ -267,6 +320,9 @@ class AdventureCommandTests(unittest.TestCase):
                 AdventureEventLog, "events", side_effect=AssertionError("event log forbidden")
             ), patch.object(AdventureTranscriptLog, "records", side_effect=AssertionError("transcript forbidden")):
                 status = session.respond("adventure participant initiative status MURR")
+                self.assertIn("Generation lifecycle: story binding inactive; matching staged turn active", status)
+                self.assertIn("Policy eligibility alone does not permit generation", status)
+                self.assertNotIn(session.adventure_turn.request_id, status)
                 self.assertIn("Declared: enabled", status)
                 self.assertIn("allowed triggers: player_turn, world_event", status)
                 self.assertIn("Pacing: turns since last recorded participant action: none recorded in this session", status)
@@ -283,6 +339,18 @@ class AdventureCommandTests(unittest.TestCase):
             self.assertEqual([], session.proposals)
             after = {path.name: path.read_bytes() for path in Path(directory, record.adventure_id).iterdir() if path.is_file()}
             self.assertEqual(before, after)
+
+            session.respond("adventure turn abort")
+            session.respond("adventure begin Initiative Status Fixture")
+            with patch("pipeline.db.connect", side_effect=AssertionError("DB forbidden")), patch.object(
+                AdventureEventLog, "events", side_effect=AssertionError("event log forbidden")
+            ):
+                self.assertIn("story binding active; matching staged turn inactive", session.respond(
+                    "adventure participant initiative status murr"))
+                session.respond("adventure turn begin")
+                self.assertIn("story binding active; matching staged turn active", session.respond(
+                    "adventure participant initiative status murr"))
+            self.assertEqual([], calls)
 
     def _config(self):
         return type("Config", (), {
@@ -1793,6 +1861,59 @@ class AdventureCommandTests(unittest.TestCase):
             self.assertEqual((), session.adventure_turn.drafts)
             self.assertEqual([], AdventureEventLog(session.adventure_registry, record).events())
             self.assertEqual(2, len(calls))
+
+    def test_bound_participant_transcript_requires_separate_extraction_staging_and_commit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            consequences = self._CandidateProvider({
+                "schema_version": 1,
+                "candidates": [{"event_type": "unresolved_hook",
+                    "summary": "The brass key still needs inspection.", "confidence": 0.8}],
+            })
+            session = self._session(directory, calls,
+                adventure_turn_coordinator=AdventureTurnCoordinator(consequences),
+                chat_response={"message": {"content": json.dumps({
+                    "schema_version": 1, "candidates": [{"participant_id": "murr",
+                        "action": "suggest", "summary": "Suggest inspecting the key.", "confidence": 0.8}],
+                })}})
+            session.respond("adventure create Explicit Loop Fixture")
+            record = session.adventure_registry.resolve_title("Explicit Loop Fixture")
+            session.adventure_registry.configure_participant_roster(record, AdventureParticipantRoster(
+                record.adventure_id, (AdventureParticipant("murr", "Murr", "persona",
+                    f"adventure:{record.adventure_id}:participant:murr",
+                    initiative_policy=PersonaInitiativePolicy(enabled=True)),)))
+            session.respond("adventure begin Explicit Loop Fixture")
+            session.respond("adventure turn begin")
+            turn_request_id = session.adventure_turn.request_id
+            self.assertIn("Presented 1", session.respond(
+                "adventure participant action generate murr player_turn: I ask Murr about the key."
+            ))
+            self.assertEqual(1, len(calls))
+            self.assertEqual([], consequences.requests)
+            self.assertIn("transcript pair", session.respond("adventure participant action record TP-001"))
+            self.assertEqual([], consequences.requests, "recording cannot request extraction")
+            self.assertEqual([], AdventureEventLog(session.adventure_registry, record).events())
+            self.assertEqual((), session.adventure_turn.drafts)
+
+            self.assertIn("Presented 1 untrusted", session.respond("adventure turn generate transcript"))
+            self.assertEqual(1, len(consequences.requests))
+            source = consequences.requests[0]
+            self.assertEqual("I ask Murr about the key.", source.user_text)
+            self.assertEqual("Murr suggests: Suggest inspecting the key.", source.narrator_text)
+            self.assertEqual(("AT-000001", "AT-000002"), source.source_record_ids)
+            self.assertEqual([], AdventureEventLog(session.adventure_registry, record).events())
+            self.assertEqual((), session.adventure_turn.drafts)
+            self.assertIn("TC-001", session.respond("adventure turn candidates"))
+            self.assertIn("Staged adventure-turn candidate", session.respond("adventure turn stage candidate TC-001"))
+            self.assertEqual([], AdventureEventLog(session.adventure_registry, record).events())
+            self.assertIn("Committed 1", session.respond("adventure turn commit"))
+            events = AdventureEventLog(session.adventure_registry, record).events()
+            self.assertEqual(1, len(events))
+            self.assertEqual("unresolved_hook", events[0].event_type)
+            self.assertEqual(turn_request_id, events[0].request_id)
+            self.assertEqual(("AT-000001", "AT-000002"), events[0].generation_provenance.source_record_ids)
+            self.assertEqual(2, len(AdventureTranscriptLog(session.adventure_registry, record).records()))
+            self.assertEqual([], session.proposals)
 
     def test_participant_action_interrupt_bypasses_candidate_failure_and_writes_nothing(self):
         with tempfile.TemporaryDirectory() as directory:

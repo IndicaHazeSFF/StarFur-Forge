@@ -9,12 +9,17 @@ See AGENTS.md for standing test/sync authority and exclusions.
 
 ## Pending files
 
-(none)
+None.
 
-The operator-checkpoint rule revision was copied and verified in WSL on
-2026-10-23. It changes development workflow only and requires no runtime smoke.
-This final cleared manifest itself must be copied and verified before a later
-slice adds a new queue entry.
+The import-provenance and canonical review-selection source, tests, AGENTS.md,
+and command documentation were copied and verified in WSL on 2026-10-23.
+All six import, nine review, and 44 API tests passed; disposable import/review
+smokes passed without production state or providers. Final evidence and
+the persistent-job planning decision are synchronized. The inert job-policy
+module, its tests, and AGENTS.md were also copied and verified; five focused
+tests passed on Windows/WSL and all 1,188 WSL regressions passed with strict
+ResourceWarning handling. The manifest itself is always included in its final
+exact-path synchronization.
 
 ## Verified / no longer pending
 

@@ -495,6 +495,11 @@ short-lived review decision; it creates no proposal or memory:
 
 The server uses its in-memory validated candidate—not client-supplied proposal fields—then calls the normal idempotent pending-proposal writer with original chunk evidence. The result is still pending and must be approved/rejected through the existing proposal controls. Review sessions default to 24 hours, disappear on server restart, and remain bounded by the server's active-review limit. Set the top-level assistant configuration field `document_review_ttl_seconds` to an integer from 60 through 604800 when a different local TTL is needed.
 
+Use the printed canonical candidate ID, including its zero-padding (`C-001`,
+then `C-1000` when applicable). Case and surrounding whitespace are accepted;
+short IDs, extra zero-padding, and non-ASCII digit aliases are rejected. A
+dismissed candidate cannot be selected again through a different spelling.
+
 `GET /v1/starfur/documents/reviews` lists only active review IDs and bounded source/review metadata; it never calls a model or exposes raw document text.
 
 `/v1/starfur/documents/context` is a separate, read-only source-selection endpoint for an active review. It accepts a `review_id`, an explicit `query`, and optional `limit` (1-8, default 3), then returns only lexical-matching chunks from the server-held source with stable scores and reasons. It does not create proposals, call a model, modify the review, or attach text to assistant chat on its own. This is the connector-facing context packet that later OpenWebUI custom retrieval will consume; raw source text remains absent from normal review metadata.
@@ -1025,8 +1030,11 @@ participant initiative, and usage inspection leaves pending/staged work intact.
 
 `adventure participant initiative status <participant-id>` is a read-only
 inspection of one declared policy and this session's current participant-action
-pacing counters. It lists the eligibility decision for each declared trigger,
-but does not schedule an initiative opportunity, call a provider, create a
+pacing counters. It lists the eligibility decision for each declared trigger
+and separately reports whether the story binding and matching staged turn are
+active. Policy eligibility alone neither permits generation nor checks provider
+readiness. The view exposes no private binding/turn identifier.
+It does not schedule an initiative opportunity, call a provider, create a
 proposal/transcript/memory/event, or make the participant autonomous. Its
 pacing counters are session-local and reset when the assistant session restarts.
 
@@ -1057,6 +1065,10 @@ Participant-action review output belongs to one exact session-local story
 binding. Ending roleplay, switching/unloading the workspace, or beginning a new
 story session invalidates that review before it can be reopened or copied to a
 transcript; regenerate under the current binding instead.
+It also belongs to the exact staged turn that requested it. Aborting or replacing
+that turn invalidates the review, including when generation finishes afterward;
+the failure category is `staged_turn_binding_stale`. Draft edits within the same
+staged turn preserve its request identity and do not independently expire review.
 
 `adventure participant action generation status` reports bounded completed,
 failed, or stale status without provider output. A candidate is not an action:
@@ -1564,10 +1576,14 @@ Adventure-turn benchmark results use the same opt-in ledger and keep the pipelin
     python starfur.py adventure-participant-eval
     python starfur.py adventure-participant-eval --record-ledger /tmp/starfur-participant-smoke.jsonl --run-id participant-smoke-001
 
-This runs seven `adventure-participant-lifecycle-v1` fixtures through real session
+This runs eleven `adventure-participant-lifecycle-v2` fixtures through real session
 commands in temporary workspaces, using synthetic responses only. Cases cover
 review-only and no-action output, once-only user/narrator transcript pairs,
-pacing, interruption/capacity recovery, stale origin, and malformed envelopes.
+pacing, interruption/capacity recovery, stale origin, and malformed envelopes,
+plus missing story bindings, binding end/replacement during generation, and
+explicit fresh-request recovery. The v2 version/fingerprint distinguishes the
+expanded suite from historical seven-case v1 evidence; prior records remain
+unchanged.
 Each run repeats the suite to measure determinism. No API server, key, Ollama,
 Chroma, production memory, or installed adventure is accessed. The optional
 ledger record contains closed labels/counts and an internal fixture manifest;

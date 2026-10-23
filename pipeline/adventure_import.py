@@ -230,6 +230,12 @@ class AdventureImportLog:
         if not isinstance(selected, Sequence) or not selected or len(selected) > MAX_IMPORT_CANDIDATES:
             raise AdventureImportError("selected review candidates are invalid")
         snapshots = tuple(_candidate_snapshot(candidate_id, candidate) for candidate_id, candidate in selected)
+        chunk_ids = {chunk.chunk_id for chunk in document.chunks if chunk.source_id == document.source_id}
+        if any(
+            candidate.source_id != document.source_id or candidate.chunk_id not in chunk_ids
+            for _candidate_id, candidate in selected
+        ):
+            raise AdventureImportError("candidate provenance does not match the reviewed document")
         if any(candidate["domain"] != document.domain for candidate in snapshots):
             raise AdventureImportError("candidate domain does not match the reviewed document")
         with self._write_guard():

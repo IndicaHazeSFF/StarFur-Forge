@@ -26,7 +26,8 @@ class AdventureParticipantEvaluationTests(unittest.TestCase):
         self.assertEqual(BENCHMARK_VERSION, first["benchmark_version"])
         self.assertEqual(FIXTURE_FINGERPRINT, first["fixture_fingerprint"])
         self.assertEqual(64, len(FIXTURE_FINGERPRINT))
-        self.assertEqual(7, len(first["results"]))
+        self.assertEqual("adventure-participant-lifecycle-v2", first["benchmark_version"])
+        self.assertEqual(11, len(first["results"]))
         self.assertTrue(first["repeatability"])
         self.assertEqual(1.0, first["participant_lifecycle_pass_rate"])
         self.assertTrue(all(case["pass"] for case in first["results"]))
@@ -45,6 +46,13 @@ class AdventureParticipantEvaluationTests(unittest.TestCase):
         self.assertEqual(2, cases["pacing"]["actual_provider_calls"])
         self.assertEqual(3, cases["interruption"]["actual_provider_calls"])
         self.assertEqual(1, cases["stale_origin"]["actual_events"])
+        self.assertEqual(0, cases["binding_required"]["actual_provider_calls"])
+        for name in ("binding_ended", "binding_replaced"):
+            self.assertEqual(1, cases[name]["actual_provider_calls"])
+            self.assertEqual(0, cases[name]["actual_candidates"])
+            self.assertEqual(0, cases[name]["actual_transcript_records"])
+        self.assertEqual(2, cases["binding_recovery"]["actual_provider_calls"])
+        self.assertEqual(1, cases["binding_recovery"]["actual_candidates"])
         self.assertTrue(all(case["actual_staged"] == 0 for case in cases.values()))
 
     def test_repeatability_is_measured_not_assumed(self):
@@ -69,13 +77,13 @@ class AdventureParticipantEvaluationTests(unittest.TestCase):
                     "pipeline.db.connect", side_effect=AssertionError("production DB forbidden")
                 ):
                     starfur.main()
-                self.assertIn("Cases:              7", output.getvalue())
+                self.assertIn("Cases:              11", output.getvalue())
                 self.assertIn("Repeatability:      PASS", output.getvalue())
                 self.assertEqual(record, ledger.exists())
             records = load_benchmark_results(ledger)
             self.assertEqual(1, len(records))
             self.assertEqual(BENCHMARK_VERSION, records[0]["benchmark_version"])
-            self.assertEqual(7, len(records[0]["cases"]))
+            self.assertEqual(11, len(records[0]["cases"]))
             self.assertNotIn("Synthetic", ledger.read_text(encoding="utf-8"))
 
 

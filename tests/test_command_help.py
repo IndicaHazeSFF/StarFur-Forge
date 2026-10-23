@@ -82,7 +82,7 @@ class CommandHelpTests(unittest.TestCase):
         self.assertIn("adventure state set <key>: <value>", rendered)
         self.assertIn("current_location", rendered)
 
-    def test_participant_action_help_returns_only_review_controls(self):
+    def test_participant_action_help_preserves_explicit_review_record_and_extraction_boundaries(self):
         payload = detect_command_help("How do I make Murr suggest an adventure action?")
         self.assertEqual(payload.intent, "adventure_participant_actions")
         rendered = payload.render()
@@ -90,6 +90,11 @@ class CommandHelpTests(unittest.TestCase):
         self.assertIn("adventure participant action generate <participant-id> <trigger>: <completed user-turn text>", rendered)
         self.assertIn("adventure participant actions", rendered)
         self.assertIn("cannot perform an action", rendered)
+        self.assertIn("adventure participant action record <TP-###>", rendered)
+        self.assertIn("adventure turn generate transcript", rendered)
+        self.assertIn("noncanonical transcript pair", rendered)
+        self.assertIn("Recording never starts extraction automatically", rendered)
+        self.assertIn("generation never stages or commits consequences", rendered)
 
     def test_adventure_retraction_help_returns_exact_core_command(self):
         payload = detect_command_help("How do I retract an adventure event?")

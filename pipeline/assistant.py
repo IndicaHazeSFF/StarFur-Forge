@@ -1548,6 +1548,9 @@ class AssistantSession:
             isinstance(generation, dict)
             and generation.get("story_session_generation") == self._story_session_generation
             and self._has_active_adventure_roleplay_binding()
+            and self.adventure_turn.active
+            and self.adventure_turn.record == self.adventure_session.record
+            and generation.get("turn_request_id") == self.adventure_turn.request_id
         )
 
     def roleplay_begin(self, title=None):
@@ -2375,6 +2378,7 @@ class AssistantSession:
         elapsed = "none recorded in this session" if turns_since_last_action is None else str(turns_since_last_action)
         lines = [
             f"Adventure participant initiative status for {participant.participant_id} (read-only):",
+            f"Generation lifecycle: story binding {'active' if self._has_active_adventure_roleplay_binding() else 'inactive'}; matching staged turn {'active' if self.adventure_turn.active and self.adventure_turn.record == self.adventure_session.record else 'inactive'}.",
             f"Declared: {'enabled' if policy.enabled else 'disabled'}; allowed triggers: {', '.join(policy.allowed_triggers)}; allowed actions: {', '.join(policy.allowed_actions)}.",
             f"Pacing: turns since last recorded participant action: {elapsed}; actions this staged turn: {actions_this_turn} / {policy.max_actions_per_turn}; cooldown: {policy.cooldown_turns} turn(s).",
         ]
@@ -2383,7 +2387,7 @@ class AssistantSession:
             for trigger, decision in decisions
         )
         lines.append(
-            "This inspection does not schedule initiative, call a provider, create a proposal, transcript, memory, or story event. Pacing is session-local and resets on restart."
+            "Policy eligibility alone does not permit generation or establish provider readiness. This inspection does not schedule initiative, call a provider, create a proposal, transcript, memory, or story event. Pacing is session-local and resets on restart."
         )
         return "\n".join(lines)
 
@@ -2412,6 +2416,7 @@ class AssistantSession:
         participant_id, trigger = parts
         self.last_adventure_participant_action_generation = None
         story_session_generation = self._story_session_generation
+        turn_request_id = self.adventure_turn.request_id
         try:
             if not self._adventure_generation_origin_is_current():
                 raise AdventureParticipantActionCoordinatorError(reason="stale_authoritative_origin")
@@ -2441,6 +2446,8 @@ class AssistantSession:
                 or not self._has_active_adventure_roleplay_binding()
             ):
                 raise AdventureParticipantActionCoordinatorError(reason="story_session_binding_stale")
+            if not self.adventure_turn.active or self.adventure_turn.request_id != turn_request_id:
+                raise AdventureParticipantActionCoordinatorError(reason="staged_turn_binding_stale")
             if not self._adventure_generation_origin_is_current():
                 raise AdventureParticipantActionCoordinatorError(reason="stale_authoritative_origin")
         except AdventureParticipantActionCoordinatorError as error:
@@ -2460,6 +2467,7 @@ class AssistantSession:
             "provider": self._provider_name,
             "event_count": self.adventure_session.event_count,
             "story_session_generation": story_session_generation,
+            "turn_request_id": turn_request_id,
             "recorded_candidate_ids": frozenset(),
         }
         return (

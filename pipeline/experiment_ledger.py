@@ -165,9 +165,11 @@ def _sanitize_participant_lifecycle_case_result(value: Mapping[str, Any]) -> dic
     fields.update(f"{prefix}_{field}" for prefix in ("expected", "actual") for field in count_fields)
     if set(value) != fields:
         raise ValueError("participant lifecycle case must use the exact content-free schema")
-    names = {"review_only", "no_action", "record_once", "pacing", "interruption", "stale_origin", "invalid_envelope"}
+    names = {"review_only", "no_action", "record_once", "pacing", "interruption", "stale_origin", "invalid_envelope",
+        "binding_required", "binding_ended", "binding_replaced", "binding_recovery"}
     outcomes = {"reviewed", "no_action", "recorded_once", "policy_denied_then_eligible",
-        "interrupted_then_recovered", "stale_rejected", "invalid_rejected", "unexpected"}
+        "interrupted_then_recovered", "stale_rejected", "invalid_rejected", "unexpected",
+        "binding_denied", "binding_completion_rejected", "binding_recovered"}
     if not isinstance(value["name"], str) or value["name"] not in names or any(
         not isinstance(value[field], str) or value[field] not in outcomes
         for field in ("expected_outcome", "actual_outcome")

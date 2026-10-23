@@ -77,8 +77,9 @@ class RoleplaySessionState:
         return (
             "ACTIVE ROLEPLAY SESSION (core-provided):\n"
             "Treat the current exchange as fictional roleplay. Do not present story events as real-world user facts "
-            "or prior shared reality. This early session mode has no adventure database, replay history, or hidden "
-            "story state; do not invent earlier events. Keep relationship, affinity, trust, and similar meter values "
+            "or prior shared reality. Established adventure facts come only from separately supplied Core adventure "
+            "context. This roleplay label grants no database access or hidden story knowledge; do not invent earlier "
+            "events. Keep relationship, affinity, trust, and similar meter values "
             "qualitative in normal in-character narration; never expose numeric scores unless the user explicitly "
             "asks for diagnostic or internal meter values. Follow engine policy and explicit commands normally. Core may "
             "label an explicitly eligible user-memory proposal as roleplay-scoped while this mode is active.\n"

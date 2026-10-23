@@ -24,7 +24,7 @@ from pipeline.persona_state import PersonaState
 from pipeline.provider_workload_gate import ProviderWorkloadGate
 from pipeline.providers import ChatCompletion
 
-BENCHMARK_VERSION = "adventure-participant-lifecycle-v1"
+BENCHMARK_VERSION = "adventure-participant-lifecycle-v2"
 _TURN_TEXT = "Synthetic crew pauses beside a synthetic hatch."
 _SUMMARY = "Suggest inspecting the synthetic key."
 _GENERATE = f"adventure participant action generate murr player_turn: {_TURN_TEXT}"
@@ -37,6 +37,10 @@ _CASES = (
     ("interruption", "interrupted_then_recovered", 3, 1, 0, 0, 0),
     ("stale_origin", "stale_rejected", 1, 0, 0, 1, 0),
     ("invalid_envelope", "invalid_rejected", 1, 0, 0, 0, 0),
+    ("binding_required", "binding_denied", 0, 0, 0, 0, 0),
+    ("binding_ended", "binding_completion_rejected", 1, 0, 0, 0, 0),
+    ("binding_replaced", "binding_completion_rejected", 1, 0, 0, 0, 0),
+    ("binding_recovery", "binding_recovered", 2, 1, 0, 0, 0),
 )
 FIXTURE_FINGERPRINT = hashlib.sha256(json.dumps(
     {"version": BENCHMARK_VERSION, "cases": _CASES, "turn": _TURN_TEXT, "summary": _SUMMARY},
@@ -118,6 +122,17 @@ def _run_case(root: Path, spec: tuple) -> dict[str, object]:
         provider.mode = "invalid"
     elif name == "stale_origin":
         provider.after_call = lambda: log.append("discovery", "Synthetic intervening event.")
+    elif name == "binding_required":
+        session.respond("roleplay end")
+    elif name in {"binding_ended", "binding_recovery"}:
+        provider.after_call = session.roleplay_end
+    elif name == "binding_replaced":
+        def replace_binding():
+            session.respond("roleplay end")
+            session.respond("adventure turn abort")
+            session.respond("adventure begin Participant Fixture")
+            session.respond("adventure turn begin")
+        provider.after_call = replace_binding
     session.respond(_GENERATE)
     if name == "review_only":
         checks.append("TP-001" in session.respond("adventure participant actions"))
@@ -154,6 +169,21 @@ def _run_case(root: Path, spec: tuple) -> dict[str, object]:
         checks.append(session.last_adventure_participant_action_generation.get("reason") == expected_reason)
         checks.append("No untrusted" in session.respond("adventure participant actions"))
         checks.append("No untrusted" in session.respond("adventure participant action record TP-001"))
+    elif name in {"binding_required", "binding_ended", "binding_replaced", "binding_recovery"}:
+        expected_reason = "story_session_binding_required" if name == "binding_required" else "story_session_binding_stale"
+        checks.append(session.last_adventure_participant_action_generation == {
+            "status": "failed", "reason": expected_reason,
+        })
+        checks.append("No untrusted" in session.respond("adventure participant actions"))
+        checks.append("No untrusted" in session.respond("adventure participant action record TP-001"))
+        checks.append(not transcript.records() and not log.events() and not writes)
+        if name == "binding_recovery":
+            provider.after_call = None
+            session.respond("adventure turn abort")
+            session.respond("adventure begin Participant Fixture")
+            session.respond("adventure turn begin")
+            session.respond(_GENERATE)
+            checks.append(_candidate_count(session) == 1)
     checks.append(not session.proposals and not session.messages and not writes)
     preserved = all(checks)
     result = {

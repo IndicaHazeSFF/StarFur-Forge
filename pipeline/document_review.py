@@ -25,6 +25,23 @@ class DocumentReviewError(ValueError):
     """Raised for missing, expired, or invalid document review selections."""
 
 
+def _normalize_candidate_selection_id(value: object, *, field: str) -> str:
+    """Accept one bounded canonical ordinal, preserving case/space compatibility."""
+    if not isinstance(value, str) or not value.strip():
+        raise DocumentReviewError(f"{field} is required.")
+    normalized = value.strip().upper()
+    digits = normalized[2:]
+    if (
+        not normalized.startswith("C-") or not digits or len(digits) > 64
+        or not digits.isascii() or not digits.isdigit()
+    ):
+        raise DocumentReviewError(f"{field} must use canonical C-### format.")
+    index = int(digits) - 1
+    if index < 0 or normalized != candidate_public_id(index):
+        raise DocumentReviewError(f"{field} must use canonical C-### format.")
+    return normalized
+
+
 @dataclass(frozen=True)
 class DocumentReviewSession:
     """One short-lived, server-side snapshot of validated candidates."""
@@ -174,11 +191,7 @@ class DocumentReviewStore:
     def get_candidate(self, review_id: object, candidate_id: object) -> DocumentMemoryCandidate:
         if not isinstance(review_id, str) or not review_id.strip():
             raise DocumentReviewError("review_id is required.")
-        if not isinstance(candidate_id, str) or not candidate_id.strip():
-            raise DocumentReviewError("candidate_id is required.")
-        normalized_candidate_id = candidate_id.strip().upper()
-        if not normalized_candidate_id.startswith("C-") or not normalized_candidate_id[2:].isdigit():
-            raise DocumentReviewError("candidate_id must use C-### format.")
+        normalized_candidate_id = _normalize_candidate_selection_id(candidate_id, field="candidate_id")
         index = int(normalized_candidate_id[2:]) - 1
         now = self._now()
         with self._lock:
@@ -225,11 +238,7 @@ class DocumentReviewStore:
             raise DocumentReviewError("candidate_ids exceeds the review batch limit.")
         normalized_ids: list[str] = []
         for candidate_id in candidate_ids:
-            if not isinstance(candidate_id, str) or not candidate_id.strip():
-                raise DocumentReviewError("candidate_ids must contain C-### identifiers.")
-            normalized = candidate_id.strip().upper()
-            if not normalized.startswith("C-") or not normalized[2:].isdigit():
-                raise DocumentReviewError("candidate_ids must contain C-### identifiers.")
+            normalized = _normalize_candidate_selection_id(candidate_id, field="candidate_ids")
             if normalized in normalized_ids:
                 raise DocumentReviewError("candidate_ids must not contain duplicates.")
             normalized_ids.append(normalized)

@@ -111,6 +111,35 @@ class DocumentReviewStoreTests(unittest.TestCase):
         self.assertEqual(store.get_review(session.review_id)[1][0][1], "handed_off")
         self.assertIs(store.get_candidate(session.review_id, "C-001"), candidates[0])
 
+    def test_candidate_aliases_cannot_bypass_dismissal_in_single_or_batch_selection(self):
+        document, candidates = self._document_and_candidate()
+        store = DocumentReviewStore()
+        session = store.create(document, candidates)
+        store.reject_candidates(session.review_id, ["C-001"])
+        for identifier in ("C-001", "c-001", " C-001 ", "C-1", "C-01", "C-0001", "C-\u0660\u0660\u0661"):
+            with self.subTest(identifier=identifier):
+                with self.assertRaises(DocumentReviewError):
+                    store.get_candidate(session.review_id, identifier)
+                with self.assertRaises(DocumentReviewError):
+                    store.get_candidates(session.review_id, [identifier])
+                with self.assertRaises(DocumentReviewError):
+                    store.mark_handed_off(session.review_id, [identifier])
+        self.assertEqual("rejected", store.get_review(session.review_id)[1][0][1])
+
+    def test_canonical_case_space_selection_remains_compatible_and_malformed_ids_are_bounded(self):
+        document, candidates = self._document_and_candidate()
+        store = DocumentReviewStore()
+        session = store.create(document, candidates)
+        self.assertIs(candidates[0], store.get_candidate(session.review_id, " c-001 "))
+        self.assertEqual((("C-001", candidates[0]),), store.get_candidates(session.review_id, [" c-001 "]))
+        for identifier in ("C-1", "C-0001", "C-000", "C-\u00b9", "C-" + "9" * 5000):
+            with self.subTest(length=len(identifier)):
+                with self.assertRaises(DocumentReviewError):
+                    store.get_candidate(session.review_id, identifier)
+                with self.assertRaises(DocumentReviewError):
+                    store.get_candidates(session.review_id, [identifier])
+        self.assertEqual("pending", store.get_review(session.review_id)[1][0][1])
+
     def test_default_ttl_is_one_day_and_list_only_returns_active_reviews_newest_first(self):
         now = [datetime(2026, 8, 16, tzinfo=UTC)]
         store = DocumentReviewStore(clock=lambda: now[0])

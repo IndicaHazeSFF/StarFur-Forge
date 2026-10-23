@@ -118,7 +118,7 @@ class ExperimentLedgerTests(unittest.TestCase):
         record = build_benchmark_result_record(sample_manifest(), result)
         self.assertEqual("passed", record["outcome"]["status"])
         self.assertEqual(1.0, record["metrics"]["participant_lifecycle_pass_rate"])
-        self.assertEqual(7, len(record["cases"]))
+        self.assertEqual(11, len(record["cases"]))
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "ledger.jsonl"
             append_benchmark_result(path, record)

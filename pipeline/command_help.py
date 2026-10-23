@@ -114,8 +114,16 @@ def detect_command_help(query: str) -> CommandHelp | None:
                 "adventure participant action generate <participant-id> <trigger>: <completed user-turn text>",
                 "adventure participant actions",
                 "adventure participant action generation status",
+                "adventure participant action record <TP-###>",
+                "adventure transcript",
+                "adventure turn generate transcript",
+                "adventure turn review",
             ),
-            notes=("Use `adventure begin <title>` to bind the loaded story session before generation. Participant action candidates are untrusted review output only. They cannot perform an action, stage an event, write a transcript or memory, or run autonomously.",),
+            notes=(
+                "Use `adventure begin <title>` to bind the loaded story session before generation. Review alone cannot perform an action, stage an event, write memory, or run autonomously.",
+                "Only the explicit `adventure participant action record <TP-###>` command copies one current suggestion and its captured player turn to a noncanonical transcript pair. It does not establish that the suggested action happened.",
+                "Request possible consequences separately with `adventure turn generate transcript`, then review candidates. Recording never starts extraction automatically; generation never stages or commits consequences. Use the explicit turn staging/commit controls only for consequences you accept.",
+            ),
         )
 
     if _contains_any(value, (

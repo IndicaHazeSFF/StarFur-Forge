@@ -1,6 +1,7 @@
 import sys
 import types
 import unittest
+import tempfile
 from unittest.mock import patch
 from pathlib import Path
 
@@ -9,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.modules.setdefault("ollama", types.ModuleType("ollama"))
 
 from pipeline.assistant import AssistantSession
+from pipeline.adventure_registry import AdventureRegistry
 from pipeline.roleplay import RoleplaySessionState, detect_casual_roleplay_start
 
 
@@ -88,6 +90,31 @@ class RoleplaySessionTests(unittest.TestCase):
         with patch("pipeline.assistant.assistant_public_id", return_value="M-001"):
             session.respond("remember this: Story fact")
         self.assertEqual("roleplay", created[-1]["visibility_scope"])
+
+    def test_bound_roleplay_guidance_respects_supplied_adventure_history(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            config = self._config()
+            config.memory_policy = "off"
+            session = AssistantSession(
+                config, "Persona", adventure_registry=AdventureRegistry(directory),
+                chat=lambda **kwargs: calls.append(kwargs) or {"message": {"content": "narration"}},
+                memory_loader=lambda **kwargs: [],
+            )
+            session.respond("adventure create Prompt History Fixture")
+            session.respond("adventure load Prompt History Fixture")
+            session.respond("adventure record discovery: A silver compass was found beside the hatch.")
+            session.respond("adventure begin Prompt History Fixture")
+            self.assertEqual("narration", session.respond("Continue the scene."))
+            self.assertEqual(1, len(calls))
+            prompt = calls[0]["messages"][0]["content"]
+            self.assertIn("A silver compass was found beside the hatch.", prompt)
+            self.assertIn("Established adventure facts come only from separately supplied Core adventure context", prompt)
+            self.assertIn("roleplay label grants no database access or hidden story knowledge", prompt)
+            self.assertNotIn("no adventure database, replay history", prompt)
+            self.assertIn("never expose numeric scores", prompt)
+            self.assertIn("No untrusted", session.respond("adventure participant actions"))
+            self.assertEqual([], session.proposals)
 
     def test_roleplay_hides_relationship_meter_values_from_normal_model_context(self):
         calls = []
