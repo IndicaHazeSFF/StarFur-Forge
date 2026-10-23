@@ -11,12 +11,10 @@ See AGENTS.md for standing test/sync authority and exclusions.
 
 (none)
 
-The passive story-binding status slice was copied by exact path and SHA-256
-verified in WSL on 2026-10-21. Its focused provider-free regression and
-disposable AssistantSession smoke passed: a matching generic roleplay label
-remained visibly unbound, while `adventure begin` made the private story
-binding active. This final cleared manifest itself must be copied and verified
-before a later slice adds a new queue entry.
+The in-flight story-binding completion fix and final documentation were copied
+and verified in WSL on 2026-10-23. All 99 focused provider-free regressions and
+four disposable fixture smoke checks passed. This final cleared manifest itself
+must be copied and verified before a later slice adds a new queue entry.
 
 ## Verified / no longer pending
 

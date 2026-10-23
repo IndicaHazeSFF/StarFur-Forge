@@ -154,6 +154,50 @@ class AdventureCommandTests(unittest.TestCase):
             self.assertEqual([], AdventureTranscriptLog(session.adventure_registry, record).records())
             self.assertEqual([], AdventureEventLog(session.adventure_registry, record).events())
 
+    def test_participant_generation_discards_completion_when_story_binding_changes_during_call(self):
+        for transition in ("end", "restart_same_story"):
+            with self.subTest(transition=transition), tempfile.TemporaryDirectory() as directory:
+                calls = []
+                session = self._session(directory, calls)
+                session.respond("adventure create Inflight Binding Fixture")
+                record = session.adventure_registry.resolve_title("Inflight Binding Fixture")
+                session.adventure_registry.configure_participant_roster(record, AdventureParticipantRoster(
+                    record.adventure_id, (AdventureParticipant("murr", "Murr", "persona",
+                        f"adventure:{record.adventure_id}:participant:murr",
+                        initiative_policy=PersonaInitiativePolicy(enabled=True)),)))
+                session.respond("adventure begin Inflight Binding Fixture")
+                session.respond("adventure turn begin")
+                payload = {"message": {"content": json.dumps({
+                    "schema_version": 1, "candidates": [{
+                        "participant_id": "murr", "action": "suggest",
+                        "summary": "Suggest inspecting the key.", "confidence": 0.8,
+                    }],
+                })}}
+
+                def complete_after_transition(*args, **kwargs):
+                    calls.append(True)
+                    session.respond("roleplay end")
+                    if transition == "restart_same_story":
+                        session.respond("adventure turn abort")
+                        session.respond("adventure begin Inflight Binding Fixture")
+                        session.respond("adventure turn begin")
+                    return payload
+
+                session._provider_complete_prefer_structured = complete_after_transition
+                reply = session.respond(
+                    "adventure participant action generate murr player_turn: I offer the key."
+                )
+                self.assertIn("failed safely", reply)
+                self.assertEqual({"status": "failed", "reason": "story_session_binding_stale"},
+                    session.last_adventure_participant_action_generation)
+                self.assertEqual([True], calls)
+                self.assertIn("No untrusted", session.respond("adventure participant actions"))
+                self.assertIn("No untrusted", session.respond("adventure participant action record TP-001"))
+                self.assertEqual([], AdventureTranscriptLog(session.adventure_registry, record).records())
+                self.assertEqual([], AdventureEventLog(session.adventure_registry, record).events())
+                self.assertEqual((), session.adventure_turn.drafts)
+                self.assertEqual([], session.proposals)
+
     def test_participant_context_usage_is_passive_count_only_and_uses_mounted_snapshot(self):
         from unittest.mock import patch
         with tempfile.TemporaryDirectory() as directory:

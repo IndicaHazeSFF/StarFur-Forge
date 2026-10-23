@@ -1845,3 +1845,9 @@
 - Constraints: the view exposes no binding identity, prompt, participant context, or authority and performs no provider/storage work.
 - Verification: focused command coverage checks unmounted, label-only roleplay, and explicit `adventure begin` states.
 
+## 2026-10-23 - Reject participant completions after an in-flight story-session change
+
+- Fix: capture the story-session generation before provider work and recheck it with the active adventure binding before publishing returned participant candidates. Ending roleplay or restarting the same story during that call now yields `story_session_binding_stale` and discards the completion.
+- Boundaries: no retry, replacement-session rebinding, transcript/event/memory write, or provider-stop claim is added.
+- Verification: 71 command and 28 participant tests passed in WSL on hash-verified copies. Four disposable fake-provider smoke checks passed for ending/restarting during generation, unchanged completion, and explicit fresh-request recovery, preserving empty transcript/event/staging/memory-proposal state. This does not establish live-provider cancellation or concurrent-session behavior.
+

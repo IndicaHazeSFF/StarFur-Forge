@@ -2411,6 +2411,7 @@ class AssistantSession:
             return usage
         participant_id, trigger = parts
         self.last_adventure_participant_action_generation = None
+        story_session_generation = self._story_session_generation
         try:
             if not self._adventure_generation_origin_is_current():
                 raise AdventureParticipantActionCoordinatorError(reason="stale_authoritative_origin")
@@ -2435,6 +2436,11 @@ class AssistantSession:
                 turns_since_last_action=turns_since_last_action,
                 actions_this_turn=actions_this_turn,
             )
+            if (
+                self._story_session_generation != story_session_generation
+                or not self._has_active_adventure_roleplay_binding()
+            ):
+                raise AdventureParticipantActionCoordinatorError(reason="story_session_binding_stale")
             if not self._adventure_generation_origin_is_current():
                 raise AdventureParticipantActionCoordinatorError(reason="stale_authoritative_origin")
         except AdventureParticipantActionCoordinatorError as error:
@@ -2453,7 +2459,7 @@ class AssistantSession:
             "model": profile.model,
             "provider": self._provider_name,
             "event_count": self.adventure_session.event_count,
-            "story_session_generation": self._story_session_generation,
+            "story_session_generation": story_session_generation,
             "recorded_candidate_ids": frozenset(),
         }
         return (
