@@ -11,10 +11,10 @@ See AGENTS.md for standing test/sync authority and exclusions.
 
 (none)
 
-The in-flight story-binding completion fix and final documentation were copied
-and verified in WSL on 2026-10-23. All 99 focused provider-free regressions and
-four disposable fixture smoke checks passed. This final cleared manifest itself
-must be copied and verified before a later slice adds a new queue entry.
+The operator-checkpoint rule revision was copied and verified in WSL on
+2026-10-23. It changes development workflow only and requires no runtime smoke.
+This final cleared manifest itself must be copied and verified before a later
+slice adds a new queue entry.
 
 ## Verified / no longer pending
 
@@ -36,9 +36,11 @@ copy success. Never clear git status, changelog, or sprint history as part of
 resetting this list. No runtime data, local config, credentials, unrelated files,
 directory mirroring, or repository deletion is authorized.
 
-On copy failure, post-copy hash mismatch, unexpected file changes, path/permission
-problems or possible runtime-data impact: pause, retain the remaining queue and
-wait for the user; no automatic retry/force/workaround. Ordinary code/test
-failures may be repaired within the current job. Corruption, security-boundary
-failures, unexpected external effects or broader-authority fixes still pause.
-The workflow-rule edits remain queued above; no WSL sync or test was performed.
+On copy failure, post-copy hash mismatch, unexpected independent file changes,
+path/permission problems or possible runtime-data impact: pause, retain the
+remaining queue and wait for the user; no automatic retry/force/workaround.
+Ordinary scoped code/test failures, including synthetic lifecycle bugs, may be
+fixed and retested under AGENTS.md. Material design/scope choices, missing
+operator inputs, actual security failures, corruption, and unexpected external
+effects still pause. "Finish this slice, then stop" includes focused verification
+and authorized sync; after abrupt interruption inspect actual state before resume.

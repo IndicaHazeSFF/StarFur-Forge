@@ -1851,3 +1851,15 @@
 - Boundaries: no retry, replacement-session rebinding, transcript/event/memory write, or provider-stop claim is added.
 - Verification: 71 command and 28 participant tests passed in WSL on hash-verified copies. Four disposable fake-provider smoke checks passed for ending/restarting during generation, unchanged completion, and explicit fresh-request recovery, preserving empty transcript/event/staging/memory-proposal state. This does not establish live-provider cancellation or concurrent-session behavior.
 
+## 2026-10-23 - Extend repeatable participant evidence with story-binding cases
+
+- Benchmark: `adventure-participant-lifecycle-v2` retains the seven original cases and adds missing-binding denial, binding end/replacement during completion, and explicit fresh-request recovery. The version and fixture fingerprint distinguish the eleven-case suite from historical v1 evidence.
+- Boundary: the ledger accepts only the additional fixed labels and existing bounded counts; historical records stay unchanged. Fixture providers/workspaces remain synthetic/disposable, with no runtime memory, installed adventure, or live service access.
+- Verification: all 24 focused fixture/ledger tests passed locally and in WSL. The eleven-case CLI and disposable-ledger smokes reported 100% lifecycle checks and repeatability PASS; the recorded v2 evidence reloaded successfully. No production ledger or installed adventure was accessed.
+
+## 2026-10-23 - Clarify autonomous fixes and operator checkpoints
+
+- Workflow: ordinary scoped code/test failures, including synthetic lifecycle regressions, may be diagnosed, fixed, and retested without an operator round trip while preserving the agreed architecture and permissions.
+- Stops: material design/scope choices, missing operator inputs, visual/audio/performance checks, sync/path/hash conflicts, runtime corruption, actual security failures, and unexpected external effects still require Roger. Repeated unclear failures require an evidence-based handoff.
+- Interruption: a request to finish the slice includes focused verification and authorized synchronization; abrupt Stop/quota interruptions require state inspection on resume and never imply completion.
+
