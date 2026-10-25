@@ -1,7 +1,7 @@
 # StarFur Forge Roadmap v4
 
 **Status:** Resident Intelligence Platform with an executable Persona Runtime
-**Last updated:** 2026-10-20
+**Last updated:** 2026-10-24
 
 `ROADMAP.md` is authoritative. `ROADMAP.v3.md`, `ROADMAP.v2.md`, and `ROADMAP.original.md` are preserved historical versions.
 
@@ -558,6 +558,9 @@ The older numbered stages above preserve the project history. Active implementat
    **STORY-LOOP INTERACTION DECISION (2026-10-23; WSL HANDOFF SMOKE PASSED):** Participant suggestion recording and consequence generation remain separate explicit commands. Local help documents the existing noncanonical record step followed by optional `adventure turn generate transcript` review; no accept-and-extract automation is planned in this slice. All 24 help and 73 command tests plus a disposable fake-provider handoff smoke passed in WSL, checking no automatic extraction/event and one explicit commit with turn/transcript provenance. Candidate selection/staging/commit remain separate Core decisions; fixture success does not establish narrative quality.
    **COMPLETED PASSIVE INITIATIVE LIFECYCLE PREREQUISITES (WSL FIXTURE SMOKE PASSED):** Participant initiative status distinguishes policy eligibility from the active story-binding/matching-turn prerequisites using passive session booleans only. All 73 command tests and a disposable WSL status smoke passed; the smoke blocked database/event-log reads and observed zero provider calls across bound/active-turn, missing-turn, and ended-binding states. It does not probe provider readiness, check durable origin, reveal private identities, or permit generation.
 4. **Deliver reviewed adventure import before automatic extraction:** route large documents, `details.md`, and exported conversations through canonical prechunking, provenance, review, and an explicit adventure-scoped handoff. This creates a usable “import, load, and continue” path without silently producing personal memories or trusting model prose as state.
+   **COMPLETED DISCONNECTED JOB PROGRESS VIEWS (FIVE WSL INTEGRATION SMOKES PASSED):** Internal immutable snapshots/listing report only exact job identity, original timestamps, closed state, actual saved-checkpoint/pending/candidate/failure counts and result availability. Reads never resume work, renew expiry, rewrite state or publish document/candidate content; expired progress is unavailable. Aggregate checkpoint overflow now denies before persistence, preserving final-result capacity. Three pure read-model tests passed natively and five disposable WSL integration gates passed. Public controls still need a distinct ownership/access boundary; no worker, dashboard, API, review rehydration or production storage is enabled by this slice.
+   **COMPLETED DISCONNECTED JOB RESULTS/CHECKPOINTS (TEN WSL LIFECYCLE SMOKES PASSED):** The private job-store foundation now validates and retains source-bound candidate/failure results and exact completed-chunk checkpoints. Explicit resume can identify unfinished chunks without discarding saved work; explicit assembly requires all prepared chunks. Stale/expired attempts, provenance mismatch, checkpoint conflicts, malformed saved output, and incomplete assembly deny. Six pure codec checks passed natively and ten disposable WSL result/checkpoint gates passed. Storage-v1 source-only records remain readable; storage-v2 adds validated output fields. No worker, review rehydration, public controls, automatic retry, or larger intake limit is enabled; those remain separately gated.
+   **COMPLETED DISCONNECTED JOB SOURCE/METADATA FOUNDATION (TEN WSL STORAGE SMOKES PASSED):** An opt-in POSIX/WSL private-directory store persists bounded source/metadata with a lifetime owner lock, atomic replacement, fixed 24-hour expiry, restart fencing, explicit resume/delete, and exact cleanup. Ten disposable provider-free storage lifecycle gates passed; native Windows correctly refuses storage pending its ACL/handle backend. No application constructs the store and no production directory is enabled. Follow-up result/checkpoint completion is recorded above; user controls, worker/capacity/Focus Mode integration, automatic sweep scheduling, and abandoned-pending recovery remain deferred. This does not complete the long-running annotation-job milestone.
    **COMPLETED IMPORT WRITER SOURCE/CHUNK GUARD (WSL FIXTURE SMOKE PASSED):** New noncanonical staging independently checks selected candidate source IDs and membership in the supplied prepared document's chunks before locking/writing. Same-domain foreign candidates are rejected; valid exact retry remains idempotent. All six import tests, 44 API tests, and a disposable WSL staging smoke passed. Historical logs, canonical events, and shared memory remain unchanged; fixture success is not extraction-quality evidence.
    **COMPLETED DOCUMENT REVIEW CANONICAL-SELECTION GUARD (WSL FIXTURE SMOKE PASSED):** Single and batch candidate selection now share bounded canonical ASCII ordinal validation before lookup/status checks. Alternate-padding and Unicode-digit aliases cannot bypass an ephemeral dismissal; case/outer whitespace compatibility remains. All nine review and 44 API tests passed locally and in WSL; a disposable review smoke confirmed dismissal and compatible canonical handoff with database/provider access blocked. No persistence or authority expansion is added.
    **PERSISTENT ANNOTATION-JOB DECISION (2026-10-23; NOT IMPLEMENTED):** Long-running annotation jobs will retain private source documents and results across restart for 24 hours from original submission, with an explicit delete control. Restart, access, retry, and resume must not extend that deadline. Recovery may restore validated metadata/results, but interrupted provider work requires explicit resume rather than automatic replay. Expired jobs must be unavailable before any content access; startup/periodic cleanup and explicit deletion must remove job-owned source/results only, without changing approved memories or canonical adventure records. Logical deletion is not guaranteed secure erasure of backups or storage media. Implement in dependency order: provider-free versioned lifecycle/retention contracts; isolated bounded private job storage and crash/restart tests; explicit submit/status/resume/delete controls; then a bounded worker honoring Focus Mode, capacity admission, cancellation, and existing review/handoff authority. Durable jobs must not turn opaque conversation IDs into authentication or silently make the existing ephemeral review store persistent. No runtime storage or worker is enabled by this planning decision.
@@ -780,6 +783,73 @@ unrestricted assistant memory.
 5. Build the low-resource apartment as a state visualization: workbench for active projects, bookshelf for installed models, newspaper for feeds, calendar for schedule, window for permissioned desktop state, and frames for artwork.
 6. Keep generated/procedural placeholder assets replaceable by commissioned art through stable asset IDs.
 7. Add an opt-in idle adventure scene display after structured adventure state and image generation exist. When permissioned user inactivity exceeds a configurable delay and an adventure remains active, Core may summarize the current structured scene and generate a cached illustrative image for an apartment frame/overlay. It must debounce generation, respect privacy/resource modes, react immediately to user activity, and never treat the image as canon or invoke an LLM for every idle tick.
+
+#### Desktop overlay input/focus safety — early visible-client gate
+
+**Priority:** fix/validate as soon as a desktop companion overlay exists, before
+in-game rollout or richer interactive overlay work. This does not reorder the
+current adventure/import implementation sequence or change the browser-only
+apartment prototype. A user report of an unrelated pet overlay apparently
+interrupting captured game input motivates this requirement; its cause is not
+verified evidence about StarFur or that overlay's implementation.
+
+- In game/fullscreen/borderless or cursor-captured use, default to a genuinely
+  click-through, non-activating overlay: companion pixels, transparent bounds,
+  hover effects, menus, notifications, animation and TTS must not intercept
+  pointer input, acquire keyboard focus, release cursor capture, or activate a
+  window. Do not synthesize/forward clicks to the game as a workaround.
+- Allow an explicit configurable hotkey to enter a visibly indicated temporary
+  interaction mode. Only this deliberate action may enable companion hit
+  targets/focus. Escape, the toggle hotkey, a conservative timeout, or a
+  switching away to another app returns to click-through mode (intentional
+  activation of the overlay itself must not immediately cancel interaction).
+  Relinquish overlay input
+  without forcibly activating another window. Normal desktop use may retain
+  ordinary companion clickability; allow a manual game-safe toggle/override.
+- Any automatic foreground/game detection must use a separately authorized,
+  minimal local adapter, not screen surveillance, raw key logging, or model
+  inference. If detection is unavailable/uncertain, offer the manual safe mode
+  and prefer non-activation rather than guessing. Presentation owns window/input
+  mechanics; Core supplies bounded presence policy, never game input authority.
+- Prefer supported OS/compositor overlays. Do not inject into game processes,
+  hook game input, or bypass anti-cheat to achieve visibility. Exclusive
+  fullscreen, anti-cheat restrictions, or unsupported hosts may require hiding
+  the companion rather than promising an overlay works everywhere.
+
+**Acceptance gate:** native Windows, user-run checks must cover fullscreen and
+borderless games, captured/released cursor, accidental clicks across the full
+overlay rectangle, hotkey entry/exit, Escape/timeout, Alt-Tab, multi-monitor/DPI,
+notifications, and overlay crash/restart. The game must retain focus/capture in
+passive mode, interaction must be deliberate and reversible, and CPU/GPU/frame
+impact must remain bounded. Deterministic input-policy tests supplement but do
+not replace these visual/game checks. No live game automation is authorized by
+this roadmap requirement.
+
+##### Character size and movement presentation (planned)
+
+Provide an obvious per-character size slider with a reset-to-default control,
+proportional scaling, and sensible minimum/maximum bounds. Save this as a local
+presentation preference, not persona identity, emotion, memory, or a model
+decision. Users may prefer a small unobtrusive resident or a larger character;
+changing size must not require replacing assets or editing configuration files.
+
+Use DPI-aware logical sizing across monitors. Recompute visible bounds, allowed
+roaming/sitting positions, anchors, and interactive hit targets together, keeping
+the character inside the permitted work area after resizing, monitor changes,
+or restart. Scaling must never create invisible oversized click targets, change
+the game-safe click-through policy, steal focus, or silently increase rendering
+work without bounds. Preserve aspect ratio and define sensible rendering for
+authored pixel-art versus higher-resolution assets without locking an engine.
+
+Treat the user's stationary pet-overlay experiment as subjective visual-concept
+validation, not evidence that roaming, environment interactions, input safety,
+or resource behavior are implemented. StarFur's later movement and independent
+activities reuse the resident scheduler/action and presentation boundaries;
+character size is independent of those milestones.
+
+Acceptance includes slider/reset/persistence, minimum/maximum sizes,
+mixed-DPI/multi-monitor transitions, roaming bounds and accurate hit targets at
+each size, and unchanged passive game input. Visual/game checks remain user-run.
 
 #### Ambient Presence (planned; cross-cutting resident capability)
 

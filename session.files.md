@@ -11,15 +11,20 @@ See AGENTS.md for standing test/sync authority and exclusions.
 
 None.
 
-The import-provenance and canonical review-selection source, tests, AGENTS.md,
-and command documentation were copied and verified in WSL on 2026-10-23.
-All six import, nine review, and 44 API tests passed; disposable import/review
-smokes passed without production state or providers. Final evidence and
-the persistent-job planning decision are synchronized. The inert job-policy
-module, its tests, and AGENTS.md were also copied and verified; five focused
-tests passed on Windows/WSL and all 1,188 WSL regressions passed with strict
-ResourceWarning handling. The manifest itself is always included in its final
-exact-path synchronization.
+The progress read model, store changes, tests, and AGENTS.md were copied and
+verified in WSL on 2026-10-24. Three pure read-model tests passed natively;
+five disposable WSL integration smoke gates passed. The final provider-free
+WSL suite ran 1,223 tests successfully (one Windows-only skip) with
+ResourceWarning promoted to an error. Final evidence documents are synchronized;
+the cleared manifest itself must also be synchronized. Paused after five
+successful gates; application/worker
+integration, access controls and review rehydration remain deferred.
+
+The subsequent documentation-only desktop overlay input/focus gate and its
+changelog entry were also synchronized and verified. No source or runtime
+behavior changed; native game/visual checks remain user-owned future gates.
+The subsequent per-character sizing/presentation roadmap addition and changelog
+entry were also synchronized and verified; no source behavior changed.
 
 ## Verified / no longer pending
 

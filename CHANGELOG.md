@@ -1917,3 +1917,34 @@
 - Boundary: no storage, source/results, worker, provider, command/API, authorization, or deletion is connected. Expiry is logical access denial, not erasure or verified provider stop; existing ephemeral reviews are unchanged.
 - Verification: five focused tests passed on Windows and WSL; all 1,188 provider-free WSL tests passed with ResourceWarning promoted to an error. No live provider, durable job store, or production data operation was used.
 
+## 2026-10-23 - Add disconnected private annotation source storage
+
+- Foundation: optional POSIX/WSL owner-only source/metadata store with an exclusive lifetime owner lock, bounded atomic records, fixed submission expiry, restart fencing, explicit resume/deletion, and exact expired-record cleanup. No application creates it; no results, worker, API, or canonical-memory/adventure writer is connected.
+- Boundary: native Windows remains denied until ACL/handle controls have their own gate. Per-attempt bindings reject stale lifecycle updates. Linked/malformed records, abandoned pending replacements, and capacity overflow fail closed. Private plaintext is not encryption, and logical cleanup is not secure media erasure or proof of provider termination.
+- Verification: ten disposable WSL storage lifecycle smoke gates passed, including separate-process ownership and corrupted-source refusal before recovery writes. Native Windows passed its unsupported-host/no-storage-creation check; its ten POSIX cases are intentionally skipped. Full-suite final verification is recorded in `2026-10-23.annotation-jobs.sprint.md`. No live provider or production state was used.
+
+## 2026-10-23 - Persist validated annotation results and completed-chunk checkpoints
+
+- Foundation: a pure bounded codec revalidates complete candidate/failure results against the original prepared source and reconstructs exact observation/provenance. The disconnected store can retain final output, save exact idempotent chunk outcomes, expose an internal unfinished-chunk plan, and explicitly assemble all completed checkpoints after resume.
+- Integrity: completion/checkpoint writes require the current unexpired owner/attempt binding. Conflicting checkpoints, source/domain/provenance mismatches, malformed saved results, and incomplete final assembly deny without replacing prior records. Restart preserves completed output and partial checkpoints but never restarts work. Storage-v1 source-only records remain readable; storage-v2 adds output fields without inventing results.
+- Boundary: completion is not factual quality, review approval, a memory write, or provider-stop evidence. No worker, application/API control, automatic retry, review rehydration, production storage, or larger intake limit is enabled.
+- Verification: six pure codec tests passed natively; ten new disposable WSL result/checkpoint lifecycle gates passed, including expiry during validation before atomic replacement. Native focused verification ran 32 tests successfully with 20 POSIX-only cases skipped. The full provider-free WSL suite ran 1,215 tests successfully (one native-Windows-only skip) with ResourceWarning promoted to an error. No live provider or production state was used.
+
+## 2026-10-23 - Gate desktop companionship on game-safe overlay input
+
+- Planning: add an early visible-desktop-client gate for click-through/non-activating game presence, deliberate hotkey interaction, automatic return to passive mode, and ordinary desktop clickability. The motivating third-party overlay focus-loss report is not a verified diagnosis or StarFur bug.
+- Boundary: permissioned minimal foreground detection or manual safe mode; no game injection, input forwarding, key logging, anti-cheat bypass, or hidden screen observation. Unsupported fullscreen environments may hide the overlay safely.
+- Verification: documentation only. Native Windows focus/cursor, hotkey, Alt-Tab, DPI/multi-monitor, failure and game-performance checks remain user-run gates when a desktop overlay exists. Immediate implementation order is unchanged.
+
+## 2026-10-23 - Plan easy character sizing independent of resident behavior
+
+- Planning: add a per-character size slider/reset and local persisted presentation preference, with proportional bounded sizing, DPI-aware monitor transitions, updated roaming/anchor bounds, and matching hit targets. Scaling must preserve game-safe passive input and bounded rendering work.
+- Evidence: the user's stationary pet experiment supports the desired visual direction only; roaming, independent activity, and input safety remain separate implementation/test gates. Documentation only; current dependency order and runtime behavior are unchanged.
+
+## 2026-10-24 - Add content-free annotation-job progress views
+
+- Foundation: immutable bounded progress snapshots and trusted-store listing expose original timestamps, closed state, actual saved-checkpoint/pending/candidate/failure counts and result availability. No filenames, source/candidate text, domains, provenance refs, provider data or paths are exported. Reading never schedules/resumes work, renews retention, or rewrites state; expiry is rechecked before snapshot return.
+- Integrity: reject aggregate checkpoint candidate overflow before persistence so saved work cannot exceed the final-result ceiling. Malformed durable state refuses listing rather than returning a partial view or repairing records.
+- Boundary: internal provider-free views only; no API/CLI control, worker, dashboard, authentication, production storage, or review rehydration is connected. Completion/counts are not factual quality or provider-stop evidence.
+- Verification: three pure read-model tests passed natively; all five disposable WSL progress integration gates passed. The full provider-free WSL suite ran 1,223 tests successfully (one native-Windows-only skip) with ResourceWarning promoted to an error. No live provider, production state or visual/game check was used; see `2026-10-24.annotation-jobs.sprint.md`.
+
