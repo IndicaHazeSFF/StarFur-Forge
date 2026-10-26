@@ -11,14 +11,18 @@ See AGENTS.md for standing test/sync authority and exclusions.
 
 None.
 
-The application chunk seam, processor/store changes, fixtures, tests and
-AGENTS.md were copied and verified in WSL on 2026-10-25. All twenty unique
-fake-provider integration gates passed. The final provider-free WSL suite ran
-1,245 tests successfully (one Windows-only skip) with ResourceWarning promoted
-to an error. Final evidence documents are synchronized; the cleared manifest
-itself must also be synchronized. Paused after twenty successful gates;
-public controls, ownership/access policy, background
-service integration and review rehydration remain deferred.
+The 2026-10-26 per-attempt runtime adapter, application/processor changes,
+tests, AGENTS and command documentation were copied and hash-verified in WSL.
+All ten unique disposable runtime/store gates plus two pure contracts passed.
+Full provider-free WSL discovery passed 1,275 tests (one Windows-only skip)
+with ResourceWarning promoted to an error. All 92 annotation-job subsystem
+tests passed (one skip). Final evidence files are synchronized and all queued
+copies hash-verified; this cleared manifest is the final sync item.
+Stopped at ten gates; the user requested a scoped furry commit after verification.
+No live providers or production state were used. New edits must re-enter this
+pending queue. Processing, shared-access ownership, background service and
+review rehydration remain deferred. Prior durable evidence is in the sprint
+records and changelog, not this pending deployment queue.
 
 The subsequent documentation-only desktop overlay input/focus gate and its
 changelog entry were also synchronized and verified. No source or runtime

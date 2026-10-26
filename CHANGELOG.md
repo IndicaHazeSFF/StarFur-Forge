@@ -1,3 +1,22 @@
+## 2026-10-26 - Bind internal annotation attempts to exact runtime settings
+
+- Foundation: provider-free capture of the default application session, exact provider object and bounded effective primary/fallback profile fingerprint. Bound chunk calls compare before and after provider work under the ordinary session lock, preserving normal routing, Focus Mode and capacity gates.
+- Integrity: configuration/provider drift yields content-free `runtime_binding_changed`, discards late output and fences processor acceptance without automatic rebind/retry. Explicit new trusted attempts can retain prior checkpoints; this is not durable job-wide route provenance or model-byte attestation.
+- Boundary: internal in-process restriction only, not authentication, disclosure permission, readiness or verified termination. No public processing command, provider construction, background worker or canonical writer is enabled.
+- Verification: native pure binding contracts and all ten disposable WSL runtime/store integration gates passed. All 92 annotation-job tests and full 1,275-test provider-free WSL discovery passed (one Windows-only skip each), with ResourceWarning promoted to an error. No live provider or production state was used; see `2026-10-26.annotation-runtime.sprint.md`.
+
+## 2026-10-26 - Add confirmed local annotation-job submission
+
+- Behavior: explicit private-storage confirmation plus open-maintenance acknowledgement allows bounded UTF-8 stdin submission through existing filename/domain/profile intake, returning only content-free queued progress. Invalid input/metadata refuses before store construction; no directory is auto-created and no file path is accepted by this adapter.
+- Boundary: private plaintext, original 24-hour expiry, unchanged 2 MiB intake limit, each explicit submission a new bounded job. Source remains data even when command-shaped. No provider/processor, shared API/assistant control, result disclosure, review rehydration or canonical write. Ctrl+C returns a bounded uncertain-storage notice without replay.
+- Verification: all ten disposable WSL submission integration gates and two pure contracts passed. All 80 annotation-job tests and full 1,263-test provider-free discovery passed (one Windows-only skip each), with ResourceWarning promoted to an error. Native input/authority checks passed; POSIX gates correctly skipped. No live provider or production state was used; see `2026-10-26.annotation-submission.sprint.md`.
+
+## 2026-10-26 - Add explicit local private-job maintenance controls
+
+- Behavior: opt-in `annotation-jobs` CLI exposes content-free list/status, explicit resume intent and exact repeated-ID deletion confirmation. No default directory or source/result disclosure is added.
+- Boundary: local OS ownership of an existing owner-only POSIX/WSL store; every open explicitly acknowledges restart fencing and expiry cleanup. Invalid arguments/confirmation refuse before opening. No provider, worker, submission, shared API/assistant authority, review rehydration or canonical write is connected. Resume alone starts no work; retention never renews. Logical deletion is not secure erasure.
+- Verification: all five disposable WSL local-control integration gates and the input contract check passed. Full provider-free WSL discovery ran 1,251 tests successfully (one Windows-only skip) with ResourceWarning promoted to an error. Native contract validation passed; POSIX storage gates correctly skipped there. No live provider or production state was used; see `2026-10-26.annotation-control.sprint.md`.
+
 ## 2026-08-20 - Mount bounded public adventure resource projections
 
 - Behavior: mounted adventure sessions now rebuild complete catalog-validated resource state from events, report resource counts in status, inject only a bounded public projection, and expose it through the read-only `adventure resources` control.

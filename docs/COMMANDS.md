@@ -30,6 +30,76 @@ requires a pause. Job scope, not the number of files, controls that distinction.
 
 ## Provider-free regression checks
 
+### Explicit local annotation-job maintenance (POSIX/WSL)
+
+Standalone operator controls, not assistant/chat/API commands. Supply an
+**existing owner-only private job directory**; no default directory is created.
+Do not use a store owned by a live process. This is local OS-user trust, not
+multi-user authentication.
+
+Every call requires `--acknowledge-maintenance`: **opening fences unfinished
+queued/running intent and deletes expired job records**, even for list/status.
+Once open, progress reads themselves are passive. Retention remains 24 hours
+from original submission, never renewed by access or resume.
+
+    python3 starfur.py annotation-jobs --root /absolute/private/job-store --acknowledge-maintenance list
+    python3 starfur.py annotation-jobs --root /absolute/private/job-store --acknowledge-maintenance status AJ-<32-lowercase-hex>
+    python3 starfur.py annotation-jobs --root /absolute/private/job-store --acknowledge-maintenance resume AJ-<32-lowercase-hex>
+    python3 starfur.py annotation-jobs --root /absolute/private/job-store --acknowledge-maintenance delete AJ-<32-lowercase-hex> --confirm-delete AJ-<same-32-lowercase-hex>
+
+Angle-bracket values are placeholders, not literal shell input. Deletion needs
+the exact ID twice and removes only that job's private source/results. Missing
+or mismatched confirmation refuses before store opening/maintenance. Deletion
+is logical, not secure erasure of backups/media; canonical memories/adventures
+are untouched. Resume only records queued intent: no provider/processor starts,
+and a later owner fences it again. Processing controls remain deferred.
+
+Explicit private submission accepts UTF-8 text from stdin (not a file-path
+argument). Both confirmations are required before input is consumed. The
+existing 2 MiB intake ceiling, supported text suffixes and structural profiles
+remain unchanged; blank/nonchunkable input is refused before store opening.
+
+    python3 starfur.py annotation-jobs --root /absolute/private/job-store --acknowledge-maintenance submit --filename notes.md --domain personal --profile assistant_note --confirm-store < /path/to/notes.md
+
+The shell opens the exact source you selected. StarFur receives only bytes;
+`--filename` is a display name without path components. Defaults are `personal`
+and `assistant_note`; explicit `project:<slug>` and structural profiles such as
+`technical_document` are supported through the normal intake validator. The
+source is private plaintext, not encrypted, and queued without calling a model.
+Output remains content-free progress; there is no source/result inspection or
+review rehydration here. Every repeated confirmed submission creates a new job
+within the store's existing capacity, not an idempotent retry. A later open
+fences queued intent as interrupted until explicit resume/processing controls.
+Ctrl+C returns exit status 130 and warns that storage completion may be
+uncertain; inspect before retrying. No automatic retry or provider-stop claim.
+
+Output is content-free JSON progress or a deletion acknowledgement. Completed
+is not factual quality. Busy owners, malformed state, unsafe roots and native
+Windows storage fail closed; inspect the cause rather than forcing recovery.
+Exit status: 0 success, 2 refusal. `python3 -m pipeline.document_job_control`
+supports the same arguments without starting the assistant. No key/service needed.
+
+Disposable local-control regression (no real job directory needed):
+
+    python3 -W error::ResourceWarning -m unittest discover -s tests -t . -p "test_document_job_control.py" -v
+
+Disposable submission/input regression:
+
+    python3 -W error::ResourceWarning -m unittest discover -s tests -t . -p "test_document_job_submission.py" -v
+
+### Full and focused regression commands
+
+Internal annotation-job runtime-binding regression (disposable POSIX/WSL
+stores and fake providers, no key/service or real documents required):
+
+    python3 -W error::ResourceWarning -m unittest discover -s tests -t . -p "test_document_job_runtime.py" -v
+
+There is no user-facing processing command yet. The internal bound runtime
+captures exact per-attempt provider/profile settings and checks them before and
+after each chunk; configuration drift fences that attempt without auto-rebind
+or retry. A future explicit new attempt may select current settings, but this
+is not durable job-wide route provenance or a guarantee about model bytes.
+
 Run full discovery from the repository root with an explicit top level:
 
     python -m unittest discover -s tests -t . -v

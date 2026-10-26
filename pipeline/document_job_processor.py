@@ -15,6 +15,7 @@ from threading import RLock
 from pipeline.document_annotation import DocumentAnnotationDeferredError
 from pipeline.document_intake import DocumentAnnotationResult
 from pipeline.document_job_results import encode_annotation_job_result
+from pipeline.document_job_runtime import AnnotationJobRuntimeError
 from pipeline.document_job_store import AnnotationJobAttempt, AnnotationJobStore, AnnotationJobStoreError
 
 
@@ -25,7 +26,7 @@ _OUTCOMES = {
     "ready": frozenset({"no_pending_chunks"}),
     "deferred": _DEFER_REASONS | {"step_busy", "chunks_pending"},
     "interrupted": frozenset({"controller_interrupted"}),
-    "failed": frozenset({"annotation_failed", "storage_failed"}),
+    "failed": frozenset({"annotation_failed", "storage_failed", "runtime_binding_changed"}),
     "completed": frozenset({"result_saved"}),
 }
 
@@ -151,6 +152,9 @@ class AnnotationJobProcessor:
                     return AnnotationJobStep("deferred", error.reason)
             saved = self._fence(state)
             return AnnotationJobStep("failed", "annotation_failed" if saved else "storage_failed")
+        except AnnotationJobRuntimeError:
+            saved = self._fence(state)
+            return AnnotationJobStep("failed", "runtime_binding_changed" if saved else "storage_failed")
         except AnnotationJobStoreError:
             self._fence(state)
             return AnnotationJobStep("failed", "storage_failed")

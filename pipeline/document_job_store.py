@@ -1,7 +1,8 @@
 """Opt-in POSIX/WSL private annotation source/metadata storage.
 
-Trusted Core callers only; no application, worker, or user-facing
-control is connected. The caller supplies an existing host-owned private root.
+Trusted Core/local-maintenance callers only; no application worker is enabled.
+The optional explicit local CLI and internal processor are separate adapters.
+The caller supplies an existing host-owned private root.
 Files are bounded plaintext, not encrypted or tamper-proof against their owner.
 """
 
@@ -422,7 +423,8 @@ class AnnotationJobStore:
         """Trusted-store listing only; no conversation key authenticates a reader.
 
         Validate all records before returning any snapshot; omit expired jobs.
-        Future user-facing listing needs a separate ownership/access boundary.
+        The local operator CLI separately binds host ownership and acknowledged
+        maintenance. Shared user-facing listing still needs access policy.
         """
         with self._guard():
             records = [self._read(name[:-5]) for name in self._records()]

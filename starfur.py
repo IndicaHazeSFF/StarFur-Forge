@@ -299,6 +299,12 @@ def main():
     # ASSISTANT
     # -------------------------
 
+    from pipeline.document_job_control import configure_annotation_job_parser
+    jobs_parser = subparsers.add_parser(
+        "annotation-jobs", help="Explicit local private-job maintenance (no processing)",
+    )
+    configure_annotation_job_parser(jobs_parser)
+
     assistant_parser = subparsers.add_parser(
         "assistant",
         help="Start the local conversational assistant",
@@ -568,6 +574,10 @@ def main():
 
     elif args.command == "analyze":
         analyze(args.path)
+
+    elif args.command == "annotation-jobs":
+        from pipeline.document_job_control import run_annotation_job_command
+        raise SystemExit(run_annotation_job_command(args))
 
     elif args.command == "assistant":
         interactive_options = {

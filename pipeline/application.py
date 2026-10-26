@@ -1559,6 +1559,49 @@ class AssistantApplication:
             snapshot["presentation"] = ResidentPresentationPlan.from_resident_snapshot(snapshot).public_dict()
             return snapshot
 
+    def bind_annotation_job_runtime(self):
+        """Capture a default-session runtime restriction without provider use.
+
+        Internal Core assembly only; no public control, permission, durable
+        policy or worker is created. Normal per-chunk gates remain mandatory.
+        """
+        from pipeline.document_job_runtime import (
+            AnnotationJobRuntimeError, BoundAnnotationJobRuntime, annotation_runtime_fingerprint,
+        )
+
+        def snapshot(session):
+            provider = getattr(session, "provider", None)
+            if not provider_is_configured(provider):
+                raise AnnotationJobRuntimeError()
+            label = getattr(session, "_provider_name", None) or getattr(provider, "name", None) or "unknown"
+            provider_id = provider_route_status_from_runtime(label, configured=True, health_status=None).provider_id
+            fingerprint = annotation_runtime_fingerprint(
+                getattr(session.config, "task_profiles", TaskProfiles()),
+                default_model=self._active_model_for_session(session), provider_id=provider_id,
+            )
+            return provider, fingerprint
+
+        with self._locked_session_for() as captured_session:
+            captured_provider, captured_fingerprint = snapshot(captured_session)
+
+        def invoke(document, chunk_id):
+            # Serialize comparison and call with ordinary session-owned model
+            # controls; the processor never holds its lifecycle lock here.
+            with self._locked_session_for() as session:
+                def unchanged():
+                    provider, fingerprint = snapshot(session)
+                    if (session is not captured_session or provider is not captured_provider
+                            or fingerprint != captured_fingerprint):
+                        raise AnnotationJobRuntimeError()
+                unchanged()
+                result = self.annotate_document_chunk(document, chunk_id)
+                # Trusted callbacks may mutate config reentrantly. Never
+                # accept their late output into the old bound attempt.
+                unchanged()
+                return result
+
+        return BoundAnnotationJobRuntime(invoke)
+
     def annotate_document_chunk(self, document: PreparedDocument, chunk_id: str):
         """Explicit internal one-chunk seam through the normal annotation gates.
 
