@@ -11,14 +11,14 @@ See AGENTS.md for standing test/sync authority and exclusions.
 
 None.
 
-The progress read model, store changes, tests, and AGENTS.md were copied and
-verified in WSL on 2026-10-24. Three pure read-model tests passed natively;
-five disposable WSL integration smoke gates passed. The final provider-free
-WSL suite ran 1,223 tests successfully (one Windows-only skip) with
-ResourceWarning promoted to an error. Final evidence documents are synchronized;
-the cleared manifest itself must also be synchronized. Paused after five
-successful gates; application/worker
-integration, access controls and review rehydration remain deferred.
+The application chunk seam, processor/store changes, fixtures, tests and
+AGENTS.md were copied and verified in WSL on 2026-10-25. All twenty unique
+fake-provider integration gates passed. The final provider-free WSL suite ran
+1,245 tests successfully (one Windows-only skip) with ResourceWarning promoted
+to an error. Final evidence documents are synchronized; the cleared manifest
+itself must also be synchronized. Paused after twenty successful gates;
+public controls, ownership/access policy, background
+service integration and review rehydration remain deferred.
 
 The subsequent documentation-only desktop overlay input/focus gate and its
 changelog entry were also synchronized and verified. No source or runtime

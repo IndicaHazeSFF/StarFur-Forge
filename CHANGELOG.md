@@ -1948,3 +1948,16 @@
 - Boundary: internal provider-free views only; no API/CLI control, worker, dashboard, authentication, production storage, or review rehydration is connected. Completion/counts are not factual quality or provider-stop evidence.
 - Verification: three pure read-model tests passed natively; all five disposable WSL progress integration gates passed. The full provider-free WSL suite ran 1,223 tests successfully (one native-Windows-only skip) with ResourceWarning promoted to an error. No live provider, production state or visual/game check was used; see `2026-10-24.annotation-jobs.sprint.md`.
 
+## 2026-10-25 - Add exact application annotation-chunk seam
+
+- Foundation: an internal one-chunk request preserves the original prepared source/provenance and reuses normal annotation routing, Focus Mode, shared capacity, validation and bounded retry. Invalid/ambiguous chunk bindings deny before provider use; callers cannot inject providers/models/annotators through this seam.
+- Boundary: closed typed policy/capacity/route deferrals contain no provider prose. Existing whole-document HTTP capacity behavior is unchanged. No public control, worker, job store, production state or automatic resume is connected.
+- Verification: five fake-provider application gates passed natively and in WSL; 28 task-profile regressions also passed natively. Processor gates remain separately tracked in `2026-10-25.annotation-processor.sprint.md`.
+
+## 2026-10-25 - Add explicit checkpointed annotation processor
+
+- Foundation: explicit start, one-chunk step, interruption and all-checkpoint finish over an injected Core application runtime. Process-local exact handles/current attempts fence concurrent duplicates and stale/late output. Deferral never retries itself; resume remains a separate store decision. Results remain untrusted and noncanonical.
+- Integrity: runtime calls hold no processor lifecycle lock; Ctrl+C/explicit interruption fence output acceptance and preserve earlier checkpoints. The application releases its capacity in its existing finally path and now records a content-free annotation interruption lifecycle error rather than remaining generating. No verified remote-stop claim is made.
+- Boundary: no background service, public control, production storage, review rehydration or canonical writer. Chunk execution metadata is deliberately not summed into unsupported whole-job accounting.
+- Verification: all twenty unique fake-provider WSL integration gates passed across application admission, explicit checkpoint processing, interruption/concurrency, and completion/failure recovery. One fixture expectation was corrected to distinguish the adapter's existing bounded failed-chunk behavior from an escaped runtime error; both paths are now checked. The final provider-free WSL suite ran 1,245 tests successfully (one native-Windows-only skip) with ResourceWarning promoted to an error. No live provider or production state was used.
+

@@ -485,6 +485,21 @@ class AnnotationJobStore:
             raise AnnotationJobStoreError("annotation job has expired")
         return record
 
+    def next_chunk(self, attempt: AnnotationJobAttempt) -> tuple[PreparedDocument, str] | None:
+        """Read the next unfinished original chunk for one current run intent.
+
+        This internal plan is not provider admission, scheduling or disclosure
+        consent. No checkpoint/state is changed just by reading it.
+        """
+        with self._guard():
+            record = self._unexpired_attempt(attempt)
+            document = self._document(record)
+            saved = {item["chunk_id"] for item in record["checkpoints"]}
+            selected = next((chunk.chunk_id for chunk in document.chunks if chunk.chunk_id not in saved), None)
+            if not annotation_job_accessible(self._metadata(record), now=self._clock()):
+                raise AnnotationJobStoreError("annotation job has expired")
+            return (document, selected) if selected is not None else None
+
     def complete(self, attempt: AnnotationJobAttempt, result: DocumentAnnotationResult) -> None:
         """Persist validated full-run output, never approve its claims or write memory.
 

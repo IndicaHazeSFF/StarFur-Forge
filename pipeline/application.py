@@ -31,8 +31,10 @@ from pipeline.command_input import (
     MIXED_CONTROL_INPUT_GUIDANCE, has_ambiguous_multiline_controls, is_context_stats_request,
 )
 from pipeline.db import upsert_assistant_memory_proposal
-from pipeline.document_annotation import DocumentProposalAnnotator, FailoverDocumentProposalAnnotator
-from pipeline.document_intake import PreparedDocument, extract_document_memory_candidates_resilient
+from pipeline.document_annotation import (
+    DocumentAnnotationDeferredError, DocumentProposalAnnotator, FailoverDocumentProposalAnnotator,
+)
+from pipeline.document_intake import IntakeChunk, PreparedDocument, extract_document_memory_candidates_resilient
 from pipeline.retrieval import DeterministicMemoryRetriever, MemoryRetriever
 from pipeline.task_profiles import (
     TASK_DOCUMENT_ANNOTATION,
@@ -1557,6 +1559,33 @@ class AssistantApplication:
             snapshot["presentation"] = ResidentPresentationPlan.from_resident_snapshot(snapshot).public_dict()
             return snapshot
 
+    def annotate_document_chunk(self, document: PreparedDocument, chunk_id: str):
+        """Explicit internal one-chunk seam through the normal annotation gates.
+
+        It cannot accept an injected annotator, provider, model, grant, or
+        routing override. Default construction creates no job store/worker;
+        no public API/command invokes this path. Source identity stays original.
+        """
+        if type(document) is not PreparedDocument or not isinstance(chunk_id, str) or len(chunk_id) > 512:
+            raise ValueError("annotation chunk binding is invalid")
+        if (type(document.chunks) is not tuple or len(document.chunks) > 100_000
+                or any(type(chunk) is not IntakeChunk or not isinstance(chunk.chunk_id, str)
+                       or len(chunk.chunk_id) > 512 for chunk in document.chunks)
+                or len({chunk.chunk_id for chunk in document.chunks}) != len(document.chunks)):
+            raise ValueError("annotation chunk binding is invalid")
+        matches = [chunk for chunk in document.chunks if chunk.chunk_id == chunk_id]
+        if len(matches) != 1:
+            raise ValueError("annotation chunk binding is invalid")
+        chunk = matches[0]
+        if (chunk.source_id != document.source_id or chunk.domain != document.domain
+                or chunk.profile != document.profile or chunk.source_name != document.source_name
+                or chunk.source_kind != document.source_kind):
+            raise ValueError("annotation chunk binding is invalid")
+        try:
+            return self.annotate_document(replace(document, chunks=(chunk,)))
+        except ProviderCapacityBusyError:
+            raise DocumentAnnotationDeferredError("provider_capacity_busy") from None
+
     def annotate_document(self, document: PreparedDocument, *, annotator=None, progress=None):
         """Return validated external-document candidates without persistence.
 
@@ -1623,6 +1652,10 @@ class AssistantApplication:
                 result = extract_document_memory_candidates_resilient(
                     document, annotator, max_attempts=max_attempts, progress=progress,
                 )
+            except KeyboardInterrupt:
+                if lifecycle is not None:
+                    lifecycle.fail("annotation_interrupted")
+                raise
             except Exception as error:
                 if lifecycle is not None:
                     lifecycle.fail(error)
@@ -1649,7 +1682,7 @@ class AssistantApplication:
         """
         provider = getattr(session, "provider", None)
         if not provider_is_configured(provider):
-            raise RuntimeError("Document annotation provider is unavailable.")
+            raise DocumentAnnotationDeferredError("provider_unavailable")
         provider_name = getattr(session, "_provider_name", None) or getattr(provider, "name", None) or "unknown"
         provider_status = provider_route_status_from_runtime(
             provider_name,
@@ -1668,13 +1701,10 @@ class AssistantApplication:
         )
         selected = decision.selected
         if selected is None or selected.task_id != task_id:
-            raise RuntimeError("Document annotation route is unavailable.")
+            raise DocumentAnnotationDeferredError("route_unavailable")
         focus_deferred = getattr(session, "focus_mode_defers_profile", None)
         if callable(focus_deferred) and focus_deferred(selected.profile):
-            raise RuntimeError(
-                f"Document annotation task {task_id!r} is deferred by Focus Mode "
-                f"({selected.profile.resource_profile} workload)."
-            )
+            raise DocumentAnnotationDeferredError("focus_mode")
         return provider, selected.profile, selected.provider_id
 
     def create_document_pending_proposal(self, candidate):

@@ -26,6 +26,22 @@ DOCUMENT_ANNOTATION_PRIMARY_RETRY_ATTEMPTS = 2
 DOCUMENT_ANNOTATION_FALLBACK_RETRY_ATTEMPTS = 1
 
 
+class DocumentAnnotationDeferredError(RuntimeError):
+    """Closed provider-free deferral classification, never provider error prose."""
+
+    def __init__(self, reason: str):
+        messages = {
+            "focus_mode": "Document annotation is deferred by Focus Mode.",
+            "provider_capacity_busy": "Document annotation provider capacity is currently busy.",
+            "provider_unavailable": "Document annotation provider is unavailable.",
+            "route_unavailable": "Document annotation route is unavailable.",
+        }
+        if reason not in messages:
+            raise ValueError("document annotation deferral reason is invalid")
+        self.reason = reason
+        super().__init__(messages[reason])
+
+
 def build_document_annotation_messages(chunk: IntakeChunk, *, retry_attempt: int = 1) -> list[dict[str, str]]:
     """Build the bounded, document-specific extraction request for one chunk."""
     taxonomy = assistant_memory_type_prompt()
