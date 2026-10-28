@@ -31,6 +31,9 @@ from pipeline.document_jobs import (
     recover_annotation_job, resume_annotation_job,
 )
 from pipeline.document_job_status import AnnotationJobProgress, AnnotationJobProgressError
+from pipeline.document_job_runtime import (
+    AnnotationJobRuntimeError, AnnotationRuntimeEvidence, validate_runtime_fingerprint,
+)
 
 try:
     import fcntl
@@ -44,6 +47,7 @@ MAX_JOB_COUNT = 32
 MAX_STORE_BYTES = 64 * 1024 * 1024
 _LOCK = ".annotation-jobs.owner.lock"
 STORAGE_VERSION = 2
+RUNTIME_STORAGE_VERSION = 3
 
 
 class AnnotationJobStoreError(ValueError):
@@ -172,7 +176,7 @@ class AnnotationJobStore:
                     raise AnnotationJobStoreError("private job owner changed")
                 yield
             except (OSError, AnnotationJobPolicyError, AnnotationJobResultError,
-                    AnnotationJobProgressError, UnicodeError, RecursionError):
+                    AnnotationJobProgressError, AnnotationJobRuntimeError, UnicodeError, RecursionError):
                 raise AnnotationJobStoreError("private job operation failed safely") from None
 
     @staticmethod
@@ -223,7 +227,8 @@ class AnnotationJobStore:
                 # in memory; reads never rewrite or invent recovered output.
                 record = {**record, "storage_version": STORAGE_VERSION, "result": None, "checkpoints": []}
             if (set(record) != legacy_fields | {"storage_version", "result", "checkpoints"}
-                    or type(record["storage_version"]) is not int or record["storage_version"] != STORAGE_VERSION
+                    or type(record["storage_version"]) is not int
+                    or record["storage_version"] not in {STORAGE_VERSION, RUNTIME_STORAGE_VERSION}
                     or record["job_id"] != job_id):
                 raise ValueError
             metadata = self._metadata(record)
@@ -286,7 +291,13 @@ class AnnotationJobStore:
         seen = set()
         candidate_count = 0
         for checkpoint in checkpoints:
-            if type(checkpoint) is not dict or set(checkpoint) != {"chunk_id", "result"}:
+            if type(checkpoint) is not dict:
+                raise AnnotationJobStoreError("annotation checkpoints are invalid")
+            fields = {"chunk_id", "result"}
+            if record["storage_version"] == RUNTIME_STORAGE_VERSION and "runtime_fingerprint" in checkpoint:
+                fields.add("runtime_fingerprint")
+                validate_runtime_fingerprint(checkpoint["runtime_fingerprint"])
+            if set(checkpoint) != fields:
                 raise AnnotationJobStoreError("annotation checkpoints are invalid")
             chunk_id = checkpoint["chunk_id"]
             validate_chunk_checkpoint(document, chunk_id, checkpoint["result"])
@@ -526,25 +537,54 @@ class AnnotationJobStore:
                 raise AnnotationJobStoreError("annotation job has no completed result")
             return decode_annotation_job_result(self._document(record), record["result"])
 
-    def save_checkpoint(self, attempt: AnnotationJobAttempt, chunk_id: str, result: DocumentAnnotationResult) -> None:
+    def save_checkpoint(self, attempt: AnnotationJobAttempt, chunk_id: str, result: DocumentAnnotationResult,
+                        *, runtime_fingerprint: str | None = None) -> None:
         """Save one completed chunk exactly once; empty and failed are distinct.
 
         Retry of identical checkpoint data is idempotent. Conflicting data or a
         stale attempt cannot overwrite evidence from an earlier chunk attempt.
         """
+        if runtime_fingerprint is not None:
+            try:
+                validate_runtime_fingerprint(runtime_fingerprint)
+            except AnnotationJobRuntimeError:
+                raise AnnotationJobStoreError("annotation runtime evidence is invalid") from None
         with self._guard():
             record = self._unexpired_attempt(attempt)
             document = self._document(record)
             output = encode_annotation_job_result(document, result)
             validate_chunk_checkpoint(document, chunk_id, output)
+            saved = {"chunk_id": chunk_id, "result": output}
+            if runtime_fingerprint is not None:
+                saved["runtime_fingerprint"] = runtime_fingerprint
             for checkpoint in record["checkpoints"]:
                 if checkpoint["chunk_id"] == chunk_id:
-                    if checkpoint["result"] == output:
+                    if checkpoint == saved:
                         return
                     raise AnnotationJobStoreError("annotation checkpoint conflicts with saved output")
-            updated = {**record, "checkpoints": record["checkpoints"] + [{"chunk_id": chunk_id, "result": output}]}
+            updated = {**record, "checkpoints": record["checkpoints"] + [saved]}
+            if runtime_fingerprint is not None:
+                updated["storage_version"] = RUNTIME_STORAGE_VERSION
             self._validate_saved_output(updated, document)
             self._write(updated, require_unexpired=True)
+
+    def runtime_evidence(self, job_id: str) -> AnnotationRuntimeEvidence:
+        """Internal saved-config coverage only; no source/result/hash exposure.
+
+        Legacy/unbound checkpoints remain unknown, never retroactively filled.
+        Equal declared fingerprints do not attest actual model bytes or truth.
+        """
+        with self._guard():
+            record = self._read(job_id)
+            metadata = self._metadata(record)
+            if not annotation_job_accessible(metadata, now=self._clock()):
+                raise AnnotationJobStoreError("annotation job has expired")
+            fingerprints = [item["runtime_fingerprint"] for item in record["checkpoints"]
+                            if "runtime_fingerprint" in item]
+            evidence = AnnotationRuntimeEvidence(len(record["checkpoints"]), len(fingerprints), len(set(fingerprints)))
+            if not annotation_job_accessible(metadata, now=self._clock()):
+                raise AnnotationJobStoreError("annotation job has expired")
+            return evidence
 
     def pending_chunk_ids(self, job_id: str) -> tuple[str, ...]:
         """Internal work plan only; never schedules, admits or calls a provider."""

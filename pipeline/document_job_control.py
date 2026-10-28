@@ -13,10 +13,14 @@ import sys
 
 from pipeline.document_intake import DEFAULT_MAX_DOCUMENT_BYTES, prepare_document_text
 from pipeline.document_job_store import AnnotationJobStore, AnnotationJobStoreError, JOB_ID_RE
+from pipeline.document_job_inspection import (
+    DEFAULT_INSPECTION_LIMIT, AnnotationJobInspectionError,
+    build_annotation_result_page, validate_inspection_range,
+)
 
 
 class AnnotationJobControlError(ValueError):
-    """Content-free refusal before private storage is opened."""
+    """Content-free invalid/unavailable local-control refusal."""
 
 
 def read_annotation_job_input(stream):
@@ -39,7 +43,8 @@ def read_annotation_job_input(stream):
 
 def control_annotation_jobs(root, action, *, job_id=None, confirm_delete=None,
                             acknowledge_maintenance=False, clock=None, content=None,
-                            filename=None, domain=None, profile=None, confirm_store=False):
+                            filename=None, domain=None, profile=None, confirm_store=False,
+                            confirm_inspect=None, offset=None, limit=None):
     """Trusted local OS operator only. No implicit directory or provider setup.
 
     The private owner-only root is the entire local operator's scope. IDs and
@@ -48,8 +53,19 @@ def control_annotation_jobs(root, action, *, job_id=None, confirm_delete=None,
     """
     if acknowledge_maintenance is not True:
         raise AnnotationJobControlError("explicit store-maintenance acknowledgement is required")
-    if not isinstance(action, str) or action not in {"list", "status", "resume", "delete", "submit"}:
+    if not isinstance(action, str) or action not in {"list", "status", "resume", "delete", "submit", "inspect-result"}:
         raise AnnotationJobControlError("unsupported annotation job control")
+    if action == "inspect-result":
+        if not isinstance(job_id, str) or confirm_inspect != job_id:
+            raise AnnotationJobControlError("private result inspection requires the exact job identifier twice")
+        offset = 0 if offset is None else offset
+        limit = DEFAULT_INSPECTION_LIMIT if limit is None else limit
+        try:
+            validate_inspection_range(offset, limit)
+        except AnnotationJobInspectionError:
+            raise AnnotationJobControlError("annotation result page range is invalid") from None
+    elif confirm_inspect is not None or offset is not None or limit is not None:
+        raise AnnotationJobControlError("inspection fields are not valid for this control")
     document = None
     if action == "submit":
         if confirm_store is not True or job_id is not None or confirm_delete is not None:
@@ -88,6 +104,19 @@ def control_annotation_jobs(root, action, *, job_id=None, confirm_delete=None,
         elif action == "delete":
             store.delete(job_id)
             result.update(job_id=job_id, deleted=True)
+        elif action == "inspect-result":
+            # Each store read revalidates source/results and retention. No
+            # durable result is installed into an ephemeral review store.
+            document = store.read_source(job_id)
+            saved_result = store.read_result(job_id)
+            try:
+                page = build_annotation_result_page(document, saved_result, offset=offset, limit=limit)
+            except AnnotationJobInspectionError:
+                raise AnnotationJobControlError("annotation result inspection is unavailable") from None
+            # Rendering may take time; expiry is checked again before returning
+            # any candidate prose. A failed check produces no partial page.
+            store.progress(job_id)
+            result.update(job_id=job_id, inspection=page)
         else:
             if action == "resume":
                 store.resume(job_id)
@@ -107,6 +136,11 @@ def configure_annotation_job_parser(parser):
     submission.add_argument("--profile", default=None, help="Structural profile; defaults to assistant_note")
     submission.add_argument("--confirm-store", action="store_true",
                             help="Confirm private plaintext storage for 24 hours from submission")
+    inspection = actions.add_parser("inspect-result", help="Explicitly display one private untrusted candidate page")
+    inspection.add_argument("job_id")
+    inspection.add_argument("--confirm-inspect", help="Repeat the exact job ID to disclose candidate prose locally")
+    inspection.add_argument("--offset", type=int, default=None)
+    inspection.add_argument("--limit", type=int, default=None, help="Candidates per page (1-10; default 5)")
     for action in ("status", "resume", "delete"):
         command = actions.add_parser(action)
         command.add_argument("job_id")
@@ -115,7 +149,10 @@ def configure_annotation_job_parser(parser):
 
 
 def run_annotation_job_command(args):
-    """No exception/private input text in output; no partial list on failure."""
+    """No exception/input echo or partial output on failure.
+
+    Only separately confirmed inspect-result may print private candidate prose.
+    """
     try:
         submission = {}
         if args.job_action == "submit":
@@ -130,11 +167,13 @@ def run_annotation_job_command(args):
             args.root, args.job_action, job_id=getattr(args, "job_id", None),
             confirm_delete=getattr(args, "confirm_delete", None),
             acknowledge_maintenance=args.acknowledge_maintenance,
+            confirm_inspect=getattr(args, "confirm_inspect", None),
+            offset=getattr(args, "offset", None), limit=getattr(args, "limit", None),
             **submission,
         )
     except (AnnotationJobControlError, AnnotationJobStoreError):
         print("Annotation job control refused safely. Check exact arguments, maintenance acknowledgement, "
-              "storage/deletion confirmation, bounded UTF-8 input, private-root permissions and exclusive ownership. "
+              "storage/deletion/inspection confirmation, bounded input/page limits, private-root permissions and exclusive ownership. "
               "No provider or processing was started. Inspect local state before retrying.")
         return 2
     except KeyboardInterrupt:

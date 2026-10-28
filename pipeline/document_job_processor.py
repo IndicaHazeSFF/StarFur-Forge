@@ -15,7 +15,7 @@ from threading import RLock
 from pipeline.document_annotation import DocumentAnnotationDeferredError
 from pipeline.document_intake import DocumentAnnotationResult
 from pipeline.document_job_results import encode_annotation_job_result
-from pipeline.document_job_runtime import AnnotationJobRuntimeError
+from pipeline.document_job_runtime import AnnotationJobRuntimeError, BoundAnnotationJobRuntime
 from pipeline.document_job_store import AnnotationJobAttempt, AnnotationJobStore, AnnotationJobStoreError
 
 
@@ -142,7 +142,10 @@ class AnnotationJobProcessor:
                 encode_annotation_job_result(document, result)
                 # Per-chunk aggregate execution metadata is not silently
                 # summed into a whole-job claim. Chunk failure attempts remain.
-                self._store.save_checkpoint(handle._attempt, chunk_id, replace(result, execution=None))
+                fingerprint = (self._runtime.configuration_fingerprint
+                               if type(self._runtime) is BoundAnnotationJobRuntime else None)
+                self._store.save_checkpoint(handle._attempt, chunk_id, replace(result, execution=None),
+                                            runtime_fingerprint=fingerprint)
                 return AnnotationJobStep("checkpointed", "chunk_saved", 1)
         except DocumentAnnotationDeferredError as error:
             with self._lock:

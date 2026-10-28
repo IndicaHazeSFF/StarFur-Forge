@@ -1,3 +1,30 @@
+## 2026-10-28 - Add opt-in direct loopback annotation transport
+
+- Foundation: immutable completion-only adapter consumes exact trusted locality evidence and emits bounded fixed-path loopback requests. It does not consult ambient host/proxy/credentials, follow redirects, accept compression, discover models or choose fallback. Output cap defaults to 1024 and cannot be made unbounded through this adapter; byte ceilings and incremental remaining-time checks fence response acceptance.
+- Integrity: strict JSON/exact model/completion checks expose only answer text and closed finish metadata. Responses/connections close on success, error and Ctrl+C; cancellation is not verified provider stop. Existing Core bounded annotation retry remains separate, and invalid transport output cannot become candidates.
+- Boundary: not connected to public job commands or normal chat; verified server/local-artifact evidence and exact-job consent still required. Declarative evidence is not independently measured by this adapter, and no service/environment/production state was changed.
+- Verification: eleven native fake-transport contracts and all fifteen WSL contract/integration checks passed, including four application/private-store gates. All 135 annotation-job tests and full 1,318-test provider-free WSL discovery passed (one Windows-only skip each), ResourceWarning promoted to an error. No actual socket/provider/service or production-state operation occurred; see `2026-10-28.annotation-local-only.sprint.md`.
+
+## 2026-10-28 - Define private annotation processing as loopback and no-relay only
+
+- Decision/foundation: LAN and hosted/cloud processing deny for now. Pure target contracts accept only exact canonical literal loopback HTTP endpoints; strict evidence binds endpoint/model/local artifact, local execution, actual server cloud disablement and direct transport. Missing/mismatched evidence denies; client environment and local-looking labels are not proof.
+- Boundary: disconnected policy only, no network, probing, runtime adapter, provider construction, permission, OS isolation or public execution control. Existing chat routing and runtime configuration remain unchanged. LAN/cloud extensions require separate review/versioning.
+- Verification: all six provider-free locality contracts passed natively and in WSL, plus all 120 annotation-job tests (one Windows-only skip). Official Ollama docs confirm that cloud models can run via a local server and cloud disablement is server configuration, not a client claim. See `2026-10-28.annotation-local-only.sprint.md`.
+
+## 2026-10-27 - Add separately confirmed private job-result inspection
+
+- Behavior: local-only `inspect-result` requires an exact repeated job ID before store opening, then renders one bounded source-revalidated completed-result page. Defaults: five candidates, max ten, 128 KiB UTF-8, explicit pagination. Expiry is rechecked after rendering; refusals publish no partial candidate page.
+- Privacy: ordinary status/list stay content-free. The opted-in page may disclose private candidate prose/source excerpts to terminal history, but omits raw document/observation fields, filenames, paths, provider metadata and runtime fingerprints. Untrusted/noncanonical labels and advisory model-confidence wording remain explicit.
+- Boundary: display-only `JC-####` refs create no review, proposal, memory, adventure state or handoff. No provider/worker, processing command or shared API is connected.
+- Verification: all ten disposable WSL consent/privacy/lifecycle/CLI gates and native pure page/range/source-binding contract passed. All 114 annotation-job tests and full 1,297-test provider-free WSL discovery passed (one Windows-only skip each), ResourceWarning promoted to an error. No provider or production state was used; see `2026-10-27.annotation-inspection.sprint.md`.
+
+## 2026-10-27 - Retain declared runtime evidence with annotation checkpoints
+
+- Foundation: exact trusted bound-runtime fingerprints are saved atomically with chunk output under storage-v3. Ordinary unbound v2 and source-only legacy records remain readable without migration/backfill; exact retry binds output plus evidence, rejecting conflicting additions/removal/changes.
+- Inspection: internal immutable coverage counts distinguish unknown/partial/mixed/uniform declared configuration without returning hashes or model labels. Expiry is rechecked, reads do not write, and default CLI/API/resident progress remains unchanged.
+- Boundary: declared equality evidence is not authentication, installed-model identity, verified provider work, quality, truth or termination. Empty/failed results retain those limitations. No public processing, production migration, provider call or canonical writer is enabled.
+- Verification: all ten disposable WSL evidence lifecycle/privacy gates passed. All 103 annotation-job tests and full 1,286-test provider-free WSL discovery passed (one Windows-only skip each), ResourceWarning promoted to error. Native pure contracts passed; no live providers/production state were used. See `2026-10-27.annotation-provenance.sprint.md`.
+
 ## 2026-10-26 - Bind internal annotation attempts to exact runtime settings
 
 - Foundation: provider-free capture of the default application session, exact provider object and bounded effective primary/fallback profile fingerprint. Bound chunk calls compare before and after provider work under the ordinary session lock, preserving normal routing, Focus Mode and capacity gates.

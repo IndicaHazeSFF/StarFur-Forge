@@ -1600,7 +1600,7 @@ class AssistantApplication:
                 unchanged()
                 return result
 
-        return BoundAnnotationJobRuntime(invoke)
+        return BoundAnnotationJobRuntime(invoke, captured_fingerprint)
 
     def annotate_document_chunk(self, document: PreparedDocument, chunk_id: str):
         """Explicit internal one-chunk seam through the normal annotation gates.

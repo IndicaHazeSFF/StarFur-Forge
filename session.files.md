@@ -11,7 +11,30 @@ See AGENTS.md for standing test/sync authority and exclusions.
 
 None.
 
-The 2026-10-26 per-attempt runtime adapter, application/processor changes,
+The 2026-10-28 locality policy and opt-in transport source/tests/AGENTS/commands
+were copied and hash-verified. Six pure locality tests and all fifteen fake
+transport/integration checks passed in WSL; all 135 annotation-job tests and
+full 1,318-test provider-free discovery passed (one Windows-only skip each).
+Final evidence files are synchronized and all queued copies hash-verified;
+this cleared manifest is the final sync item. Stopped at real-server verification
+operator gate with 50% quota remaining at the post-slice check. No actual
+network/provider/service/production-state operation or commit was performed.
+
+Prior verified checkpoint: private result-inspection source/tests/AGENTS/commands were copied and
+hash-verified in WSL. Ten gates and the pure contract passed; all 114 annotation
+job tests and full 1,297-test provider-free discovery passed (one Windows-only
+skip each). Final evidence files are synchronized and all queued copies
+hash-verified; this cleared manifest is the final sync item. Paused at ten gates; no new
+commit, live provider or production state operation was requested/performed.
+
+Prior verified evidence: the 2026-10-27 durable provenance source/tests/AGENTS/commands were copied and
+hash-verified. All ten gates passed; all 103 annotation-job tests and full
+1,286-test WSL discovery passed, one Windows-only skip each. Final evidence
+copies are synchronized and hash-verified after quota was restored. This
+cleared manifest is the final sync item. No live providers or production state;
+changes remain uncommitted. Paused at ten successful unique gates.
+
+Prior verified checkpoint: the 2026-10-26 per-attempt runtime adapter, application/processor changes,
 tests, AGENTS and command documentation were copied and hash-verified in WSL.
 All ten unique disposable runtime/store gates plus two pure contracts passed.
 Full provider-free WSL discovery passed 1,275 tests (one Windows-only skip)

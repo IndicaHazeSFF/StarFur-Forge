@@ -8,6 +8,7 @@ on an explicit attempt; it does not attest the model bytes behind a label.
 from dataclasses import dataclass, field
 from hashlib import sha256
 import json
+import re
 from typing import Callable
 
 from pipeline.task_profiles import (
@@ -21,6 +22,36 @@ class AnnotationJobRuntimeError(ValueError):
 
     def __init__(self):
         super().__init__("annotation job runtime binding is invalid or changed")
+
+
+def validate_runtime_fingerprint(value):
+    """Validate declared equality evidence, not its authenticity or model bytes."""
+    if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None:
+        raise AnnotationJobRuntimeError()
+    return value
+
+
+@dataclass(frozen=True)
+class AnnotationRuntimeEvidence:
+    """Internal content-free checkpoint coverage, never execution verification."""
+    checkpointed_chunks: int
+    bound_chunks: int
+    distinct_configurations: int
+
+    def __post_init__(self):
+        if (any(type(value) is not int for value in (
+                self.checkpointed_chunks, self.bound_chunks, self.distinct_configurations))
+                or not 0 <= self.distinct_configurations <= self.bound_chunks <= self.checkpointed_chunks <= 100_000
+                or (self.bound_chunks > 0) != (self.distinct_configurations > 0)):
+            raise AnnotationJobRuntimeError()
+
+    def to_public_dict(self):
+        # Internal projection only; no CLI/API/snapshot automatically uses it.
+        return {"checkpointed_chunks": self.checkpointed_chunks,
+                "bound_chunks": self.bound_chunks,
+                "distinct_configurations": self.distinct_configurations,
+                "uniform_declared_configuration": self.bound_chunks == self.checkpointed_chunks
+                and self.bound_chunks > 0 and self.distinct_configurations == 1}
 
 
 def annotation_runtime_fingerprint(profiles, *, default_model, provider_id):
@@ -69,10 +100,13 @@ class BoundAnnotationJobRuntime:
     fields are public or rendered through repr, status, API or the CLI.
     """
     _invoke: Callable = field(repr=False)
+    configuration_fingerprint: str | None = field(default=None, repr=False)
 
     def __post_init__(self):
         if not callable(self._invoke):
             raise AnnotationJobRuntimeError()
+        if self.configuration_fingerprint is not None:
+            validate_runtime_fingerprint(self.configuration_fingerprint)
 
     def annotate_document_chunk(self, document, chunk_id):
         return self._invoke(document, chunk_id)

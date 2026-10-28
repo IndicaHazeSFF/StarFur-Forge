@@ -89,6 +89,57 @@ Disposable submission/input regression:
 
 ### Full and focused regression commands
 
+### Explicit private completed-result inspection
+
+Private annotation processing policy (2026-10-28): LAN/hosted/cloud deny for
+now. Only literal loopback endpoints may describe the first target, and that
+alone is not permission to send source text: a local Ollama server can relay
+cloud models. Actual server cloud-disabled/local-model evidence and sealed
+direct transport are separate gates; no public processing command is connected.
+Do not change your service just to run the provider-free locality tests:
+
+    python3 -m unittest discover -s tests -t . -p "test_document_job_locality.py" -v
+
+Reference: [Ollama cloud disablement](https://docs.ollama.com/faq#how-do-i-disable-ollamas-cloud-features).
+Setting `OLLAMA_NO_CLOUD=1` in a StarFur client shell does not establish what an
+already-running Ollama server was configured to do. Any future server setup or
+restart requires the operator; the agent does not change services here.
+
+The opt-in direct loopback transport is an internal foundation only: no command
+enables it or produces verified deployment evidence. Its trusted fake-transport
+tests require no Ollama service/key/network and change no server settings:
+
+    python3 -W error::ResourceWarning -m unittest discover -s tests -t . -p "test_document_job_loopback.py" -v
+
+The tests verify framing/controls and application/store composition, not actual
+network isolation, cloud disablement, model bytes, speed or remote termination.
+
+This local-only command discloses candidate prose, unlike ordinary job status.
+Repeat the exact job ID to confirm disclosure to your terminal. Candidate text
+may quote private source content and can remain in terminal scrollback/logs
+after the job expires or is deleted. Do not run it in a shared/logged terminal
+unless that disclosure is intended. The existing store-maintenance acknowledgement
+is still required; opening can fence unfinished jobs and sweep expired records.
+
+    python3 starfur.py annotation-jobs --root /absolute/private/job-store --acknowledge-maintenance inspect-result AJ-<32-lowercase-hex> --confirm-inspect AJ-<same-32-lowercase-hex> --offset 0 --limit 5
+
+Replace placeholders; do not paste angle brackets literally. Completed results
+only, fixed original expiry, default five/max ten candidates per page, 128 KiB
+UTF-8 page ceiling. Reduce the limit for oversized candidate pages; there is
+no automatic truncation, continuation or retry. `next_offset` gives an explicit
+next page. Raw document/observation fields, filenames, paths, runtime hashes,
+provider metadata and unrestricted provenance are not output. Candidate prose
+is untrusted and noncanonical; model confidence is not verification. `JC-####`
+refs are display-only and cannot approve, import or create a memory. Inspection
+creates no review/handoff/state and calls no provider. Missing, expired,
+unfinished or invalid output fails closed without a partial page. Status/list
+continue to be content-free. No shared chat/API control or processing command
+is enabled. Package execution supports the same operator arguments.
+
+Disposable result-inspection integration checks:
+
+    python3 -W error::ResourceWarning -m unittest discover -s tests -t . -p "test_document_job_inspection.py" -v
+
 Internal annotation-job runtime-binding regression (disposable POSIX/WSL
 stores and fake providers, no key/service or real documents required):
 
@@ -98,7 +149,16 @@ There is no user-facing processing command yet. The internal bound runtime
 captures exact per-attempt provider/profile settings and checks them before and
 after each chunk; configuration drift fences that attempt without auto-rebind
 or retry. A future explicit new attempt may select current settings, but this
-is not durable job-wide route provenance or a guarantee about model bytes.
+is not a guarantee about model bytes. Bound checkpoints now optionally retain
+declared configuration fingerprints internally; mixed or legacy-unknown
+coverage is not silently called uniform. Existing public progress/CLI output
+does not expose those hashes. Ordinary unbound records remain storage-v2;
+explicit bound writes use storage-v3. Reads never migrate/backfill evidence.
+No production migration or public processing control is enabled.
+
+Durable declared-configuration regression (disposable stores/fake providers):
+
+    python3 -W error::ResourceWarning -m unittest discover -s tests -t . -p "test_document_job_provenance.py" -v
 
 Run full discovery from the repository root with an explicit top level:
 
