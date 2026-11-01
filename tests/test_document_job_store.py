@@ -59,6 +59,29 @@ class AnnotationJobStoreSmokes(unittest.TestCase):
         with self.store() as reopened:
             self.assertEqual(reopened.read_source(job.job_id), source)
 
+    def test_source_expiring_during_reconstruction_is_not_returned(self):
+        with self.store() as store:
+            job = self.submit(store)
+            from pipeline.document_job_store import prepare_document_text
+            calls = 0
+
+            def prepare(*args, **kwargs):
+                nonlocal calls
+                result = prepare_document_text(*args, **kwargs)
+                calls += 1
+                # First preparation validates the saved record; the second
+                # reconstructs the value after the initial retention check.
+                if calls == 2:
+                    self.now = job.metadata.expires_at
+                return result
+
+            before = self.path(job).read_bytes()
+            with mock.patch("pipeline.document_job_store.prepare_document_text", side_effect=prepare):
+                with self.assertRaisesRegex(AnnotationJobStoreError, "expired"):
+                    store.read_source(job.job_id)
+            self.assertEqual(calls, 2)
+            self.assertEqual(self.path(job).read_bytes(), before)
+
     def test_02_second_process_owner_denied_until_release(self):
         store = self.store()
         self.submit(store)

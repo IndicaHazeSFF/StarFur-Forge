@@ -67,6 +67,23 @@ class AnnotationLoopbackContracts(unittest.TestCase):
     def call(self, **kwargs):
         return self.provider.complete(self.messages, model="fixture-model", **kwargs)
 
+    def test_deadline_crossed_during_json_parsing_discards_completion(self):
+        now = 0
+        parse = json.loads
+
+        def delayed_parse(*args, **kwargs):
+            nonlocal now
+            result = parse(*args, **kwargs)
+            now = 30
+            return result
+
+        with mock.patch("pipeline.document_job_loopback.time.monotonic", side_effect=lambda: now), \
+                mock.patch("pipeline.document_job_loopback.json.loads", side_effect=delayed_parse):
+            with self.assertRaisesRegex(AnnotationLoopbackError, "request failed safely"):
+                self.call()
+        self.assertTrue(self.connection.response.closed)
+        self.assertTrue(self.connection.closed)
+
     def test_missing_locality_evidence_denies_before_connection(self):
         with self.assertRaises(AnnotationLoopbackError):
             LoopbackAnnotationProvider(self.target, "fixture-model", _connection_factory=self.factory)

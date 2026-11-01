@@ -61,6 +61,30 @@ class AnnotationJobResultStoreSmokes(unittest.TestCase):
         return DocumentAnnotationResult(tuple(candidate for candidate in self.result(document).candidates
                                                if candidate.chunk_id == chunk_id), ())
 
+    def test_result_expiring_during_decoding_is_not_returned(self):
+        with self.store() as store:
+            job, document = self.job(store)
+            store.complete(store.mark_running(job.job_id), self.result(document))
+            from pipeline.document_job_store import decode_annotation_job_result
+            calls = 0
+
+            def decode(*args, **kwargs):
+                nonlocal calls
+                result = decode_annotation_job_result(*args, **kwargs)
+                calls += 1
+                # Record validation decodes first; the returned projection
+                # decodes again after the initial retention check.
+                if calls == 2:
+                    self.now = job.metadata.expires_at
+                return result
+
+            before = self.path(job).read_bytes()
+            with mock.patch("pipeline.document_job_store.decode_annotation_job_result", side_effect=decode):
+                with self.assertRaisesRegex(AnnotationJobStoreError, "expired"):
+                    store.read_result(job.job_id)
+            self.assertEqual(calls, 2)
+            self.assertEqual(self.path(job).read_bytes(), before)
+
     def path(self, job):
         return self.root / (job.job_id + ".json")
 

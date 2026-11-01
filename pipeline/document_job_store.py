@@ -460,6 +460,8 @@ class AnnotationJobStore:
                     raise ValueError
             except (ValueError, TypeError):
                 raise AnnotationJobStoreError("job source failed validation") from None
+            if not annotation_job_accessible(self._metadata(record), now=self._clock()):
+                raise AnnotationJobStoreError("annotation job has expired")
             return document
 
     def resume(self, job_id: str) -> AnnotationJobStatus:
@@ -535,7 +537,10 @@ class AnnotationJobStore:
                 raise AnnotationJobStoreError("annotation job has expired")
             if record["state"] != "completed" or record["result"] is None:
                 raise AnnotationJobStoreError("annotation job has no completed result")
-            return decode_annotation_job_result(self._document(record), record["result"])
+            result = decode_annotation_job_result(self._document(record), record["result"])
+            if not annotation_job_accessible(self._metadata(record), now=self._clock()):
+                raise AnnotationJobStoreError("annotation job has expired")
+            return result
 
     def save_checkpoint(self, attempt: AnnotationJobAttempt, chunk_id: str, result: DocumentAnnotationResult,
                         *, runtime_fingerprint: str | None = None) -> None:

@@ -1460,6 +1460,23 @@ Release engineering includes installer/setup, backups/migrations, offline behavi
 
 Permissioned idle work, verified persona learning, deterministic offline adventure simulation, multi-persona Council Mode, procedural/generated adventures, composited visuals, RPG-engine integration, and Crown of Claws continuity tooling remain research until permissions, benchmarks, persistence, and package boundaries pass their gates.
 
+## Later expansion mapping — Persistent virtual worlds and engine orchestration
+
+The authoritative specification is [Persistent virtual worlds and engine orchestration](ROADMAP.md#persistent-virtual-worlds-and-engine-orchestration-later-extension-of-stage-5a). This proposed roadmap does not supersede it. These planned milestones extend Stage B/C4 continuity, participant policies and Stage J simulation; they neither reorder the current sequence nor become Steam gates.
+
+| Phase | Existing stage integration and dependencies | Acceptance boundary |
+|---|---|---|
+| W1 spatial contracts/minimal world | B/C4 typed resources, transactions, recovery and package schemas | Provider-free two-location/two-NPC world, object ownership/position, restart and deterministic event rebuild; invalid spatial relations and stale writes deny. |
+| W2 routines/social simulation | W1, participant knowledge/relationships and shared H/J scheduler concepts | Explicit seeded time steps, goals/needs/priorities, deterministic contention and knowledge isolation; no continuous worker or personal-memory promotion. |
+| W3 engine adapter | W1/W2, application and F permission boundaries | Headless/fake engine then optional Godot placeholder scene; versioned snapshots/actions/outcomes, navigation and animation seams, bounded bidirectional sync, duplicate/stale/disconnect recovery without direct database writes. |
+| W4 autonomous lifecycle/fidelity | W2/W3, E resource cooperation and D benchmarks | Opt-in background evolution, durable schedules, pause/restart and bounded offline catch-up; proximity/relevance activation preserves invariants, with measured scaling and foreground cost. |
+| W5 generative worldbuilding | W1–W3, F/G media and I package validation | Quarantined environments/characters/assets/scenarios enter canonical state only after validation/review; advanced 3D and large-scale generation deferred. |
+| W6 cinematic client | W3, C4 branches/replay, media/export permissions; W5 optional | Reusable scene timelines, characters and recorded outcomes support directing/replay/recording in isolated takes; rendering never changes source-world history. |
+
+Core remains the single canonical writer. Model intentions and engine outcomes are inputs to validation, not world truth or permission. Engines handle transient physics/navigation/animation; conventional deterministic systems handle routine planning/scheduling; model calls are reserved for bounded creative/intelligent decisions. Extend existing adventure namespaces, participant perspectives and resident scheduling interfaces rather than create competing memory/world systems. Fictional ownership is not filesystem authority, and persona IDs are not authentication.
+
+Current event/turn/projection primitives do not yet constitute a spatial simulation or durable NPC scheduler. Required future contracts are world definitions/snapshots/deltas, action proposals/requests/outcomes, navigation requests and separate scene timelines. Coordinate/time conventions, visibility, reservations/conflicts, recovery/unknown completion, adapter trust and fidelity approximations require explicit review. The authoritative W1–W6 section defines interfaces, gates and acceptance tests; no runtime work or new authority is introduced here.
+
 ## Dependency-ordered execution sequence
 
 1. C3 safety gates: shared whitelist, response ceiling, generation origin/fingerprint, generation IDs, typed sanitized context.
@@ -1486,3 +1503,41 @@ Every slice updates focused tests and user-facing documentation when its surface
 ## End state
 
 StarFur is a trustworthy resident continuity engine, not merely a chatbot embedded in a game. Models, personas, voices, art, interfaces, and fictional worlds can be swapped around stable Core identity and state. Adventures are replayable and distributable; the apartment is an honest read-only view before it becomes interactive; providers improve capability without becoming authority; and small-model claims are supported by reproducible evidence.
+
+### COMPLETED FOUNDATION / VERIFIED — 2026-10-31 annotation handoff reconciliation
+
+Completed disconnected foundations: exact inert model-listing request, bounded direct literal-loopback GET `/api/tags` acquisition, and pure request/model/independently expected declared-digest equality binding. Source/tests exist and Windows/WSL hashes were audited equal; previous changelog records 163 subsystem and 1,346 full tests (one skip each), not rerun by that audit. These supersede older future-tense acquisition/binding notes; they do not establish installed bytes, server cloud disablement, execution locality, freshness or consent. Public processing remains disconnected.
+
+**COMPLETED CORRECTIVE SLICE:** Final store-read retention and completion parse-time acceptance checks are implemented with three deterministic regressions; current WSL validation passed 39 focused, 166 annotation-job and 1,349 full provider-free tests (one platform skip each), with ResourceWarning treated as error. Full stderr capture reported zero resource-warning/unraisable-exception/traceback signals. Next dependency remains trusted deployment/local-artifact verification and exact-job disclosure authority before private processing, with higher-model review for unclear security/design boundaries. No milestone promotion or live processing is claimed.
+
+### COMPLETED DECISION — 2026-10-31 private-annotation deployment selection
+
+Roger selected the **StarFur-Forge WSL distribution** as the intended server location for future private annotation. Preserve literal-loopback/no-relay policy; native-Windows or cross-host execution is not inferred from this selection. Next is operator-verifiable exact server identity/cloud-disabled policy and independently verified local artifact/execution binding, followed by separately reviewed exact-job consent. Existing metadata declarations and successful fake regressions cannot fill these requirements. A separately authorized read-only operator inspection has occurred, but it is not a complete trusted deployment verifier. Installed artifact/execution evidence, freshness binding and exact-job consent remain pending. No service/configuration change or processing control is enabled by this decision.
+
+**Historical recovery checkpoint (2026-10-31; superseded operational count):** Request, bounded metadata acquisition and declared-identity binding are COMPLETED DISCONNECTED FOUNDATIONS. Final retention/deadline acceptance corrections are COMPLETED AND WSL-VERIFIED (39 focused, 166 subsystem, 1,349 full tests; one expected skip each). WSL server-location selection and workflow-rule reconciliation are COMPLETED DECISIONS. Exact copy synchronization is verified; these slices have no new GitHub backup. Required test-run counter: 3/10. Remaining private-processing milestone is INCOMPLETE: trusted deployment/artifact/execution verification and separately reviewed exact-job consent precede runtime wiring. Continue from those dependencies, not by rebuilding the completed primitives. Detailed evidence: `2026-10-31.annotation-audit-followup.sprint.md`. Current operational status/counter is maintained only in `next.steps.md`; the Sol recovery audit independently rechecked the scoped changes without adding test-run counts.
+
+### COMPLETED / WSL-VERIFIED — bounded listing metadata compatibility (2026-10-31)
+
+The disconnected parser validates and discards v0.32.1 advisory capability labels and context/embedding lengths while retaining exact selected identity and denial of unknown/remote extensions. Four synthetic regressions added; WSL validation passed 32 focused, 170 subsystem and 1,353 full tests (one expected skip in subsystem/full; zero stderr warning/traceback signals). These fields grant no permission or locality evidence. Trusted deployment/artifact/execution verification and exact-job consent remain incomplete. See current `next.steps.md` and durable annotation audit sprint.
+
+### COMPLETED DEVELOPMENT / OPERATOR CHECK PENDING — temporary workflow handoff (2026-10-31)
+
+Dependency-driven deviation: a concise user.smokes.md and disposable one-command real-CLI fixture runner support immediate workflow acceptance after chat recovery, ahead of private-processing integration. Required helper workflow passed and full discovery passed 1,353 tests (one expected skip), zero stderr warning/traceback signals. Roger's manual acceptance remains pending independently. No private processing/model/service permission is added. Keep the runbook until Roger revokes it; roadmaps may be reordered for current/near-current dependencies with recorded scope and unchanged safety boundaries.
+
+### COMPLETED INDEPENDENT RECOVERY AUDIT — Sol review (2026-10-31)
+
+Retention/deadline corrections, advisory metadata bounds and the disposable CLI helper were reviewed against source/tests. Independent repeat validation passed 53 focused tests (one expected platform skip); 24 exact relevant Windows/WSL hashes matched. No blocking defect found in that limited scope; operator acceptance and trusted deployment/consent review remain pending. Declared manifest identity needs release-specific decoder semantics, not assumed whole-file/GGUF equality. Earlier same-chat unbacked foundation files are now explicitly in the accumulated backup scope. No runtime behavior or stage ordering changed; no new commit/push. Audit repetitions do not advance the 8/10 required-run counter. Evidence: `2026-10-31.sol-recovery-review.sprint.md`.
+
+### COMPLETED M1 / WSL-VERIFIED — inert manifest decoder (2026-10-31)
+
+Implementation and required validation completed: seven focused codec tests and 177 annotation-job subsystem tests passed (one expected subsystem skip), ResourceWarning treated as error, on exact hash-verified WSL copies. The codec validates supplied bytes into immutable redacted descriptors and separate raw-input hash only. No filesystem/service/model access, measured locality, consent or processing integration was added. Counter reached 10/10; scoped backup due. Next: unresolved trusted-evidence/consent review, not more claimed-verification wrappers. Design text below is historical contract context. Evidence: `2026-10-31.manifest-codec.sprint.md`.
+
+Sol High completed the narrow M1 contract in `docs/private_annotation_verification.plan.md`: a pure bounded schema-2 byte decoder with exact descriptor/media limits and a separately named raw-input hash. It may proceed independently while actual deployment/execution/freshness/consent review remains pending. This ordering helps the current annotation track without manufacturing measured evidence, changing existing locality semantics, accessing live model files/services or promoting the wider milestone. Next: implement only the decoder and focused/subsystem provider-free tests; no operator smoke for this inert boundary. Counter unchanged at 8/10; no commit/push in this documentation slice. Evidence: `2026-10-31.manifest-decoder-design.sprint.md`.
+
+### COMPLETED PLAN DRAFT / REVIEW PENDING — private deployment verification (2026-10-31)
+
+`docs/private_annotation_verification.plan.md` records the reviewed release's distinct manifest/blob identities and a dependency-ordered bounded codec, read-only artifact verifier, actual-server/executable/execution evidence and exact-attempt consent sequence. This is a design handoff only. Targeted security review must resolve identity schema, executable trust, evidence freshness and consent consumption before trusted evidence or processing wiring is implemented. Public processing remains incomplete; no new test/smoke gate required for the draft. Required-run counter remains 8/10.
+
+### COMPLETED DOCUMENTATION — recovered product and architecture context (2026-10-31)
+
+`starfur.context.md` maps current implementation and product intent while retaining this file's proposed status. `ROADMAP.md` remains authoritative; no proposal is adopted or product milestone promoted by reconstruction. Private-deployment/consent security review remains pending. Operational counts and backup state belong in next.steps.md, not older dated checkpoints. Exact documentation verification is recorded in `2026-10-31.context-recovery.sprint.md`; no code tests or smokes required.

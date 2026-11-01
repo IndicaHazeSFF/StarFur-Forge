@@ -161,6 +161,7 @@ class LoopbackAnnotationProvider:
             # server's thinking/timing/resource/error payloads are never exposed.
             reason = result.get("done_reason")
             reason = reason if reason in {"stop", "length"} else "unknown" if reason else None
+            remaining()
             return ChatCompletion(result["message"]["content"], reason)
         except Exception:
             raise AnnotationLoopbackError("private annotation request failed safely") from None

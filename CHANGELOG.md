@@ -1,3 +1,98 @@
+## 2026-10-31 - Recover the resident-platform context map
+
+- Added starfur.context.md: product/research intent, implemented versus foundation/future status, subsystem ownership, persistence/lifetimes, request flows, authority matrix, benchmark limits and the actual private-annotation frontier. Existing development rules and roadmap authority remain canonical.
+- Recorded documentation drift explicitly: historical non-persistent-proposal/upload notes versus current writers/bridge, later unverified research-answer presentation, stale broad roadmap headings/counters, and proposed versus authoritative roadmap identities. No runtime behavior, permission, historical record or security gate was changed to reconcile prose.
+- Added a review diff and durable context-recovery sprint; linked orientation/maintenance guidance and Roger's normally-running WSL preference. Experiment directories remain outside scope. All nine documentation copies passed exact baseline/path/hash verification; final closure records follow the same queue. No application test/smoke needed, counter unchanged at 8/10, no commit/push. Targeted verifier/consent security review and operator workflow acceptance remain pending.
+
+## 2026-10-31 - Implement inert bounded manifest descriptors
+
+- Foundation: pure narrow schema-2 decoder validates exact root/descriptor fields, supported media, unique digests, one model layer, byte/count/size/aggregate ceilings and strict JSON. Immutable redacted output separates the raw-input hash from server-declared identity. Direct output constructors validate too.
+- Boundary: no filesystem, layer payload, model/service, existing locality-evidence conversion, consent, readiness or processing integration. M1 advances the independent prerequisite only; trusted-evidence review stays pending.
+- Verification: exact queued files hash-verified in WSL; required focused suite passed 7 tests and annotation-job subsystem passed 177 tests (one platform skip), ResourceWarning treated as error. Counter reached 10/10; scoped backup due. No operator/live smoke required for this pure boundary. See 2026-10-31.manifest-codec.sprint.md.
+
+## 2026-10-31 - Bound the next inert manifest-decoder slice
+
+- Design: completed a narrow schema-2 manifest-byte decoder contract with explicit key/media/size/count bounds, separate raw-input hash and provider-free acceptance criteria. It parses descriptors, not model/template contents or claimed locality evidence; implementation remains pending.
+- Ordering: this inert prerequisite may proceed independently while actual filesystem/server/execution evidence, freshness and consent remain security-review pending. No existing evidence is reinterpreted; no verifier, private-data disclosure, policy migration or runtime control is enabled.
+- Records: next.steps, context map and maintained roadmaps distinguish the implementation-ready M1 boundary from the unresolved trusted-evidence gate. Documentation only, no tests/smokes or counter change; current 8/10 preserved. See 2026-10-31.manifest-decoder-design.sprint.md.
+
+## 2026-10-31 - Independently audit recovery slices and reconcile backup scope
+
+- Review: no blocking defect found in the scoped retention/completion fences, bounded advisory metadata parsing or disposable workflow helper. Independently verified 24 exact Windows/WSL file hashes and reran 53 focused tests successfully (one platform skip); this duplicate acceptance coverage does not advance the 8/10 counter.
+- Records: restored the earlier same-chat request/acquisition/binding foundations to the explicit accumulated backup allowlist; labelled superseded roadmap counters historical. Operator acceptance remains pending; no code or runtime behavior changed.
+- Security plan: clarified release JSON-decoder digest semantics versus whole-file and layer identities. Trusted verifier design/review, executable trust, freshness and exact-attempt consent remain pending; no attestation or processing wiring added. See 2026-10-31.sol-recovery-review.sprint.md.
+
+## 2026-10-31 - Draft measured deployment-verification boundaries
+
+- Design only: documented distinct manifest/blob identities and a proposed bounded read-only artifact/server verification sequence, separately authorized synthetic execution evidence, and exact-job/attempt disclosure consent before processing admission.
+- Review gate: targeted Astra review must resolve identity-version semantics, executable trust, freshness/execution evidence and consent consumption; no attestation flags, verifier, runtime wiring or private-source disclosure added.
+- Records: roadmaps label plan draft completed and security review pending; next.steps holds concrete review questions. Documentation-only exact-copy verification; required-run counter unchanged at 8/10.
+
+## 2026-10-31 - Prepare concise temporary operator workflow smokes
+
+- Tooling: one-command WSL helper drives real annotation-job CLI processes over synthetic owner-only temporary state: submission, restart fencing, resume/deadline preservation, inspection refusals, exact deletion and empty listing. It accepts no path arguments and cleans only its own fixture state.
+- Handoff: user.smokes.md tracks pending operator checks separately from developer evidence, with one primary command, optional fixture coverage and explicit unavailable live-processing gates. Maintain until Roger revokes it.
+- Guidance: dependency-driven roadmap deviations are authorized for current/near-current needs with recorded scope; safety/service authority unchanged. Required helper workflow passed; full discovery passed 1,353 tests (one expected skip), zero stderr warning/traceback signals. Counter 8/10; manual acceptance remains pending.
+
+## 2026-10-31 - Bound newer advisory model-list metadata
+
+- Compatibility: accept bounded v0.32.1 capability labels and context/embedding lengths, discarding them from declared identity. Unknown/remote/authority fields, malformed unrelated records and existing identity limits still deny. No capability dispatch, generation-setting change, locality proof or processing wiring.
+- Coverage: four provider-free regressions for identity equivalence, strict numeric/label bounds and preserved denial boundaries; required WSL validation passed 32 focused, 170 subsystem and 1,353 full tests (one expected skip in subsystem/full); captured stderr contained zero warning/traceback signals. Required-run counter: 6/10.
+- Guidance: usage-limit checks between slices and near-5% stop/handoff rule recorded. No service configuration, model invocation or private job store access.
+
+## 2026-10-31 - Add rotating next-steps handoff
+
+- Documentation: next.steps.md now records current/completed slice scope, next dependencies/blockers, required-test outcomes and 3/10 counter, mandatory-smoke status, exact accumulated edited files and backup limitations for chat recovery.
+- Lifecycle: rotate after successful commit and verified GitHub push; preserve unfinished/failed/unbacked work and durable history. The Windows rotation is queued for normal WSL synchronization and the next commit cycle, avoiding recursive backup commits.
+- Guidance: AGENTS defines ownership/reset rules; roadmaps reviewed, completed statuses/dependencies unchanged. Documentation-only exact path/baseline/hash verification required, no code tests or smokes.
+
+## 2026-10-31 - Make completed slices explicit in recovery records
+
+- Documentation: marked the completed disconnected annotation foundations, WSL-verified acceptance corrections and deployment-selection decision explicitly in both maintained roadmaps. Corrected the authoritative listing section's stale acquisition/binding dependency; deployment/artifact/execution verification, consent and processing remain incomplete.
+- Guidance: every slice must leave an evidence-backed completed/pending status, next dependency and separate synchronization/backup state. Changelog and applicable AGENTS changes remain part of the slice, so recovery does not depend on chat history.
+- Verification: documentation-only exact-path/baseline/hash synchronization; no code tests or smokes required. Required test-run counter remains 3/10; no commit/push.
+
+## 2026-10-31 - Clarify autonomous slice and ten-test backup rules
+
+- Workflow: autonomous bounded Windows edits, exact verified WSL copies and required tests continue; commit/push occurs after ten successful required test runs, with furry messaging covering accumulated verified slices. Required regression suites and mandatory smokes count once per gate; duplicate reruns and individual methods do not inflate the count. No optional tests are added to reach ten.
+- Evidence: the documented focused/subsystem/full acceptance-fence suites establish 3/10; older undocumented carry remains unknown. An exact accumulated commit allowlist remains separate from the copy queue.
+- Escalation: Sol High handles routine work; Astra is requested for unresolved reasoning/security/design ambiguity. Understood findings permit independent safe progress; service/configuration changes remain separately scoped. Documentation-only rule update, no code tests required.
+
+## 2026-10-31 - Select WSL private-annotation deployment target
+
+- Decision: Roger selected the StarFur-Forge WSL distribution for future private annotation. This narrows the deployment plan; it does not enable processing or establish server/model evidence or job consent.
+- Handoff: Astra reviewed the acceptance fixes and exact Windows/WSL synchronization; Sol 6.1 High remains the implementation model. Corrected stale final-manifest instructions. Required server verification remains an operator-access gate; no alternate identity, service change, provider request or private-source disclosure was attempted.
+- Validation: documentation-only slice; exact-path/baseline/hash synchronization required. No code tests or standalone smokes required. Mandatory smoke count remains 0/10; no new GitHub backup.
+
+## 2026-10-31 - Fence final private-result and completion acceptance
+
+- Correction: store source/result reads recheck original retention after reconstruction/decoding; the disconnected completion transport rechecks its acceptance deadline after parsing and validation. Late values fail closed without changing stored records.
+- Coverage: three deterministic regressions target expiry during source preparation/result decoding and deadline crossing during completion parsing, including cleanup. WSL validation passed 39 focused, 166 annotation-job and 1,349 full provider-free tests (one platform skip each), ResourceWarning treated as error. A repeated full run captured all stderr after initial output truncation and found zero resource-warning/unraisable-exception/traceback signals; no live provider or production store used.
+- Handoff: reconciled October 31 request/acquisition/declaration-binding foundations in current/proposed roadmaps; replaced historical copy-queue notes with an exact active queue. Recorded safe-fix/higher-model escalation rules and ten mandatory-smoke commit cadence. Historical test claims remain historical evidence.
+
+## 2026-10-31 - Bind model declarations without manufacturing verification
+
+- Foundation: pure immutable request/model/expected-digest equality observation, with closed invalid/mismatch refusals and redacted representation. No model-byte hashing, freshness, locality flags, consent, public processing or canonical writer is added.
+- Verification: four native pure binding tests passed; all 163 WSL annotation-job tests and full 1,346-test provider-free discovery passed (one platform skip each), ResourceWarning promoted to error. Exact source/test copies were hash-verified; no live provider or production data used.
+
+## 2026-10-31 - Add disconnected bounded local-model listing acquisition
+
+- Foundation: explicit metadata-only GET transport binds one exact loopback request, with bounded incremental reads, total acceptance deadline, strict parser and closed cleanup/failure behavior. Factory delay reduces the remaining connect timeout.
+- Boundary: constructor is inert; no default caller, `/api/show`, private document, job processing, model discovery/download, consent or locality proof is connected. Fake transport tests do not verify a deployed server.
+- Verification: ten native fake-only transport tests passed; included in the passing 163-test WSL annotation-job and 1,346-test full regressions below the exact synchronization boundary. No actual socket/service was accessed.
+
+## 2026-10-31 - Define inert exact local-model metadata requests
+
+- Foundation: immutable, redacted loopback-target/configured-model request uses a versioned deterministic equality fingerprint; invalid/cloud labels deny without I/O. The request is not authority, locality/artifact evidence, consent or readiness.
+- Boundary: no acquisition, worker, processing command, default wiring, normal-chat change or runtime state operation. Benchmark trials remain isolated and uncommitted; this is a separately reviewed production foundation.
+- Verification: four native request tests passed; first WSL annotation-job gate passed 149 tests, followed by the expanded 163-test subsystem and 1,346-test full suite (one platform skip each). All exact queued source/document copies were hash-verified.
+
+## 2026-10-30 - Plan persistent virtual worlds and engine orchestration
+
+- Documentation only: extended authoritative Stage 5A simulation with W1–W6 spatial state, NPC routines/social perspectives, engine adapters, bounded autonomous lifecycle/fidelity, validated worldbuilding and isolated cinematic timelines; mapped dependencies in proposed v5 without changing current execution priorities or Steam gates.
+- Preserved Core canonical authority, fictional/personal memory separation, model independence and permissions. Engines own transient physics/navigation/animation; outcomes require Core validation. Reused adventure and resident foundations rather than adding competing systems.
+- Added interfaces, phased acceptance criteria, synthetic benchmark requirements and open design decisions. Existing code/tests establish continuity primitives, not completed world simulation. No implementation, runtime state, live provider, service or configuration changes; historical roadmaps and AGENTS ownership rules remain unchanged.
+
 ## 2026-10-28 - Add opt-in direct loopback annotation transport
 
 - Foundation: immutable completion-only adapter consumes exact trusted locality evidence and emits bounded fixed-path loopback requests. It does not consult ambient host/proxy/credentials, follow redirects, accept compression, discover models or choose fallback. Output cap defaults to 1024 and cannot be made unbounded through this adapter; byte ceilings and incremental remaining-time checks fence response acceptance.
@@ -2006,4 +2101,16 @@
 - Integrity: runtime calls hold no processor lifecycle lock; Ctrl+C/explicit interruption fence output acceptance and preserve earlier checkpoints. The application releases its capacity in its existing finally path and now records a content-free annotation interruption lifecycle error rather than remaining generating. No verified remote-stop claim is made.
 - Boundary: no background service, public control, production storage, review rehydration or canonical writer. Chunk execution metadata is deliberately not summed into unsupported whole-job accounting.
 - Verification: all twenty unique fake-provider WSL integration gates passed across application admission, explicit checkpoint processing, interruption/concurrency, and completion/failure recovery. One fixture expectation was corrected to distinguish the adapter's existing bounded failed-chunk behavior from an escaped runtime error; both paths are now checked. The final provider-free WSL suite ran 1,245 tests successfully (one native-Windows-only skip) with ResourceWarning promoted to an error. No live provider or production state was used.
+
+## 2026-10-29 - Add strict declared local-model listing boundary
+
+- Foundation: pure bounded parsing now selects one exact configured Ollama `/api/tags` model only when name/model match exactly and its server-declared digest, positive size and `gguf` format are structurally valid. Alias selection, duplicate exact entries, incomplete/unknown fields, duplicate JSON keys, non-finite values and oversized listings fail closed.
+- Boundary: no HTTP, service/environment/model-file access, model discovery, private-job construction or public processing is connected. The returned digest remains declared server metadata—not a hash of model bytes, verified local execution, cloud-disablement, authorization, consent or readiness. `/api/show` is intentionally excluded because its response can expose templates/system prompts.
+- Verification: six provider-free contract tests exercise exact binding, strict shape/JSON bounds and non-attestation. See `2026-10-29.annotation-model-listing.sprint.md`.
+
+## 2026-10-29 - Correct local-model listing schema compatibility
+
+- Fix: accept bounded documented `/api/tags` timestamp and model-details fields without retaining them in the declared identity. The first fixture-only parser rejected ordinary server responses; its prior tests established strictness, not real-response compatibility.
+- Robustness: invalid UTF-8, lone surrogates and excessive JSON nesting fail with content-free errors. Unknown remote-model/host extensions still deny; no network, service inspection, execution evidence or public processing is connected.
+- Verification: expanded provider-free contracts include a documentation-shaped response and malformed optional metadata. This is one corrective slice, not ten implementation slices.
 
