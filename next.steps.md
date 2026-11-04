@@ -1,135 +1,110 @@
 # Rotating development handoff
 
-Updated: 2026-10-31. Read this with AGENTS.md, session.files.md, authoritative ROADMAP.md, CHANGELOG.md and the referenced sprint record before acting. Inspect actual file/process/test state after interruption; do not assume an unfinished operation succeeded.
+Updated 2026-10-31 after successful scoped commit and independently verified GitHub push.
 
-## Current slice
+## Last verified backup checkpoint
 
-COMPLETED M1 / WSL-VERIFIED: strict inert manifest codec with seven synthetic
-test methods. Focused 7-test suite and 177-test annotation-job subsystem passed
-(one expected platform skip in subsystem), ResourceWarning treated as error.
-Counter is 10/10; exact scoped commit/push is now due. No trusted evidence or live
-processing enabled. Next: targeted review of measured evidence/consent choices.
+- Commit: bd9f181b73f9792460ad11e4943fb7fc7e9fe082 on WSL main and GitHub refs/heads/main.
+- Subject: Keep Murr’s manifest paws bounded and recovery trails clear.
+- Previous checkpoint: eade99aa73aeac847fc679b135acf7cb83dd31ac.
+- Exact 32-file accumulated allowlist was hash-verified before staging; no unrelated files, runtime data, bytecode or quota trials included.
+- Commit/push verification completed successfully; Windows Git remains a separate older index and was not reset.
+- Required acceptance counter reset to **0/10 for the new cycle**. Previous cycle finished ten gates; no duplicate audit run was counted.
+- This post-backup handoff rewrite and session.files.md closure belong to the next normal commit, not a recursive receipt-only commit.
 
-COMPLETED HIGH-EFFORT M1 DESIGN: the private verification plan now specifies a
-pure bounded manifest-byte decoder that may proceed independently of later
-trusted-evidence review. No implementation or attestation was added. Next slice:
-implement only M1 in pipeline/document_job_manifest.py and its synthetic tests;
-do not connect filesystem, service, model invocation, consent or processing.
-Medium is suitable for this now-explicit pure contract; return to High for the
-authority-bearing verifier/admission work and escalate unresolved ambiguity.
+## Current state
 
-COMPLETED SOL RECOVERY AUDIT / EXACT COPY VERIFIED: reviewed the timing fixes, metadata compatibility,
-helper and records; 24 relevant Windows/WSL hashes matched and independent focused
-audit passed 53 tests (one expected skip). No code changed or new blocking defect
-identified in that scope. Counter stays 8/10: audit reruns do not inflate cadence.
-Plan clarification: listed manifest digest is release-decoder-consumed identity,
-not automatically whole-file or GGUF identity. Targeted measured-evidence review
-remains pending. See 2026-10-31.sol-recovery-review.sprint.md.
+CURRENT 2026-11-04: resumed sprint completed ten required gates across M2a
+hardening (9/186/1,369), M2b budgets (6/192/1,375), M2c reader/integration
+(6/1/199/1,382). Expected skip only in subsystem/full; ResourceWarning as error.
+All three slices COMPLETED / WSL-VERIFIED. Prior two gates plus ten new = twelve;
+backup threshold crossed during M2c, required final slice verification completed
+before backup; carry two gates after successful scoped commit/push, not lost or
+inflated. Fifteen accumulated paths are in current sprint/commit allowlist.
+Exact copies verified; completion records queued for final sync. Commit/push due.
+Next: explicit safe root/model selection and bounded config/remote-reference
+validation; service, consent and OS enforcement remain unimplemented/gated.
+No installed model/provider/private document touched. Manual outcomes unchanged.
+Earlier changing statuses/counters below are historical, not current authority.
 
-COMPLETED CONTEXT RECOVERY / EXACT COPY VERIFIED: starfur.context.md now maps product intent, actual ownership/persistence/flows, implementation limits and documentation drift. Documentation review and nine-file exact Windows/WSL synchronization passed; final closure records use the pending queue until its verified clear. No new tests/smokes required. See 2026-10-31.context-recovery.sprint.md and docs/starfur.context.review.diff. Existing development rules are unchanged; the brief is not authority to replace them. Roger's quota-efficiency experiment directories are unrelated and excluded.
+2026-11-04 sprint: M2a hardening and M2b whole-set budgets COMPLETED. M2b passed
+6 focused/192 subsystem/1,375 full tests (one expected platform skip). Cycle
+counter 8/10, resumed sprint 6/10 required gates. M2c bounded manifest-file
+acquisition and synthetic disk-to-blob integration implemented; reader/integration/
+subsystem/full gates pending. Adds pipeline/document_job_manifest_file.py,
+tests/test_document_job_manifest_file.py and
+tests/test_document_job_artifact_measurement_flow.py: fourteen accumulated
+unbacked paths (original ten plus blob-set test and these three). No installed
+artifacts/provider/service/private data used. Exact copy evidence in sprint.
 
-COMPLETED DEVELOPMENT / OPERATOR ACCEPTANCE PENDING: user.smokes.md plus one-command disposable CLI workflow runner. Required helper workflow and full regression passed. Roger's manual review remains pending. Next dependency: targeted Astra review of docs/private_annotation_verification.plan.md before choosing measured evidence identities/freshness/execution and consent contracts. Plan draft completed; context reconstruction does not clear this security-review gate. No verifier or public processing is enabled.
+COMPLETED M2a / WSL-VERIFIED: bounded single-blob POSIX measurement and
+synthetic fixtures. Required focused suite passed 5 tests; annotation-job subsystem
+passed 182 tests (one expected skip), ResourceWarning as error. Counter now 2/10.
+No installed artifacts/private source/service touched. Adds two accumulated
+unbacked paths: pipeline/document_job_blob_measurement.py and
+tests/test_document_job_blob_measurement.py. Previous eight-path scope retained.
+Full artifact verifier, deployment acceptance and OS egress backend remain pending.
+Next: safe root/model manifest selection and aggregate byte/time budget across
+all blobs, then bounded config/remote-reference validation. No installed artifact
+inspection or setup required for synthetic fixtures. No manual/live smoke needed.
+All current files synchronized/hash-verified; no new commit/push, ten accumulated
+unbacked paths retained (prior eight plus source/test). Earlier 0/10 notes below
+are historical; current counter is 2/10.
 
-Active implementation track: disconnected private annotation jobs. Next is M1
-only, a descriptor parser over supplied bytes, not another declaration wrapper
-or an evidence producer. Real deployment/artifact/execution verification and
-exact-job consent remain pending before processing. Scope and tests are fixed
-in docs/private_annotation_verification.plan.md; no broad stage reorder.
+COMPLETED / BACKED UP: M1 pure manifest-byte codec plus tested request/acquisition/binding foundations, recovery fixes, metadata compatibility, orientation map, workflow helper and design/audit records.
+M1 required focused suite passed 7 tests; annotation-job subsystem passed 177 tests with one expected platform skip, ResourceWarning as error. Its exact source/test hashes and previous-cycle scope are in 2026-10-31.manifest-codec.sprint.md. Latest full regression remains the earlier 1,353-test result, not a new full M1 run.
 
-## Completed since the current recovered checkpoint
+M1 reads supplied bytes only. It cannot open model files, read layer payloads, verify locality, establish consent, reinterpret stored identity or enable processing. No actual service/model/private source was used.
 
-- Exact model request, bounded metadata acquisition and pure declared-model equality foundations exist; October 31 records describe them. They do not attest local artifacts/execution or grant consent.
-- Final source/result retention checks and post-parse completion acceptance check corrected; three new regressions passed.
-- Astra reviewed those corrections and reconfirmed eleven Windows/WSL file hashes; no further blocking defect identified within that focused scope.
-- Both maintained roadmaps mark completed foundations/corrections/decisions; broader deployment/consent/private-processing milestone remains incomplete. v5 remains proposed, not authoritative.
-- Roger selected StarFur-Forge WSL as the intended private-annotation server location.
-- Autonomous slice, safe-fix, targeted model escalation and ten-required-test-run backup rules recorded in AGENTS.md.
+## Next dependency / stop gate
 
-## Next actions and boundaries
+COMPLETED DESIGN DIRECTION (2026-11-01): Roger accepted dedicated StarFur orchestration and bounded Ollama chunks outside Open WebUI. Astra recommendations are now in docs/private_annotation_verification.plan.md; implementation security contracts remain pending. Next requires Sol High deployment/admission/dispatch state-machine design. Existing default-session binding is not accepted private transport dispatch. No service setup or private processing added. Do not repeat declaration wrappers.
+COMPLETED D1 CONTRACT DRAFT (2026-11-01, Sol High): exact identity/acceptance,
+owner/job/attempt admission, one-call chunk budget and cancellation/dispatch gates
+are specified, not implemented. Source gaps: ordinary runtime binding and injected
+annotator seam cannot provide private dispatch/capacity guarantees. RESOLVED:
+Roger requires OS-enforced outbound-network blocking covering the worker and
+inference descendants, natively tested in WSL before private dispatch. No service,
+firewall or configuration changes authorized. Next: independent M2 provider-free
+artifact-verifier contract/fixtures; enforcement backend and actual setup remain
+gated. Counter 0/10; eight-path accumulated allowlist unchanged, unbacked.
 
-1. Recheck session.files.md and current source/WSL state before changes. Windows is editing source; /home/roger/StarFur-Forge in distribution StarFur-Forge, user roger, is the exact test copy.
-   Read starfur.context.md for the recovered product/architecture map. Roger normally leaves WSL running while messaging; do not start/stop it routinely. Windows has no local origin/main reference; this is missing tracking evidence, not a reason to modify its separate Git index. WSL HEAD/local origin/main were read again at the same recorded commit during context recovery; no remote contacted.
-2. Implement M1 only from the completed Sol High contract. Required focused codec
-   and annotation-job subsystem suites are two new gates (8/10 -> 10/10 if both
-   pass), followed by scoped verified commit/push under existing rules. Keep
-   source-byte hash distinct from server-declared/release-decoder identity.
-   Before any trusted evidence producer or private disclosure, complete targeted
-   review of executable trust, artifact/runner identity, freshness and exact-
-   attempt consent. Earlier elevated read-only WSL inspection is not authority
-   for service reconfiguration or implicit model probes.
-3. A non-loopback server listener alone does not violate the client-destination/no-relay contract. Do not change it automatically or escalate models solely for that observation. Actual client target, relay behavior and evidence freshness remain relevant.
-4. Agree the trusted evidence producer and exact-job consent design before runtime wiring/private-source disclosure. Stop for missing operator decisions, uncertain security effects, broader authority or corruption; ask for Astra only for unresolved reasoning/security/design ambiguity. Sol 6.1 High is the default.
-5. Maintain completion/status, next dependency, tests, hashes and backup evidence in the same slice. Preserve runtime data and unrelated dirty files.
+Remaining implementation dependencies (earlier broad review questions below):
+1. Release-decoder/listed-manifest identity versus exact input/file hash and blob identities, including trailing encoding/data and version semantics.
+2. Trusted installed executable/server acceptance and runner/model/artifact correlation, including cached runners and changes.
+3. Sufficient measured local-execution evidence and bounded freshness/pre/post revalidation. Loopback/cloud-disabled labels alone are not proof or OS egress isolation.
+4. One-use exact-job/store-owner/attempt/source/deployment consent before disclosure, with no automatic replay, renewal or cross-job reuse.
 
-## Required tests and smoke gates
+Request targeted Astra or Roger input only for unresolved security/design ambiguity; do not silently delegate. High is appropriate for the authority-bearing review/implementation. No verifier, public processing, private-source probe, service/configuration change or automatic runtime wiring is authorized by this handoff. Server location remains StarFur-Forge WSL; listener wildcard alone is not a client-policy violation.
 
-Counter: **10/10 successful required test runs** since the recovered checkpoint; scoped backup due. Older undocumented carry is unknown. Documentation-only slices add no runs.
+## Operator acceptance
 
-| Count | Required run already completed in WSL | Result |
-|---|---|---|
-| 1 | Focused store/result/loopback regressions | 39 tests, OK, one expected platform skip |
-| 2 | Annotation-job discovery | 166 tests, OK, one expected platform skip |
-| 3 | Full provider-free discovery | 1,349 tests, OK, one expected platform skip |
-| 4 | Listing/request/acquisition/binding compatibility contracts | 32 tests, OK |
-| 5 | Annotation-job discovery after compatibility correction | 170 tests, OK, one expected platform skip |
-| 6 | Full provider-free discovery after compatibility correction | 1,353 tests, OK, one expected platform skip |
-| 7 | Required development smoke of new disposable CLI helper | WORKFLOW PASS, five expectations met; one gate total |
-| 8 | Full provider-free discovery after helper addition | 1,353 tests, OK, one expected platform skip |
-| 9 | Required M1 codec suite | 7 tests, OK |
-| 10 | Required annotation-job subsystem after M1 | 177 tests, OK, one expected platform skip |
+Preserve user.smokes.md. Roger’s one-command disposable CLI workflow review remains **PENDING**; developer WORKFLOW PASS is not operator acceptance. The helper has not changed in M1. No live private-processing smoke exists while processing is disconnected. Visual/audio/game checks stay user-owned.
 
-All used `-W error::ResourceWarning`. Full-suite repeat captured stderr after initial output truncation: zero resource-warning/unraisable-exception/traceback signals; duplicate run adds no count. Exact commands and source/test hashes: 2026-10-31.annotation-audit-followup.sprint.md.
+## New-cycle pending / accumulated unbacked scope
 
-Standalone mandatory smoke gates for the next deployment/consent slice: **not yet specified**. Define only those required by its agreed behavior; never run optional smokes or split assertions to reach ten. Unit methods within a suite do not count separately. A mandatory live model smoke requires the applicable disposable-state/authority boundaries; this handoff grants none.
+- next.steps.md — this required post-push rotation.
+- session.files.md — exact sync queue/closure for this rotation.
 
-## Backup and accumulated edited files
+Additional accumulated unbacked documentation: AGENTS.md, CHANGELOG.md,
+ROADMAP.md, starfur.context.md, docs/private_annotation_verification.plan.md,
+2026-11-01.annotation-worker-design.sprint.md. Counter remains 0/10; no application
+test required. No commit/push this slice. Exact copy evidence is in the sprint.
 
-No new commit/push has occurred. WSL HEAD and locally recorded origin/main at audit time: eade99aa73aeac847fc679b135acf7cb83dd31ac; no fresh remote verification. Windows Git is an older separate baseline. Synchronization and passing tests do not establish GitHub backup.
+No other completed-cycle files are unbacked under this scope. Existing unrelated WSL modifications, including bytecode and docs/COMMANDS.md, remain excluded and untouched. Temporary quota benchmark directories stay isolated.
 
-Accumulated exact files edited/created by this chat's slices (review this allowlist at commit; do not stage the whole dirty tree):
+Pending copy details and exact destination baselines are in session.files.md. Verify all copies before clearing it; copy success is not a commit/push. No application tests or new counter gates are required for this handoff-only rotation.
 
-- AGENTS.md
-- starfur.context.md
-- docs/starfur.context.review.diff
-- 2026-10-31.context-recovery.sprint.md
-- ROADMAP.md
-- ROADMAP.v5.md
-- CHANGELOG.md
-- session.files.md
-- next.steps.md
-- user.smokes.md
-- docs/private_annotation_verification.plan.md
-- tests/manual_annotation_workflow_smoke.py
-- 2026-10-31.annotation-audit-followup.sprint.md
-- pipeline/document_job_model.py
-- tests/test_document_job_model.py
-- pipeline/document_job_store.py
-- pipeline/document_job_loopback.py
-- tests/test_document_job_store.py
-- tests/test_document_job_result_store.py
-- tests/test_document_job_loopback.py
-- pipeline/document_job_model_request.py
-- pipeline/document_job_model_acquisition.py
-- pipeline/document_job_model_binding.py
-- tests/test_document_job_model_request.py
-- tests/test_document_job_model_acquisition.py
-- tests/test_document_job_model_binding.py
-- 2026-10-29.annotation-model-listing.sprint.md
-- 2026-10-31.sol-recovery-review.sprint.md
-- 2026-10-31.manifest-decoder-design.sprint.md
-- pipeline/document_job_manifest.py
-- tests/test_document_job_manifest.py
-- 2026-10-31.manifest-codec.sprint.md
+## Continuing workflow
 
-The request/acquisition/binding source/test files were authored earlier in this
-same development chat and independently hash-verified on recovery; they and the
-October 29 sprint are now explicitly included as accumulated unbacked work, not
-because they appear untracked. The later parser correction has its own evidence.
-Resolve any additional missing dependency through exact recorded scope, never a
-whole-tree stage. Temporary quota trials, runtime and unrelated edits stay excluded.
+Read AGENTS.md and starfur.context.md, then this handoff and actual queue/process state on recovery. Windows edits -> exact queued WSL copies -> required WSL gates -> exact accumulated GitHub backup every ten successful required runs. Do not run optional suites to inflate cadence. Preserve fixed retention, canonical authority, privacy, namespaces and all safety gates.
+Use the five-hour 20%-remaining stop requested for this sprint; other account-window exhaustion/safety limits still apply. Last quota observation before backup was 65% five-hour / 19% weekly remaining; refresh before a new slice rather than treating that as current.
 
-## Rotation after backup
+## Durable evidence
 
-After a successful scoped commit AND verified GitHub push, replace completed-slice notes/test lists here with a compact last-verified-commit checkpoint and reset the successful-run counter for the next cycle. Carry unfinished work, pending copies, failures, blockers and unbacked files forward. Failed/uncertain commit or push never resets this file or the counter. Never erase CHANGELOG, sprint evidence, roadmap statuses or Git state as part of rotation.
-
-Edit the rotated file in Windows and queue/synchronize it normally. That rotation is the first handoff update for the next commit cycle; do not create an endless extra commit merely to record the previous commit hash. Include it in the next ordinary scoped commit.
+- 2026-10-31.manifest-codec.sprint.md — implemented M1 and prior-cycle commit scope.
+- 2026-10-31.manifest-decoder-design.sprint.md — bounded M1 design.
+- 2026-10-31.sol-recovery-review.sprint.md — independent focused audit.
+- 2026-10-31.context-recovery.sprint.md — context reconstruction.
+- 2026-10-31.annotation-audit-followup.sprint.md — earlier corrections and required gates.
+- CHANGELOG.md / maintained roadmaps — completed slices and still-pending wider milestones.

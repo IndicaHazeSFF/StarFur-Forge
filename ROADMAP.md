@@ -1372,6 +1372,34 @@ Dependency-driven deviation: a concise user.smokes.md and disposable one-command
 
 Retention/deadline corrections, advisory metadata bounds and the disposable CLI helper were reviewed against source/tests. Independent repeat validation passed 53 focused tests (one expected platform skip); 24 exact relevant Windows/WSL hashes matched. No blocking defect found in that limited scope; operator acceptance and trusted deployment/consent review remain pending. Declared manifest identity needs release-specific decoder semantics, not assumed whole-file/GGUF equality. Earlier same-chat unbacked foundation files are now explicitly in the accumulated backup scope. No runtime behavior or stage ordering changed; no new commit/push. Audit repetitions do not advance the 8/10 required-run counter. Evidence: `2026-10-31.sol-recovery-review.sprint.md`.
 
+### COMPLETED M2c / WSL-VERIFIED — bounded manifest acquisition (2026-11-04)
+
+Explicit directory-handle/basename acquisition plus synthetic manifest-to-blob-set integration fixtures passed 6 focused reader tests, 1 integration fence, 199 subsystem tests and 1,382 full tests (one expected skip in subsystem/full), ResourceWarning as error. This is not trusted root/model discovery or config/remote-reference validation, and supplies no deployment or private-dispatch authority. Full M2 remains incomplete. Next: safely select/bind the exact model root/manifest and implement bounded config/remote-reference policy, before any service/evidence or private-processing integration.
+
+### COMPLETED M2b / WSL-VERIFIED — shared blob-set budgets (2026-11-04)
+
+Added whole-descriptor-set byte/time ceilings and before/after member snapshots over the caller's trusted directory handle. Exact WSL copies passed 6 focused, 192 subsystem and 1,375 full tests (one expected skip in subsystem/full). No root/model mapping or config/worker authority; full M2 remains incomplete.
+
+### COMPLETED M2a hardening / WSL-VERIFIED (2026-11-04)
+
+Close-failure cleanup and additional replacement/FIFO/post-read-timeout fixtures passed 9 focused, 186 subsystem and 1,369 full-regression tests (one expected skip in subsystem/full). This extends the primitive, not deployment authority. Full M2 remains incomplete.
+
+### COMPLETED M2a / WSL-VERIFIED — single-blob measurement (2026-11-01)
+
+Implemented a disconnected POSIX exact-directory-handle measurement primitive and synthetic fixtures: bounded streaming hash, no-follow/owner/link/regular-file checks and pre/post identity. Exact WSL copies passed 5 focused and 182 annotation-job tests (one expected skip), ResourceWarning as error. No live artifacts, root discovery, config parsing, complete deployment evidence, consent, execution or enforcement backend. Full M2 remains pending; next bind a safely selected root/model manifest and whole-set hash budget, then config/remote-reference validation. No live/operator smoke needed for this primitive.
+
+### ACCEPTED SECURITY GATE — private-worker egress blocking (2026-11-01)
+
+Roger requires OS-enforced outbound-network blocking for the private worker and inference descendants, with native WSL verification before private dispatch. Local observations/cloud-disabled configuration or restricting only a controller using the unrestricted shared daemon are insufficient. Preserve ordinary clients. Service/firewall/configuration changes remain separately authorized. Provider-free artifact/controller work can continue; actual enforcement and dispatch remain pending. This resolves the earlier pending D1 policy choice below.
+
+### COMPLETED D1 CONTRACT DRAFT — private attempt admission (2026-11-01)
+
+Defined separate artifact/deployment/live observations and opaque exact-attempt admission; explicit confirmation, one call per remaining chunk, no initial retry/fallback, cancellation linearization, fresh pre-disclosure checks and checkpoint fencing. Source review identified default-session routing and injected-annotator capacity bypass as unsuitable private integration shortcuts. This is design only, not implemented verification or processing. Pending Roger policy: trusted-host no-relay evidence alone versus requiring OS egress enforcement before private dispatch. Artifact/controller fixture work can remain independent. See docs/private_annotation_verification.plan.md; broader milestone remains pending.
+
+### COMPLETED DESIGN DIRECTION — dedicated annotation worker (2026-11-01)
+
+Roger selected separately managed local annotation orchestration: StarFur retains documents/jobs and sends bounded chunks to Ollama outside Open WebUI's upload lifecycle. This is not implementation completion, installation permission or OS isolation. Preserve shared resource admission and replaceable backends. The targeted review separates declared/manifest/blob identities and operator deployment acceptance from observations. Exact-attempt consent and accepted-transport dispatch remain pending; initial private processing has no model fallback. Next: Sol High deployment/admission-state design, then provider-free implementation. Immediate priorities remain unchanged. See docs/private_annotation_verification.plan.md and 2026-11-01.annotation-worker-design.sprint.md.
+
 ### COMPLETED M1 / WSL-VERIFIED — inert manifest decoder (2026-10-31)
 
 Implementation and required validation completed: seven focused codec tests and 177 annotation-job subsystem tests passed (one expected subsystem skip), ResourceWarning treated as error, on exact hash-verified WSL copies. The codec validates supplied bytes into immutable redacted descriptors and separate raw-input hash only. No filesystem/service/model access, measured locality, consent or processing integration was added. Counter reached 10/10; scoped backup due. Next: unresolved trusted-evidence/consent review, not more claimed-verification wrappers. Design text below is historical contract context. Evidence: `2026-10-31.manifest-codec.sprint.md`.

@@ -23,7 +23,33 @@ Working paths include shared CLI/API assistant orchestration; persistent assista
 
 The active recovered track is **disconnected private annotation jobs**. Store, results/checkpoints, processor, runtime binding, maintenance/submission/inspection controls, locality contracts, loopback transport and model-declaration foundations exist. There is no public processing worker/control. Actual deployment/artifact/execution verification and exact-job disclosure consent remain prerequisites. Do not restart completed declaration work or mistake this one frontier for StarFur's entire purpose.
 
-Latest recorded WSL full regression: **1,353 tests, one expected platform skip**, plus the disposable CLI helper's workflow pass. These are prior development results, not tests run during this reconstruction or Roger's manual acceptance. Current cycle and backup state belong in `next.steps.md`; this document deliberately does not own a second test counter.
+Latest recorded WSL full regression: **1,382 tests, one expected platform skip**, run 2026-11-04 with ResourceWarning as error after M2a hardening, M2b shared budgets and M2c bounded manifest acquisition. This is provider-free development evidence, not Roger's manual acceptance or deployed locality/isolation. Current cycle and backup state belong in `next.steps.md`; this document deliberately does not own a second test counter.
+
+Accepted direction (2026-11-01): a separately managed local annotation worker
+owns orchestration through StarFur's job boundaries; Ollama receives bounded
+chunks only, outside Open WebUI. This remains planned, not deployed or isolated.
+The default-session runtime binding is not an accepted private transport binding.
+Deployment acceptance, freshness and exact-attempt consent/dispatch need Sol High
+design before authority-bearing implementation; service setup is not authorized.
+
+D1 contract draft now specifies separate deployment acceptance/observations and
+one-use exact-attempt admission, with one call per chunk and no initial retry or
+fallback. Nothing implements or enables it. Roger requires OS outbound-network
+blocking covering the worker and inference descendants, with native WSL tests
+before private dispatch; implementation remains pending. Existing
+injected-annotator test wiring skips capacity acquisition and is not the private
+production assembly path. See the maintained verification plan for state/race gates.
+
+M2a single-blob measurement is a disconnected read-only POSIX primitive over a
+trusted caller-opened directory handle. It does not validate root/model mapping,
+all artifacts/configuration or deployment, and supplies no processing authority.
+Acceptance is recorded separately in the current sprint/handoff.
+Whole-set measurement adds a shared byte/time budget and end-of-set member
+revalidation, still over a trusted caller-opened directory and supplied manifest.
+On-disk manifest binding/root selection and config policy remain separate gates.
+Explicit bounded on-disk manifest acquisition now has its own disconnected
+directory-handle primitive. Caller root/model selection and interpretation of
+config/remote references remain unfinished; measuring bytes is not acceptance.
 
 ## 4. Architecture map
 
@@ -171,7 +197,7 @@ Keep separate: a fact existed -> retrieval selected it -> correct bounded contex
 
 ## 11. Development frontier and gates
 
-**Current active work:** recover durable orientation and finish the private annotation deployment-verification design. The completed request/acquisition/declaration binding, final retention/deadline fixes, newer listing metadata compatibility and one-command operator workflow are recorded in the October 31 changelog/sprint.
+**Current active work:** disconnected private-annotation artifact measurement. M2a single-blob hardening, M2b shared budgets and M2c explicit directory-handle manifest acquisition passed their provider-free WSL gates on 2026-11-04. Trusted root/model selection, config/remote-reference interpretation, deployment acceptance, exact-attempt admission and OS egress enforcement remain incomplete. Do not confuse a synthetic disk-to-hash flow with private-job readiness.
 
 **Completed safe prerequisite:** M1 in `pipeline/document_job_manifest.py` is a pure bounded schema-2 decoder over supplied bytes. Its focused/subsystem WSL verification passed; see the October 31 codec sprint. It returns immutable redacted descriptors and a separately named raw-input hash, never locality, readiness or API-digest proof. No files/services or layer payloads are opened, and later trusted-evidence gates remain unchanged.
 

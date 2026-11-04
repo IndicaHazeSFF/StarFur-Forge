@@ -4,6 +4,11 @@ Maintain until Roger explicitly says to stop. This is the short checklist for th
 
 ## Start here — one command in the StarFur-Forge WSL terminal
 
+2026-11-04 code checkpoint: M2a/M2b/M2c filesystem foundations passed ten
+required provider-free gates, final full suite 1,382 tests (one expected skip).
+No new manual/live smoke required for these disconnected primitives. Existing
+operator outcomes below stay PENDING; private processing is still unavailable.
+
 ```bash
 cd /home/roger/StarFur-Forge && .venv/bin/python -W error::ResourceWarning -m tests.manual_annotation_workflow_smoke
 ```

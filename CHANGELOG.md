@@ -1,3 +1,39 @@
+## 2026-11-04 - Read bounded manifests through exact directory handles
+
+- Added disconnected explicit-basename POSIX manifest acquisition with regular/single-link/owner/no-follow checks, bounded read/decode time and before/after identity validation. Returns parsed descriptors only. Synthetic integration connects a temporary disk manifest to whole-set blob measurement; missing members deny, configuration bytes remain uninterpreted.
+- Exact WSL copies passed 6 reader, 1 integration, 199 subsystem and 1,382 full tests (one expected skip in subsystem/full), ResourceWarning as error. Ten required gates passed in the resumed sprint; prior two gates make twelve since last backup, so carry two into the next cadence after scoped backup. No installed artifact, provider, private data or services accessed; deployment and OS enforcement remain disconnected.
+
+## 2026-11-04 - Bound complete descriptor-set measurement
+
+- Added a disconnected set measurement over one caller-opened directory: total declared-byte budget checked before opening, one shared monotonic deadline across members, ordered hash results and rechecks of earlier files after later hashing. Exact WSL copies passed 6 focused, 192 subsystem and 1,375 full tests (one expected skip in subsystem/full); counter 8/10, resumed sprint 6/10 gates. No root discovery/config parsing/locality or consent authority.
+
+## 2026-11-04 - Harden blob measurement cleanup and adversarial refusals
+
+- Ensure both owned handles get a close attempt even if one close raises; sanitize cleanup-only failures and preserve an already propagating interruption/failure. Caller-owned directory handle remains open.
+- Added synthetic regressions for failed cleanup, interruption plus cleanup failure, pathname replacement, FIFO refusal and deadline expiration after reading. Exact WSL copies passed 9 focused, 186 subsystem and 1,369 full tests (one expected skip in subsystem/full). Counter 5/10; three gates in resumed sprint. No production state/provider used; see maintained worker sprint.
+
+## 2026-11-01 - Measure one bounded local blob without deployment authority
+
+- Added disconnected POSIX directory-handle blob hashing with exact descriptor identity, no-follow regular/single-link/ownership checks, byte/time acceptance limits, change detection and interruption cleanup. Returns measured hash only, never private-job readiness or authority. No installed models/services or private documents accessed.
+- Added disposable synthetic fixtures for success, hash/size/budget/owner refusal, link/directory/permissions, clocks, changed files and interruption. Exact WSL copies passed 5 focused and 182 subsystem tests (one expected skip), ResourceWarning as error; counter 2/10. M2a completed, not the full artifact verifier/private worker. See maintained worker sprint for exact queue and results. No operator/live smoke required.
+
+## 2026-11-01 - Require private-worker OS outbound-network enforcement
+
+- Roger selected mandatory OS-enforced outbound-network blocking for the private worker and inference descendants, with native WSL verification before private dispatch. Restricting only the controller while using unrestricted shared Ollama is insufficient; preserve ordinary clients.
+- Updated operative plan/guidance/roadmap/context/handoff; no service, firewall, configuration, source or runtime data changed. Independent provider-free development may proceed, but actual enforcement/backend setup remains gated. Documentation-only; no tests required, counter 0/10; exact copy evidence in the maintained worker sprint. No commit/push.
+
+## 2026-11-01 - Specify private deployment and attempt admission boundaries
+
+- Added D1 contract draft: distinct observations/operator acceptance, opaque owner/job/source/attempt/settings binding, one-use confirmation, single-call chunk budget, explicit cancellation/disclosure ordering, no initial retry/fallback, drift/expiry/restart fences and future regression matrix.
+- Source review found ordinary default-session dispatch and injected-annotator capacity bypass cannot substitute for accepted private transport admission. No source/runtime behavior changed. Pending operator policy: whether OS outbound-network enforcement is mandatory before private dispatch.
+- Documentation-only verification; no application tests required, counter 0/10. No services, probes or private data accessed. Exact sync/backup evidence in 2026-11-01.annotation-worker-design.sprint.md.
+
+## 2026-11-01 - Record dedicated private-annotation worker direction
+
+- Roger selected StarFur-owned document/job orchestration with bounded Ollama inference chunks outside Open WebUI. No backend removal, service setup, execution or private processing was enabled.
+- Recorded targeted review recommendations separating declared/manifest/blob identity, operator deployment acceptance, bounded observations and exact-attempt consent. Identified ordinary default-session runtime binding versus accepted private transport as an explicit integration gate; initial private jobs must not use model fallback.
+- Documentation-only slice; no application tests required and counter remains 0/10. Next authority-bearing deployment/admission design requires Sol High. Exact copy/backup evidence: 2026-11-01.annotation-worker-design.sprint.md.
+
 ## 2026-10-31 - Recover the resident-platform context map
 
 - Added starfur.context.md: product/research intent, implemented versus foundation/future status, subsystem ownership, persistence/lifetimes, request flows, authority matrix, benchmark limits and the actual private-annotation frontier. Existing development rules and roadmap authority remain canonical.
