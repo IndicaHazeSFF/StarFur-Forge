@@ -4,10 +4,16 @@ Maintain until Roger explicitly says to stop. This is the short checklist for th
 
 ## Start here — one command in the StarFur-Forge WSL terminal
 
+2026-11-05 M2f development checkpoint: 6 config-file, 4 integration, 224 subsystem
+and 1,407 full-regression tests passed (one expected platform skip in subsystem/
+full). No new manual/live smoke required; config inspection remains disconnected
+from private processing. Prior operator workflow PASS remains valid for its scope.
+
 2026-11-04 code checkpoint: M2a/M2b/M2c filesystem foundations passed ten
 required provider-free gates, final full suite 1,382 tests (one expected skip).
-No new manual/live smoke required for these disconnected primitives. Existing
-operator outcomes below stay PENDING; private processing is still unavailable.
+Roger reported WORKFLOW PASS and all 22 artifact-measurement tests passing on
+2026-11-04 at checkpoint fc6f5f2. Disposable CLI workflow operator acceptance is
+PASS; private processing is still unavailable. Optional broader checks remain pending.
 
 ```bash
 cd /home/roger/StarFur-Forge && .venv/bin/python -W error::ResourceWarning -m tests.manual_annotation_workflow_smoke
@@ -17,11 +23,11 @@ Expected: five PASS lines and a final **WORKFLOW PASS**, exit 0. Read the labels
 
 | Workflow check | Expected | Roger's result |
 |---|---|---|
-| Confirmed synthetic document submission | queued, content-free progress | PENDING |
-| New CLI process opens the job | queued intent fenced as interrupted | PENDING |
-| Explicit resume, then another status request | resume changes intent only; no worker; original expiry unchanged | PENDING |
-| Inspect without confirmation / inspect unfinished job | both refuse; no candidate page or record change | PENDING |
-| Wrong deletion confirmation / exact deletion / list | wrong refuses; exact removes fixture job; empty list | PENDING |
+| Confirmed synthetic document submission | queued, content-free progress | PASS — Roger, 2026-11-04 |
+| New CLI process opens the job | queued intent fenced as interrupted | PASS — Roger, 2026-11-04 |
+| Explicit resume, then another status request | resume changes intent only; no worker; original expiry unchanged | PASS — Roger, 2026-11-04 |
+| Inspect without confirmation / inspect unfinished job | both refuse; no candidate page or record change | PASS — Roger, 2026-11-04 |
+| Wrong deletion confirmation / exact deletion / list | wrong refuses; exact removes fixture job; empty list | PASS — Roger, 2026-11-04 |
 
 These exercise the real `starfur.py annotation-jobs` CLI in separate processes. A passing workflow is not quality, secure-erasure, verified cloud disablement or model-execution evidence. The helper does not process a job or call a model.
 
@@ -42,5 +48,12 @@ Expected: OK. Fixtures own their temporary state. This checks consent/refusal, p
 - OpenWebUI/API/document-review and apartment visual checks: OUTSIDE this annotation-job slice; add a separate bounded disposable workflow when those surfaces change. Do not substitute the annotation helper for visual or model-quality acceptance.
 
 ## Developer verification versus operator acceptance
+
+Current operator acceptance: PASS, Roger reported final WORKFLOW PASS with
+test-owned cleanup, plus all 22 focused artifact tests passing. The helper's
+generic reminder that operator review is separate is expected; Roger's report
+supplies that acceptance. This repeat/optional operator run does not increment
+the required-development counter (2/10). Historical developer paragraph below
+does not override these results or close the optional broader/manual-result gates.
 
 New helper development check: PASSED on 2026-10-31 (all five workflow labels, final WORKFLOW PASS). Full provider-free regression after adding helper: PASSED, 1,353 tests with one expected skip and zero stderr warning/traceback signals. The helper checkpoint was 8/10; current development counter/backup state is in next.steps.md (M1 now reaches 10/10). Operator results below remain independent of that counter. No operator result has been claimed. Keep this file across ordinary slices; rotation of next.steps.md must not erase pending operator checks. When Roger runs a check, record pass/fail, relevant code/commit checkpoint and a concise content-free observation. Stop maintaining only on explicit revocation; do not delete automatically.

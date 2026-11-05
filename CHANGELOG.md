@@ -1,3 +1,23 @@
+## 2026-11-05 - Bind config decoding to exact measured file bytes
+
+- Added explicit bounded POSIX config acquisition with no-follow entry/handle equality, hash/size/schema validation, metadata-only output, retention-free deadline checks and interruption/close cleanup. New inspect_model_tree_config composes it around blob hashing, rechecks all original member identities and shares the acceptance deadline; legacy measurement behavior stays unchanged.
+- Exact WSL copies passed 6 reader, 4 integration, 224 subsystem and 1,407 full tests (one expected skip in subsystem/full), ResourceWarning as error. Counter twelve since backup; finish required slice gates before scoped backup and carry two. No installed models, service, private documents, admission or egress enforcement touched. This remains an observation primitive, not private-processing readiness. Targeted backend/isolation/control-transport design review is the next security gate.
+
+## 2026-11-04 - Validate basic GGUF config bytes without locality authority
+
+- Added pure bounded config parsing tied to exact manifest config hash/size and ordered rootfs layer digests. Initial policy accepts only basic GGUF linux/amd64 metadata; remote/draft and all optional/unknown extensions deny even empty/null. No payload or metadata is promoted to deployment authority.
+- Source-grounded schema from pinned Ollama v0.32.1 config.go/createConfigLayer; synthetic I/O-blocked tests cover malformed/remote/extended JSON and equality/type/label boundaries. Exact WSL copies passed 6 focused, 214 subsystem and 1,397 full tests (one expected skip in subsystem/full), ResourceWarning as error. Counter 8/10; pause for High before measured-config acquisition/binding. No file acquisition, service, processing or private source accessed.
+
+## 2026-11-04 - Bind artifact measurement to an explicit anchored model tree
+
+- Added disconnected no-follow directory-relative traversal for an exact root-component tuple and narrow explicit lowercase model:tag. Fixed local registry/library layout, owner/device/permission checks, manifest inode/content and full directory-chain revalidation prevent silent path replacement acceptance. One monotonic deadline spans manifest reads and blob-set hashing; no discovery, environment access, config interpretation or runtime wiring.
+- Added synthetic symlink/race/cross-device/permission/manifest replacement/interruption fixtures. Exact WSL copies passed 9 focused, 208 subsystem and 1,391 full tests (one expected skip in subsystem/full), ResourceWarning as error. Counter 5/10; no new manual/live smoke required. No installed models/services/private documents accessed; safe anchor acquisition and deployment/consent/OS enforcement remain separate gates. Pause for Medium before pure config-contract/schema work.
+
+## 2026-11-04 - Record operator workflow acceptance
+
+- Roger reported WORKFLOW PASS with test-owned temporary cleanup and all 22 focused artifact-measurement tests passing at fc6f5f2. Marked the five CLI workflow phases accepted; optional broader/live/result checks remain pending. The helper's generic operator-review reminder is expected.
+- Documentation only; no rerun or new required gate, counter remains 2/10. No private processing, deployment, OS-isolation or model-quality claim. Acceptance records queued for normal exact WSL sync and next scoped backup.
+
 ## 2026-11-04 - Read bounded manifests through exact directory handles
 
 - Added disconnected explicit-basename POSIX manifest acquisition with regular/single-link/owner/no-follow checks, bounded read/decode time and before/after identity validation. Returns parsed descriptors only. Synthetic integration connects a temporary disk manifest to whole-set blob measurement; missing members deny, configuration bytes remain uninterpreted.

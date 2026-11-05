@@ -4,30 +4,33 @@
 
 None.
 
-No pending source/test copies. All completion records copied and SHA-256 verified;
-final queue/receipt closure synchronized separately. Scoped backup due for fifteen
-accumulated paths; ten new gates plus two prior. Earlier notes are historical.
+M2f exact source/test queue copied and SHA-256 verified; required tests passed.
+Completion records copied and SHA-256 verified; final receipt closure synchronized
+separately. No pending copies. Fifteen accumulated paths due for scoped backup;
+twelve gates since last backup, carry two after closing slice.
 
-M2a source/test and records copied with exact baseline/path/hash verification.
-Completion receipts synchronized separately. Counter 2/10: focused 5 tests and
-subsystem 182 tests (one expected skip). Ten accumulated unbacked paths retained;
-no commit/push. No manual/live smoke required. Earlier counters are historical.
+M2e source/test and records synchronized and SHA-256 verified. Completion receipts
+synchronized separately; no pending source copies. Counter 8/10; twelve exact
+accumulated unbacked paths (prior ten plus config source/test). No commit/push.
+PAUSED for High filesystem binding. Earlier M2d/acceptance counters are historical.
 
-Policy update: all eight exact accumulated paths synchronized and SHA-256 verified.
-Queue closed; no tests required, counter 0/10. Policy choice resolved: OS outbound
-blocking is mandatory before private dispatch. Earlier stop notices below are
-historical. No service changes, commit or push; accumulated scope stays unbacked.
+M2d source/test queue copied and SHA-256 verified; focused/subsystem/full tests
+passed 9/208/1,391 (one expected platform skip), counter 5/10.
+All completion records copied and SHA-256 verified; final receipt/queue closure
+synchronized separately. No pending copies. Later edits re-enter the queue.
+Ten accumulated unbacked paths listed in handoff/sprint; no commit/push yet.
 
-D1 eight-path design queue copied and SHA-256 verified. Final closure receipts
-use the same exact two-path baseline checks. No tests required; counter 0/10.
-All eight accumulated files remain unbacked; no commit/push. STOP for Roger's
-egress-enforcement policy choice; no service/private-processing change authorized.
+Acceptance-record update: six exact files synchronized and SHA-256 verified;
+final receipt/queue closure synchronized separately. No pending copies. Six records
+remain accumulated unbacked scope; counter 2/10. No application tests required.
 
-2026-11-01 eight-path documentation queue copied with exact baseline/path and
-SHA-256 verification; closure records synchronized separately. All eight paths
-remain accumulated unbacked scope. Counter 0/10. No application tests required.
-Next: Sol High deployment/admission design. Prior closure below is historical.
+Both rotation records copied and SHA-256 verified; final closure synchronized
+against the recorded rotation hashes. Next edits re-enter this exact queue.
 
-Post-push handoff rotation synchronized and SHA-256 verified. Last verified GitHub checkpoint: bd9f181b73f9792460ad11e4943fb7fc7e9fe082. New-cycle required-run counter: 0/10. next.steps.md and this manifest are deliberately uncommitted next-cycle records, to include in the next ordinary scoped backup; do not recursively commit just for rotation.
-
-Completed M1 evidence and prior-cycle exact scope: 2026-10-31.manifest-codec.sprint.md. Current unresolved trusted-evidence/consent gate and pending manual acceptance: next.steps.md / user.smokes.md. No runtime/service/private-source or temporary benchmark changes. Later edits re-enter the queue.
+Post-push rotation only. Last verified WSL/GitHub checkpoint:
+fc6f5f20a53eafa1d7fe54e6ea7904f069f92997.
+All fifteen scoped sprint files backed up; this rotation is deliberately not
+recursively committed. New-cycle accumulated unbacked allowlist is exactly these
+two records. Required-run counter 2/10 carried forward; ten requested gates passed.
+No application tests needed for rotation; operator outcomes remain pending.
+Pre-copy baselines and verification evidence: next.steps.md.

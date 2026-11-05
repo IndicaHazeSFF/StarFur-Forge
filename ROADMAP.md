@@ -1366,11 +1366,23 @@ The disconnected parser validates and discards v0.32.1 advisory capability label
 
 ### COMPLETED DEVELOPMENT / OPERATOR CHECK PENDING — temporary workflow handoff (2026-10-31)
 
-Dependency-driven deviation: a concise user.smokes.md and disposable one-command real-CLI fixture runner support immediate workflow acceptance after chat recovery, ahead of private-processing integration. Required helper workflow passed and full discovery passed 1,353 tests (one expected skip), zero stderr warning/traceback signals. Roger's manual acceptance remains pending independently. No private processing/model/service permission is added. Keep the runbook until Roger revokes it; roadmaps may be reordered for current/near-current dependencies with recorded scope and unchanged safety boundaries.
+Dependency-driven deviation: a concise user.smokes.md and disposable one-command real-CLI fixture runner support immediate workflow acceptance after chat recovery, ahead of private-processing integration. Required helper workflow passed and full discovery passed 1,353 tests (one expected skip), zero stderr warning/traceback signals. COMPLETED OPERATOR ACCEPTANCE 2026-11-04: Roger reported WORKFLOW PASS with cleanup and all 22 artifact-measurement tests passing at fc6f5f2. Repeat operator checks do not increment the required-development counter. No private processing/model/service permission is added. Keep the runbook until Roger revokes it; roadmaps may be reordered for current/near-current dependencies with recorded scope and unchanged safety boundaries.
 
 ### COMPLETED INDEPENDENT RECOVERY AUDIT — Sol review (2026-10-31)
 
 Retention/deadline corrections, advisory metadata bounds and the disposable CLI helper were reviewed against source/tests. Independent repeat validation passed 53 focused tests (one expected platform skip); 24 exact relevant Windows/WSL hashes matched. No blocking defect found in that limited scope; operator acceptance and trusted deployment/consent review remain pending. Declared manifest identity needs release-specific decoder semantics, not assumed whole-file/GGUF equality. Earlier same-chat unbacked foundation files are now explicitly in the accumulated backup scope. No runtime behavior or stage ordering changed; no new commit/push. Audit repetitions do not advance the 8/10 required-run counter. Evidence: `2026-10-31.sol-recovery-review.sprint.md`.
+
+### COMPLETED M2f / WSL-VERIFIED — measured config-file binding (2026-11-05)
+
+Explicit metadata-only config-file acquisition now composes with anchored-tree hashing via a separate opt-in inspection function. Shared deadline, exact config bytes/descriptor equality and final original blob/manifest/chain identities; legacy measurement remains unchanged. Exact WSL copies passed 6 reader, 4 integration, 224 subsystem and 1,407 full tests (one expected skip in subsystem/full), ResourceWarning as error. No actual deployment, executable/server/runner verification, consent, OS enforcement or private processing is enabled; trusted-anchor acquisition remains a caller obligation. Next security design gate: choose/enforce worker-only network isolation and authenticated Core control transport consistent with literal-loopback/no-relay policy; targeted Astra review before privileged-backend selection, not a broad audit.
+
+### COMPLETED M2e / WSL-VERIFIED — pure config codec (2026-11-04)
+
+Pinned schema review supports a deliberately narrow basic GGUF config parser: exact bytes/config descriptor and ordered layer binding; remote/draft/optional/unknown extensions refuse, even empty. Exact WSL copies passed 6 focused, 214 subsystem and 1,397 full tests (one expected skip in subsystem/full), ResourceWarning as error. No file-reading integration, local-execution or consent evidence; binding measured config acquisition into M2d remains the next High filesystem slice.
+
+### COMPLETED M2d / WSL-VERIFIED — anchored model-tree measurement (2026-11-04)
+
+Explicit trusted-anchor/root-components/model:tag mapping now drives fixed-layout manifest acquisition and shared-budget blob measurement with no-follow traversal and final manifest/chain identity checks. Exact WSL copies passed 9 focused, 208 subsystem and 1,391 full tests (one expected skip in subsystem/full), ResourceWarning as error. Owner/device/permissions deny unsupported forms; no discovery or config/deployment/consent authority. The trusted caller must still safely acquire/accept the anchor; full M2/private processing remain incomplete. Next: reviewed bounded pure config/remote-reference codec; no live artifacts or service setup required for that prerequisite.
 
 ### COMPLETED M2c / WSL-VERIFIED — bounded manifest acquisition (2026-11-04)
 

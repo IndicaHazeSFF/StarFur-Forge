@@ -23,7 +23,7 @@ Working paths include shared CLI/API assistant orchestration; persistent assista
 
 The active recovered track is **disconnected private annotation jobs**. Store, results/checkpoints, processor, runtime binding, maintenance/submission/inspection controls, locality contracts, loopback transport and model-declaration foundations exist. There is no public processing worker/control. Actual deployment/artifact/execution verification and exact-job disclosure consent remain prerequisites. Do not restart completed declaration work or mistake this one frontier for StarFur's entire purpose.
 
-Latest recorded WSL full regression: **1,382 tests, one expected platform skip**, run 2026-11-04 with ResourceWarning as error after M2a hardening, M2b shared budgets and M2c bounded manifest acquisition. This is provider-free development evidence, not Roger's manual acceptance or deployed locality/isolation. Current cycle and backup state belong in `next.steps.md`; this document deliberately does not own a second test counter.
+Latest recorded WSL full regression: **1,407 tests, one expected platform skip**, run 2026-11-05 with ResourceWarning as error after M2f config-file binding. This is provider-free development evidence, not deployed locality/isolation. Roger separately accepted the disposable CLI workflow and reran the prior 22 artifact tests successfully. Current cycle and backup state belong in `next.steps.md`; this document deliberately does not own a second test counter.
 
 Accepted direction (2026-11-01): a separately managed local annotation worker
 owns orchestration through StarFur's job boundaries; Ollama receives bounded
@@ -50,6 +50,17 @@ On-disk manifest binding/root selection and config policy remain separate gates.
 Explicit bounded on-disk manifest acquisition now has its own disconnected
 directory-handle primitive. Caller root/model selection and interpretation of
 config/remote references remain unfinished; measuring bytes is not acceptance.
+An explicit anchored-tree adapter composes local manifest and blob measurement
+for a narrow model:tag layout, with no-follow owner/device/chain revalidation.
+Safe anchor acquisition is still a caller obligation; no environment/default-root
+discovery, configuration interpretation or deployment authority is implied.
+The separate pure basic-GGUF config codec binds supplied bytes to config/hash and
+ordered layer descriptors, rejecting remote/draft/optional/unknown fields. It is
+used only by explicit bounded config inspection below and grants no locality or consent.
+The explicit inspect_model_tree_config path now composes bounded no-follow config
+acquisition/decoding with tree hashing and original-member revalidation. Legacy
+measurement-only behavior is preserved; neither is private processing or actual
+deployment verification. Optional inspection does not run at import/startup.
 
 ## 4. Architecture map
 
