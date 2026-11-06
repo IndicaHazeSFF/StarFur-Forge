@@ -1,5 +1,60 @@
 # Private annotation deployment verification — review draft
 
+## Accepted isolation/control direction — 2026-11-05
+
+Roger approved the targeted Astra recommendation as DESIGN ONLY. Core depends
+on a platform-neutral private-worker protocol and demonstrated enforcement, not
+WSL APIs. First reference direction: isolated worker, dedicated Ollama and all
+inference descendants in one private network namespace with loopback only, no
+external interface/route; ordinary Ollama/OWU remain untouched. A narrowly trusted
+supervisor establishes isolation before private input and supplies a private
+inherited control socket pair. It is not a host HTTP proxy or generic relay.
+The worker adapter talks directly to its measured Ollama within that namespace.
+Namespace-qualified endpoint/process epoch replaces any assumption that Core's
+127.0.0.1 is the worker's 127.0.0.1. Existing locality-v1 objects are not upgraded
+or silently reused; a separately versioned deployment/transport policy is needed.
+
+IMPORTANT D1 refinement: burn the exact dispatch slot BEFORE the first possible
+Core-to-worker write of private bytes, not merely before the eventual HTTP body.
+No replay after possible channel disclosure; post-call rejection cannot undo it.
+Channel ownership comes from trusted launch/handle provenance and process epoch,
+not IDs or SO_PEERCRED alone (socketpair credentials predate later exec/identity
+changes). No arbitrary messages, destinations, file access, FD-passing requests,
+tools or grants. Close all unrelated inherited handles; worker control handles
+must not leak to Ollama/runners. Bounded schemas are data, not capabilities.
+
+Network namespaces alone are insufficient: restrict filesystem host sockets,
+Windows interop, mounts, inherited descriptors, capabilities and namespace escape;
+review GPU/driver paths individually. Dedicated unprivileged execution and
+descendant supervision require enforceable native tests, not configuration claims.
+No global wsl.conf, service/firewall change, launcher installation, deployment or
+live/private probe is authorized. Unsupported enforcement denies, with no shared-
+daemon fallback. The accepted trusted-host/binary model is not hostile-code/VM
+isolation. Preserve original retention, Focus Mode and physical capacity leases.
+
+Native Windows later supplies equivalent authenticated IPC, isolation, lifecycle
+and ACL/handle adapters; current POSIX store denies native Windows. Self-contained
+packaging is not proof that required OS features exist. Keep protocol, Core
+consent/storage and chunk validation reusable; do not retrofit WSL into Core or
+claim the separate sandbox backend automatically satisfies private annotation.
+
+Implementation order: bounded inert wire codec; fake-transport lifecycle/admission
+with pre-IPC slot burn; separately reviewed supervisor/enforcement and deployment
+evidence; separately authorized native synthetic tests (egress/host relay/children,
+GPU, crash/cancel/restart, unchanged clients); then exact-attempt private dispatch.
+No live smoke is possible from a pure codec. No initial retry/fallback.
+
+Sources reviewed for the design (not installed-host evidence):
+- https://man7.org/linux/man-pages/man7/network_namespaces.7.html
+- https://man7.org/linux/man-pages/man7/unix.7.html
+- https://learn.microsoft.com/en-us/windows/wsl/wsl-config
+
+W1 wire foundation: pipeline/document_job_worker_protocol.py defines strict
+64 KiB request/256 KiB result envelopes, closed controls/outcomes and equality
+correlation only. No I/O, channel authentication, replay prevention, consent,
+worker lifecycle, accepted deployment or application wiring is implemented.
+Empty/length completions remain transport data, not extraction quality.
+
 Status: DEDICATED-WORKER DIRECTION ACCEPTED / IMPLEMENTATION SECURITY GATES PENDING, 2026-11-01. This is a proposed implementation sequence, not evidence, permission, a deployment certificate or a public processing control. Selected location: StarFur-Forge WSL. Core assumes a trusted local OS/operator, not hostile-root isolation.
 
 ## Accepted worker direction — 2026-11-01
@@ -142,7 +197,8 @@ For each explicit step:
    only the controller-issued exact dispatch object, never arbitrary messages
    plus an admission ID. Check rendered-byte/output ceilings before sending.
 4. Recheck cancellation/identity and atomically burn the chunk's dispatch slot
-   immediately before the first possible write of private bytes. Never hold store
+   before the first possible Core-to-worker write of private bytes (including IPC,
+   not just the downstream HTTP request). Never hold store
    or processor lifecycle locks across provider I/O. Controller cancellation and
    dispatch linearize: cancellation winning first prevents send; dispatch winning
    first means disclosure may already occur. Never claim cancellation undoes it.

@@ -1,3 +1,22 @@
+## 2026-11-06 - Fence controller shutdown and cancellation ordering
+
+- Added idempotent registry closure that invalidates all handles and refuses new preparation; reference release is not secure erasure or remote stop. Deterministic thread fixtures cover cancellation winning before versus after burn, plus sanitized clock failure fencing. Exact WSL gates passed 11 focused/251 subsystem tests (one expected skip), ResourceWarning as error. Counter11: complete required gates, back up exact W1-W4 scope and carry one. No live/manual smoke needed.
+
+## 2026-11-06 - Bound one-use private worker byte dispatch
+
+- W3 adds a disconnected trusted-Core registry with exact-object challenges/admissions/bindings, captured bounded request bytes, fixed expiry, one outstanding send, atomic pre-return slot burn, result correlation and terminal fencing. No retry/slot restoration or authority from saved IDs.
+- This implements only controller-local mechanics, NOT real operator consent, store/deployment binding producers, fresh enforcement/capacity checks, a transport or private processing. Exact WSL copies passed 8 focused, 248 subsystem and 1,431 full tests (one expected skip in subsystem/full), ResourceWarning as error; counter 9/10. No live/manual smoke needed.
+
+## 2026-11-05 - Describe worker lifecycle without dispatch authority
+
+- W2 adds a pure monotone dispatch description: pre-burn failure stays undisclosed; post-burn failure retains possible disclosure; terminal states reject late responses/replay events. Constructible descriptions/events are not consent, authentic observations or an atomic controller. No runtime wiring or I/O.
+- Exact verified WSL copies passed 6 focused and 240 subsystem tests (one expected skip), ResourceWarning as error; counter now 6/10. No manual/live smoke needed; actual attempt controller is the next High boundary. No new commit/push (cadence not reached).
+
+## 2026-11-05 - Approve isolated-worker direction and bound inert wire data
+
+- Recorded Roger's approval of isolated worker/dedicated inference with private supervised IPC, platform adapters and pre-IPC disclosure-slot consumption. No service/setup or processing authority; ordinary clients unchanged.
+- W1 adds strict versioned, redacted request/result codecs with total UTF-8 wire ceilings, exact settings/identity equality and closed failures. IDs/decoded data are not authentication, consent, replay protection or readiness. Exact WSL copies passed 10 focused and 234 subsystem tests (one expected skip), ResourceWarning as error; counter 4/10. No live/manual smoke needed. Lifecycle/admission and actual enforcement remain separate. Ready to lower to Sol Medium for disconnected lifecycle fixtures; no new commit/push yet.
+
 ## 2026-11-05 - Bind config decoding to exact measured file bytes
 
 - Added explicit bounded POSIX config acquisition with no-follow entry/handle equality, hash/size/schema validation, metadata-only output, retention-free deadline checks and interruption/close cleanup. New inspect_model_tree_config composes it around blob hashing, rechecks all original member identities and shares the acceptance deadline; legacy measurement behavior stays unchanged.

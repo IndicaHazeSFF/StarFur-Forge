@@ -1,5 +1,14 @@
 # StarFur Forge: project context and architecture map
 
+## Current accepted worker refinement — 2026-11-05
+
+W3 (2026-11-06) adds disconnected one-use byte-budget mechanics over trusted
+opaque bindings. It owns no storage, measured deployment, operator consent
+channel, transport or readiness. Full D1 acceptance/admission and actual OS
+enforcement remain unfinished; captured bytes must not be replayed by callers.
+
+Roger approved the targeted isolation/control design: Core keeps document lifecycle and sends only bounded dispatches over a private supervisor-owned channel to an isolated worker/dedicated Ollama/descendant boundary. Consume consent before any Core-to-worker private bytes. Platform-neutral contracts permit later Windows IPC/isolation/ACL adapters; WSL is first reference, not a product requirement. W1 wire codec is inert data only, not authentication, consent, replay prevention or a deployed worker. Design STOP resolved; actual enforcement/deployment/admission gates still pending. Current status in next.steps.md supersedes older frontier/acceptance paragraphs below; operator workflow acceptance remains PASS.
+
 Reconstructed 2026-10-31 from repository guidance, roadmap, implementation, test code and recorded slice evidence, with Roger's recovery brief supplying explicit product intent. This is an orientation map, not new development authority, a replacement roadmap, a security certification or a claim that all tests were rerun. Read [AGENTS.md](AGENTS.md) first; use [next.steps.md](next.steps.md) for the changing checkpoint and [session.files.md](session.files.md) for pending deployment files.
 
 ## 1. StarFur in one paragraph
