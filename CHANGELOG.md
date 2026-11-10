@@ -1,3 +1,19 @@
+## 2026-11-09 - Refuse stale plans before reading exact chunk text
+
+- Revalidate the full current unexpired work plan under the store guard before returning only the first pending chunk’s text to trusted Core. Checkpoint drift, stale owners/attempts and expiry deny; no transport, scheduling, consent or write. Required WSL gates: 9 focused, 263 subsystem and 1,446 full tests completed successfully (one expected skip in subsystem/full), ResourceWarning as error. Counter 10/10. No new commit/push.
+
+## 2026-11-09 - Describe exact remaining private annotation work
+
+- Add a redacted, read-only store plan for the current unexpired attempt: exact prepared-source digest, original expiry and ordered pending chunk byte identities. No source disclosure, mutation, runtime or authorization. Required WSL gates: 4 focused, 258 subsystem and 1,441 full tests completed successfully (one expected skip in subsystem/full), ResourceWarning as error. Counter 7/10. No new commit/push.
+
+## 2026-11-09 - Release private dispatch bytes without reopening replay
+
+- Drop the registry’s captured bytes on handoff or fencing; keep only correlation and bounded replay records. Lazy expiry runs on registry operations. No secure-erasure, disclosure rollback or runtime claim. Required WSL gates: 14 focused and 254 subsystem passed (one expected skip), ResourceWarning as error. Counter 4/10. No new commit/push.
+
+## 2026-11-08 - Verify disposable WSL worker isolation prerequisites
+
+- Roger approved phases 1–2 only. Unprivileged namespace startup and the opt-in synthetic network/PID smoke passed as roger: host loopback canary denied, literal IPv4/IPv6 blocked, inherited bounded IPC worked, and process handles confirmed worker/child exit on cancel and timeout. One required gate, counter2/10. No sudo, service, GPU, model, private source or production configuration access. Host relay/device and actual inference enforcement remain unverified.
+
 ## 2026-11-06 - Fence controller shutdown and cancellation ordering
 
 - Added idempotent registry closure that invalidates all handles and refuses new preparation; reference release is not secure erasure or remote stop. Deterministic thread fixtures cover cancellation winning before versus after burn, plus sanitized clock failure fencing. Exact WSL gates passed 11 focused/251 subsystem tests (one expected skip), ResourceWarning as error. Counter11: complete required gates, back up exact W1-W4 scope and carry one. No live/manual smoke needed.

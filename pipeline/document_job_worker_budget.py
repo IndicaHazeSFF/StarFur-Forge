@@ -10,7 +10,7 @@ import math
 from threading import Lock
 import time
 
-from pipeline.document_job_worker_protocol import encode_request, decode_request, match_result
+from pipeline.document_job_worker_protocol import encode_request, encode_result
 
 
 class WorkerBudgetError(ValueError):
@@ -34,6 +34,10 @@ class WorkerDispatchBudget:
         self._bytes = 0
         self._closed = False
 
+    def _fence(self, plan):
+        self._bytes -= sum(len(raw) for raw in plan['raw'] if raw is not None)
+        plan.update(state='fenced', raw=[], inflight=None)
+
     def _now(self):
         try:
             if self._closed:
@@ -44,10 +48,13 @@ class WorkerDispatchBudget:
             if self._last is not None and value < self._last:
                 _deny()
             self._last = value
+            for plan in self._plans.values():
+                if value >= plan['expires'] and plan['state'] in {'awaiting_confirmation', 'active'}:
+                    self._fence(plan)
             return value
         except BaseException as error:
             for plan in self._plans.values():
-                plan['state'] = 'fenced'
+                self._fence(plan)
             if isinstance(error, (KeyboardInterrupt, SystemExit)):
                 raise
             _deny()
@@ -70,7 +77,8 @@ class WorkerDispatchBudget:
                     or any(key in self._ids for key in keys)):
                 _deny()
             challenge = object()
-            self._plans[challenge] = dict(binding=binding, raw=raw, expires=expires_at,
+            self._plans[challenge] = dict(binding=binding, raw=list(raw), expires=expires_at,
+                correlations=tuple((r.epoch, r.dispatch, r.model) for r in requests),
                 state='awaiting_confirmation', next=0, inflight=None, admission=None)
             self._ids.update(keys)
             self._bytes += sum(map(len, raw))
@@ -85,7 +93,7 @@ class WorkerDispatchBudget:
             _deny()
         now = self._now()
         if plan['binding'] is not binding or now >= plan['expires']:
-            plan['state'] = 'fenced'
+            self._fence(plan)
             _deny()
         return plan
 
@@ -114,8 +122,11 @@ class WorkerDispatchBudget:
             if index >= len(plan['raw']):
                 _deny()
             plan['next'] += 1
-            plan['inflight'] = index
-            return plan['raw'][index]
+            plan['inflight'] = plan['correlations'][index]
+            raw = plan['raw'][index]
+            plan['raw'][index] = None
+            self._bytes -= len(raw)
+            return raw
 
     def receive(self, admission, binding, result):
         """Correlate an envelope, never checkpoint or publish its contents."""
@@ -124,12 +135,12 @@ class WorkerDispatchBudget:
             if plan['state'] != 'active' or plan['inflight'] is None:
                 _deny()
             try:
-                request = decode_request(plan['raw'][plan['inflight']])
-                match_result(request, result)
-                if result.status != 'completed' or result.finish_reason != 'stop':
+                encode_result(result)
+                if ((result.epoch, result.dispatch, result.model) != plan['inflight']
+                        or result.status != 'completed' or result.finish_reason != 'stop'):
                     _deny()
             except BaseException:
-                plan['state'] = 'fenced'
+                self._fence(plan)
                 raise
             plan['inflight'] = None
             if plan['next'] == len(plan['raw']):
@@ -140,12 +151,12 @@ class WorkerDispatchBudget:
         """Fence acceptance only. Does not attest provider termination."""
         with self._lock:
             plan = self._current(handle, binding, admission=True)
-            plan['state'] = 'fenced'
+            self._fence(plan)
 
     def abandon(self, challenge, binding):
         with self._lock:
             plan = self._current(challenge, binding)
-            plan['state'] = 'fenced'
+            self._fence(plan)
 
     def close(self):
         """Invalidate all handles and drop registry references, not secure erasure.

@@ -68,6 +68,23 @@ class AnnotationJobAttempt:
     attempt_id: str
 
 
+@dataclass(frozen=True, slots=True, repr=False)
+class AnnotationJobChunkIdentity:
+    """Internal exact UTF-8 byte identity, never a public chunk label."""
+    chunk_id: str
+    text_sha256: str
+    byte_count: int
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class AnnotationJobWorkPlan:
+    """Read-only work observation, not consent, capability or a retained lease."""
+    attempt: AnnotationJobAttempt
+    prepared_digest: str
+    expires_at: datetime
+    pending: tuple[AnnotationJobChunkIdentity, ...]
+
+
 def _pairs(items):
     result = {}
     for key, value in items:
@@ -514,6 +531,52 @@ class AnnotationJobStore:
             if not annotation_job_accessible(self._metadata(record), now=self._clock()):
                 raise AnnotationJobStoreError("annotation job has expired")
             return (document, selected) if selected is not None else None
+
+    @classmethod
+    def _work_plan(cls, attempt, record, document):
+        saved = {item["chunk_id"] for item in record["checkpoints"]}
+        pending = []
+        for chunk in document.chunks:
+            if chunk.chunk_id not in saved:
+                raw = chunk.text.encode("utf-8")
+                pending.append(AnnotationJobChunkIdentity(chunk.chunk_id, sha256(raw).hexdigest(), len(raw)))
+        return AnnotationJobWorkPlan(attempt, record["source"]["prepared_digest"],
+                                     cls._metadata(record).expires_at, tuple(pending))
+
+    def work_plan(self, attempt: AnnotationJobAttempt) -> AnnotationJobWorkPlan:
+        """Observe one exact running attempt without returning document prose.
+
+        Metadata stays in trusted Core. Nothing here schedules, renews retention,
+        grants consent or replaces a later pre-disclosure validation.
+        """
+        with self._guard():
+            record = self._unexpired_attempt(attempt)
+            plan = self._work_plan(attempt, record, self._document(record))
+            if not annotation_job_accessible(self._metadata(record), now=self._clock()):
+                raise AnnotationJobStoreError("annotation job has expired")
+            return plan
+
+    def read_planned_chunk_text(self, plan: AnnotationJobWorkPlan) -> str:
+        """Revalidate a plan and expose one chunk to trusted Core only.
+
+        A later dispatch must still check live bindings, consent and retention
+        at its own boundary. This is not a reservation or a provider call.
+        Do not log or return the private text through public surfaces.
+        """
+        if (type(plan) is not AnnotationJobWorkPlan or type(plan.pending) is not tuple
+                or not plan.pending):
+            raise AnnotationJobStoreError("annotation work plan is unavailable")
+        with self._guard():
+            record = self._unexpired_attempt(plan.attempt)
+            document = self._document(record)
+            current = self._work_plan(plan.attempt, record, document)
+            if current != plan:
+                raise AnnotationJobStoreError("annotation work plan has changed")
+            selected = next(chunk.text for chunk in document.chunks
+                            if chunk.chunk_id == current.pending[0].chunk_id)
+            if not annotation_job_accessible(self._metadata(record), now=self._clock()):
+                raise AnnotationJobStoreError("annotation job has expired")
+            return selected
 
     def complete(self, attempt: AnnotationJobAttempt, result: DocumentAnnotationResult) -> None:
         """Persist validated full-run output, never approve its claims or write memory.

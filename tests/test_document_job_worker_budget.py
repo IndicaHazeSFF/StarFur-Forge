@@ -129,3 +129,38 @@ class WorkerBudgetTests(unittest.TestCase):
         self.assertNotIn('PRIVATE',str(caught.exception))
         self.budget._clock=lambda:100
         with self.assertRaises(WorkerBudgetError):self.budget.burn_for_send(a,self.binding)
+
+    def test_burn_releases_payload_without_restoring_dispatch_id(self):
+        a = self.active()
+        wire = self.budget.burn_for_send(a, self.binding)
+        self.assertEqual(self.budget._bytes, 0)
+        self.assertTrue(all(not any(p['raw']) for p in self.budget._plans.values()))
+        self.assertEqual(decode_request(wire), self.request)
+        self.budget.receive(a, self.binding, self.result)
+        with self.assertRaises(WorkerBudgetError):
+            self.prepared()
+
+    def test_expiry_sweeps_other_plan_bytes_without_replay(self):
+        c = self.prepared()
+        self.now = 200
+        second = replace(self.request, dispatch='c'*32)
+        self.budget.prepare(self.binding, (second,), expires_at=250)
+        self.assertEqual(self.budget._plans[c]['raw'], [])
+        self.assertEqual(self.budget._plans[c]['state'], 'fenced')
+        with self.assertRaises(WorkerBudgetError):
+            self.budget.prepare(self.binding, (self.request,), expires_at=250)
+
+    def test_cancel_and_invalid_response_discard_unsent_bytes(self):
+        for cancel in (True, False):
+            b = WorkerDispatchBudget(_clock=lambda: 100)
+            requests = self.request, replace(self.request, dispatch='c'*32)
+            a = b.confirm(b.prepare(self.binding, requests, expires_at=200), self.binding)
+            b.burn_for_send(a, self.binding)
+            self.assertGreater(b._bytes, 0)
+            if cancel:
+                b.cancel(a, self.binding)
+            else:
+                with self.assertRaises(WorkerBudgetError):
+                    b.receive(a, self.binding, replace(self.result, finish_reason='length'))
+            self.assertEqual(b._bytes, 0)
+            self.assertTrue(all(not p['raw'] for p in b._plans.values()))

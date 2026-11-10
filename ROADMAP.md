@@ -1374,6 +1374,14 @@ Retention/deadline corrections, advisory metadata bounds and the disposable CLI 
 
 ### COMPLETED W1 / WSL-VERIFIED — private-worker wire foundation (2026-11-05)
 
+**COMPLETED W7 / WSL-VERIFIED (2026-11-09):** Revalidate the full current unexpired work plan under the store guard before returning only the first pending chunk’s text to trusted Core. Checkpoint drift, stale owners/attempts and expiry deny; no transport, scheduling, consent or write. Required WSL gates: 9 focused, 263 subsystem and 1,446 full tests completed successfully (one expected skip in subsystem/full), ResourceWarning as error.
+
+**COMPLETED W6 / WSL-VERIFIED (2026-11-09):** Add a redacted, read-only store plan for the current unexpired attempt: exact prepared-source digest, original expiry and ordered pending chunk byte identities. No source disclosure, mutation, runtime or authorization. Required WSL gates: 4 focused, 258 subsystem and 1,441 full tests completed successfully (one expected skip in subsystem/full), ResourceWarning as error.
+
+**COMPLETED W5 / WSL-VERIFIED (2026-11-09):** Drop the registry’s captured bytes on handoff or fencing; keep only correlation and bounded replay records. Lazy expiry runs on registry operations. No secure-erasure, disclosure rollback or runtime claim. Required WSL gates: 14 focused and 254 subsystem passed (one expected skip), ResourceWarning as error.
+
+**COMPLETED N1 / NATIVE WSL PASS (2026-11-08):** Approved rootless prerequisite/startup and synthetic network/PID smoke passed. Worker and synthetic descendant had loopback-only routes, blocked literal IPv4/IPv6 and host canary, private inherited IPC and verified cancel/timeout exit. No host filesystem/interop relay, GPU or actual inference coverage. No deployment or private-processing milestone promotion; next scope is disposable host-relay/descriptor/mount-boundary verification design before separate approval.
+
 **COMPLETED W4 / WSL-VERIFIED (2026-11-06):** Controller shutdown invalidates every outstanding handle and refuses reopening. Deterministic cancel-before/after-burn and clock-failure fixtures passed required 11 focused/251 subsystem tests (one expected skip). Still no actual worker, consent surface or OS enforcement.
 
 **COMPLETED W3 / WSL-VERIFIED (2026-11-06):** One-use captured-byte registry implements exact-object confirmation/bindings, fixed expiry, one outstanding burn and terminal result fencing. Required gates passed 8 focused, 248 subsystem and 1,431 full tests (one expected skip in subsystem/full). This is disconnected controller-local machinery, not full D1 consent/deployment admission or private dispatch readiness; actual store/deployment producers, preflight resource/enforcement checks and transport remain gates.

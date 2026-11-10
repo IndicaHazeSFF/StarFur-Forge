@@ -40,6 +40,14 @@
 
 ## Private annotation worker direction
 
+- `AnnotationJobStore.read_planned_chunk_text()` is trusted-Core read-only projection for the first pending chunk after exact plan revalidation under the guard and final expiry check. Output is private text; never log/expose it. No consent, lease, checkpoint or downstream dispatch is implied, and later disclosure preflight is still required.
+
+- `AnnotationJobStore.work_plan()` returns internal redacted current-attempt metadata and ordered pending chunk byte digests under the store guard, with final expiry check. This is a read-only snapshot, not permission, a retained lease, operator consent or deployment evidence.
+
+- `WorkerDispatchBudget` drops owned private wire references on burn and fencing; expiry is swept on clock-checked operations, not in background. Exact identity/replay fences and 32-plan lifetime cap remain. This does not erase caller copies or attest remote stop.
+
+- Roger approved 2026-11-08 disposable rootless network/PID synthetic smoke only, via `scripts/private_worker_namespace_smoke.py`. No sudo, privileged install, service/WSL configuration, production endpoints, GPU, models or private input. A pass cannot attest mounted-socket/Windows interop isolation, actual inference descendants or deployment readiness. Keep native smoke opt-in; never in normal regression discovery or automatic startup.
+
 - Closing WorkerDispatchBudget invalidates all outstanding process-local handles and drops registry references; it does not securely erase bytes, recall prior dispatches or attest remote stop. A fresh registry cannot restore prior operator consent by inference.
 
 - `document_job_worker_budget.py` owns disconnected trusted-Core one-use byte-budget mechanics only: exact process-local challenge/admission/binding objects, immutable captured request bytes, fixed expiry, one inflight dispatch, atomic burn-before-return, terminal correlation/fencing and no retry. Generic binding is not a measured deployment/store/attempt producer, operator confirmation channel, resource lease, authentication or OS enforcement. No transport/public caller connected; callers must not cache/replay returned bytes. Full D1 admission remains pending.

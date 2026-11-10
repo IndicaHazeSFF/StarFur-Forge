@@ -4,5 +4,5 @@
 
 None.
 
-W4 completion and closure copied/hash-verified; required tests PASS,
-counter11/carryone. Exact scoped backup due. No runtime/config/unrelated paths.
+W7 code and records hash-verified. Required tests PASS; counter 10/10.
+Exact accumulated allowlist in next.steps.md; no new commit/push.

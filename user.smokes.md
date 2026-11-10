@@ -1,5 +1,10 @@
 # Temporary operator smoke handoff
 
+2026-11-08: Disposable synthetic WSL namespace gate PASS at the unbacked N1
+scope after checkpoint 262edd2 (no sudo, GPU, models, services or private
+documents). Cancel/timeout and process cleanup verified by agent. No operator
+rerun required. Later host-relay/device/actual-worker checks need separate scope.
+
 Maintain until Roger explicitly says to stop. This is the short checklist for the next operator session; keep outcomes and remaining checks current. Development test success does not mark Roger's manual acceptance complete.
 
 ## Start here — one command in the StarFur-Forge WSL terminal
