@@ -40,6 +40,18 @@
 
 ## Private annotation worker direction
 
+- Root-smoke startup and descendant phases wait for supervisor-owned pidfds
+  before proceeding; startup failures must verify captured-process exit too.
+  N2b.1 remains filesystem evidence only. Astra's private binfmt-registry and
+  inherited syscall/socket-policy recommendation is not installed enforcement;
+  no global registry, Windows relay, service or configuration changes are allowed.
+
+- Roger approved N2b.1 synthetic restricted-root verification and conditional N2b.2 continuation only after .1 success. Opt-in `scripts/private_worker_root_smoke.py` is test-owned/rootless, not a launcher. No Windows data/executables, production relay/config, GPU or model access; unresolved N2b.2 prevention design still needs escalation before any real interop probe.
+
+- Roger approved the N2a opt-in test-owned relay smoke in `scripts/private_worker_relay_smoke.py`: exact Linux `/tmp` fixture, rootless private mount, synthetic pathname socket/FD canaries and bounded cleanup. No real relay/Windows path or executable, sudo, services, GPU, models or runtime access. No automatic startup or broader approval.
+
+- `document_job_worker_binding.py` owns trusted-Core equality binding only: exact store identity/current work snapshot and the bounded canonical wire digest, with first pending chunk UTF-8 hash/length agreement. No prose retained in the record, admission, consent, lease, enforcement, send or caller wiring. Revalidation is observational, not an atomic pre-disclosure fence.
+
 - `AnnotationJobStore.read_planned_chunk_text()` is trusted-Core read-only projection for the first pending chunk after exact plan revalidation under the guard and final expiry check. Output is private text; never log/expose it. No consent, lease, checkpoint or downstream dispatch is implied, and later disclosure preflight is still required.
 
 - `AnnotationJobStore.work_plan()` returns internal redacted current-attempt metadata and ordered pending chunk byte digests under the store guard, with final expiry check. This is a read-only snapshot, not permission, a retained lease, operator consent or deployment evidence.

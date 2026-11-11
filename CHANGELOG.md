@@ -1,3 +1,34 @@
+## 2026-11-11 - Pin synthetic workers before releasing test phases
+
+- Add worker/child startup handshakes and pidfd identity revalidation before
+  test work, including cleanup on early failure/interruption. WSL verification:
+  8 focused tests, bounded native root smoke PASS, full1,459 OK/one expected skip.
+  Counter10/10; exact scoped backup due. No provider, Windows or global change.
+- Record targeted Astra N2b.2 direction: private empty binfmt registry plus
+  restricted executable image and inherited syscall/socket controls. Mechanism
+  still needs exact-kernel native evidence; no deployment or interop pass claimed.
+
+## 2026-11-11 - Diagnose root-smoke startup without weakening isolation
+
+- Final authorized retry2/2 PASSED N2b.1 in about2.21s with unchanged isolation. Predeclaring ctypes ABI structures avoids lazy ctypes._layout imports after root detachment; no old-root/library access restored. Fake diagnostic suite3 passed; full regression1,454 passed/one expected skip. Counter7/10 (corrective focused rerun not counted twice). Earlier failures/fixtures retained, no N2b.2 run. Next: targeted Astra review of unresolved worker-scoped interop denial while permitting the reviewed Linux runner; no actual .2 test or new backup.
+
+## 2026-11-11 - Verify a disposable worker filesystem root
+
+- N2b.1 native gate FAILED before fixture readiness (exit1, fixture_not_ready). No N2b.2 attempt or retry. Supervisor killed/waited exact wrapper; inner process handles were not yet captured, so full descendant exit was not independently evidenced. Test-owned fixture retained at /tmp/sf-worker-root-2s2ibp7_. Cause unresolved; do not claim containment/cleanup pass or broaden scope. Successful gate counter4/10 unchanged; no new commit/push.
+
+## 2026-11-10 - Split synthetic root verification from WSL interop proof
+
+- Read-only WSLInterop registration confirms enabled /init with F pinning; hiding the path cannot prove denial. Documented separate test-owned N2b.1 scope and unresolved actual interop control. No Windows launch, host relay call, config or runtime change; no test gate added.
+
+## 2026-11-10 - Exercise disposable WSL relay barriers
+
+- N2a native gate PASS as roger: unmasked positive control and private-mount denial, worker/child descriptor exclusion, ancillary/truncated packet refusal and no leak, unchanged parent view, process and fixture cleanup. No Windows path/executable, real endpoint, services, GPU, models or private data. One gate, counter4/10. Not deployment or full host-relay proof.
+
+## 2026-11-10 - Bind exact private worker requests to current chunks
+
+- Added a disconnected read-only equality binding for exact store/attempt, first pending chunk bytes and all wire controls. No prose retained in the binding, consent or dispatch. Required WSL gates passed 5 focused, 268 subsystem and 1,451 full tests (one expected skip in each broader run), ResourceWarning as error; counter3/10.
+- Prepared N2a synthetic relay-test scope without running it. Broader native checks still require separate approval.
+
 ## 2026-11-09 - Refuse stale plans before reading exact chunk text
 
 - Revalidate the full current unexpired work plan under the store guard before returning only the first pending chunk’s text to trusted Core. Checkpoint drift, stale owners/attempts and expiry deny; no transport, scheduling, consent or write. Required WSL gates: 9 focused, 263 subsystem and 1,446 full tests completed successfully (one expected skip in subsystem/full), ResourceWarning as error. Counter 10/10. No new commit/push.

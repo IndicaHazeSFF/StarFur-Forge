@@ -2,6 +2,11 @@
 
 ## Current accepted worker refinement — 2026-11-05
 
+W8 binds a bounded request digest to the exact live store/current plan and next
+chunk identity without retaining document prose. This is disconnected trusted-Core
+equality checking, not an atomic disclosure fence or permission. Full D1 and
+native relay, interop, GPU and actual inference verification remain unfinished.
+
 W3 (2026-11-06) adds disconnected one-use byte-budget mechanics over trusted
 opaque bindings. It owns no storage, measured deployment, operator consent
 channel, transport or readiness. Full D1 acceptance/admission and actual OS

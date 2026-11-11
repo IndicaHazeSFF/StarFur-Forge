@@ -1,5 +1,189 @@
 # Private annotation deployment verification — review draft
 
+## Targeted Astra N2b.2 review — 2026-11-11
+
+REVIEW COMPLETED / ENFORCEMENT PENDING. Roger resumed Sol High implementation
+after review. This is not a private-worker deployment or actual Windows probe.
+
+Recommended candidate: establish an empty binfmt_misc instance owned by the
+worker's new user namespace, not a bind mount of the ancestor registry. Upstream
+Linux v6.18 load_binfmt_misc() selects the first instantiated registry in the
+user-namespace ancestry; bm_fill_super() creates per-user-namespace state.
+This avoids selecting ancestor WSLInterop F handlers while keeping ordinary
+Linux ELF handling. Installed WSL behavior must be demonstrated, not inferred
+from uname, an empty directory, or merely hiding /init. Never write to the
+existing registry or change WSL configuration; unsupported isolation denies.
+Source: https://raw.githubusercontent.com/torvalds/linux/v6.18/fs/binfmt_misc.c
+
+Separate complementary gates: a minimal reviewed Linux executable/library
+image with immutable executable bytes and non-executable writable storage;
+private root/proc/network/PID lifetime; removal of outside handles; inherited
+architecture-checked syscall policy denying host socket families (including
+AF_VSOCK), namespace/mount mutation and alternate descriptor/IO bypasses.
+Seccomp cannot inspect path strings and alone is not the sandbox. Retain only
+required private networking and controlled IPC. Policy must survive real Linux
+child exec; denying all exec does not satisfy Ollama runner requirements.
+Sources: https://docs.kernel.org/6.18/userspace-api/seccomp_filter.html
+and https://github.com/microsoft/WSL/blob/master/doc/docs/technical-documentation/interop.md
+
+COMPLETED prerequisite: pin worker and fork-child pidfds before
+releasing each test phase. Existing supervise() acquired handles only after
+ready, weakening evidence on earlier startup failure. Focused fake tests must
+cover phase order, failure, interruption, malformed diagnostics and PID drift;
+then one separately bounded synthetic root verification, not an old retry.
+Verification PASS:8 focused fake tests, native root smoke exit0, full1,459
+OK/one expected skip. No N2b.2 native gate or production enforcement added.
+
+Subsequent slices must distinguish (a) private-registry/kernel prerequisite,
+(b) executable/socket/syscall enforcement and inheritance, and (c) integrated
+deployment verification. A synthetic Linux canary is not actual Ollama/GPU or
+complete Windows-interop evidence. No real Windows executable, relay or private
+input is to be used just to discover whether a boundary works.
+
+## N2b scope split — pinned interpreter finding (2026-11-10)
+
+Read-only observation as roger in StarFur-Forge WSL:
+`/proc/sys/fs/binfmt_misc/WSLInterop` is visible/enabled, uses /init, and has
+the F flag. No registration write, /init execution, Windows data access or
+relay connection was attempted. The kernel can keep an F interpreter open
+across root/mount changes. Therefore an absent /init pathname in a new root
+or a cleared WSL_INTEROP variable is not interop denial evidence. This is a
+design prerequisite, not an observed escape or current StarFur vulnerability.
+
+### N2b.1 approved synthetic restricted-root test — PASSED final retry
+
+Final retry2/2 passed root, worker/child, capability and cleanup controls.
+Fix preloads ctypes ABI declarations; no barrier removed. Earlier failed
+attempts remain historical evidence. Full provider-free regression passed1,454
+with one expected skip. N2b.2 conditional approval does not resolve its control
+design; targeted Astra review required before any actual interop attempt.
+
+#### Historical failure/retry notes (superseded by final pass above)
+
+Retry1/2 identified a helper lazy-import bug in capability ABI declarations.
+Declarations now preloaded before isolation; no runtime/library path restored.
+A final retry2/2 is authorized, not a loop. Pause if it fails.
+
+Roger authorized ordinary helper correction and at most two further native
+attempts. No barrier may be weakened. Old fixture stays preserved; stop if two
+more attempts fail or a security/configuration expansion is needed.
+
+Native gate exited1 (fixture_not_ready); retained fixture requires diagnosis.
+No N2b.2 run. No containment or cleanup pass is inferred. No automatic retry.
+
+Roger approved .1 and then .2 conditional on .1 success, restated 2026-11-11.
+No permission to risk Windows data, change global settings or weaken a barrier.
+N2b.2 design uncertainty must be resolved before a live interop attempt.
+
+Allow only an opt-in helper in StarFur-Forge WSL as roger, reusing the bounded
+rootless user/network/PID/private-mount pattern. One fresh mode-0700 Linux /tmp
+fixture contains the candidate root, a synthetic outside file/socket and an
+inside marker. Use the trusted preloaded Linux test process; no copied host
+root, executables from Windows, package installation, real relay, private data,
+GPU, services, binfmt/config changes, or privileged host action.
+
+1. Verify every namespace and private propagation, exact scratch identities,
+   and positive control on the outside canary. Create mountpoints only in the
+   owned fixture; pivot to its minimal root, chdir to / and detach the old root
+   in the private namespace. No mounting over real /proc, /run, /mnt or /init.
+2. Close all outside directory/file handles and keep only the intended test
+   IPC and bounded synthetic result handles. Drop capabilities, verify no
+   new privileges, and run a synthetic fork child without exec. Check current
+   root/mount identity, inside marker visibility and outside canary denial in
+   both processes. Probe exact test paths only, never real Windows paths.
+3. Verify parent mount/path identities and canary still unchanged, exact
+   process exits and cleanup of known fixture entries. Limit to 55 seconds
+   plus a 2-second watchdog kill window. Refuse unavailable primitive, unclear
+   root/FD state, permission escalation, any unexpected reachability/effect
+   or uncertain cleanup. No fallback to a less isolated test or actual interop.
+
+Passing N2b.1 proves only the synthetic filesystem/root controls. The exact
+helper and command must be reviewed before native execution; this plan neither
+implements nor approves it. No native gate executed in this documentation slice.
+
+### N2b.2 actual WSL interop barrier — reviewed candidate, enforcement pending
+
+Require a worker-scoped prevention mechanism covering the pinned binfmt
+interpreter, relay sockets, inherited descriptors and host socket families
+without disabling ordinary WSL interop. A synthetic no-exec process cannot
+establish this for Ollama, which must be able to launch its reviewed runner.
+Before choosing a production control, review how to preserve only required
+Linux child execution and prove all Windows relay paths denied. If this cannot
+be shown on the supported kernel, deny private processing. Do not change
+global binfmt, WSL configuration or existing clients to make a test pass.
+Actual executable/host bridge probing, GPU and real inference remain outside
+this proposed scope.
+
+References: [Linux binfmt_misc F behavior](https://docs.kernel.org/admin-guide/binfmt-misc.html),
+[pivot_root](https://man7.org/linux/man-pages/man2/pivot_root.2.html),
+[Microsoft WSL interop internals](https://github.com/microsoft/WSL/blob/master/doc/docs/technical-documentation/interop.md).
+
+## N2 test-owned relay controls (2026-11-10)
+
+N2a COMPLETED / NATIVE WSL PASS: synthetic masked/unmasked, descriptor and
+cleanup controls only; no deployment proof. N2b remains pending separate scope.
+
+Historical 2026-11-10 approval covered N2a only. Roger later approved N2b.1
+and conditional N2b.2, then resumed Sol implementation after Astra review.
+The newer approval does not authorize global configuration, real Windows
+execution, relay access, GPU/models or private-data disclosure.
+
+N1 proved synthetic TCP network/PID isolation, not pathname-socket or descriptor
+containment. Network namespaces isolate abstract UNIX names, not access through
+a visible socket pathname. Mount namespaces start with inherited mounts. WSL
+interop can discover /run/WSL servers even without WSL_INTEROP; clearing an
+environment variable is not an interop barrier.
+
+Proposed approval is for N2a only: add/review/synchronize one opt-in helper,
+then run it as roger in StarFur-Forge WSL using the existing unprivileged
+user/network/PID/private-mount pattern. No sudo, installs, production sockets,
+GPU, models, private data, Windows process launch, service/WSL configuration,
+binfmt change, internet or host mount propagation. No broader authorization.
+Use one mode-0700 test-owned temporary directory, fixed children within it,
+one filesystem UNIX socket, a synthetic pipe and one private socketpair.
+No persistent namespaces or new runtime components.
+
+1. Parent establishes a positive connection to its exact synthetic socket.
+   A network-namespace-only fixture may also connect to this synthetic path;
+   this is an expected positive control, not an attempted production bypass.
+2. A fresh isolated fixture checks distinct user/network/PID/mount identities
+   and private propagation before any mount action. Bind a test-owned empty
+   directory over the exact test-owned canary directory, within its own mount
+   namespace only. Do not cover /run, /mnt, /proc or any system directory.
+   Drop capabilities before running probes. Both worker and synthetic child
+   must fail to reach the hidden canary; parent must still reach it and see
+   unchanged mount/path identity. If prerequisites or mount checks fail, stop.
+3. Mark only a synthetic sentinel descriptor inheritable in the test supervisor;
+   launch with close_fds and explicit control-channel pass list. Worker must
+   not inherit the sentinel (compare identity, not just descriptor number),
+   and its synthetic child must not inherit the worker’s control endpoint.
+   Use bounded socketpair messages; an opt-in synthetic SCM_RIGHTS packet with
+   a test pipe descriptor must be refused with every received descriptor closed.
+   Truncation must also refuse, not accept a prefix as a complete message.
+4. At most 55 seconds plus 2 seconds for the watchdog, bounded per-I/O waits,
+   no retries without isolation. Use exact process handles to verify exits;
+   release descriptors, remove only the known synthetic socket/files and empty
+   test-owned directories, and verify host canary/mount state unaffected.
+   Stop for permission/elevation requirements, unexpected reachability,
+   lingering descendants, uncertain cleanup or any production effect.
+
+Intended invocation after the helper exists and its exact source/hash is reviewed:
+`/usr/bin/timeout --signal=TERM --kill-after=2s 55s .venv/bin/python -I -B -S scripts/private_worker_relay_smoke.py`
+from the WSL repository root. Execution is approved for N2a only. Required
+gate is one native run; syntax and read-only prerequisite checks are not gates.
+
+A pass would establish the listed synthetic controls only. No claim that all
+host files, relays, aliases, or Windows interop are blocked. N2b requires a
+reviewed restricted root and actual WSL relay/Windows-execution denial evidence
+under separate approval; do not change global settings or probe real agents.
+Actual inference children, driver/GPU access and private dispatch remain gated.
+
+References:
+- https://man7.org/linux/man-pages/man7/network_namespaces.7.html
+- https://man7.org/linux/man-pages/man7/mount_namespaces.7.html
+- https://man7.org/linux/man-pages/man7/unix.7.html
+- https://github.com/microsoft/WSL/blob/master/doc/docs/technical-documentation/interop.md
+
 ## Accepted isolation/control direction — 2026-11-05
 
 Roger approved the targeted Astra recommendation as DESIGN ONLY. Core depends

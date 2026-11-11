@@ -1,5 +1,20 @@
 # Temporary operator smoke handoff
 
+2026-11-11: Startup-supervision hardening PASS:8 fake tests, bounded native root
+regression, full1,459 OK/one expected skip. Astra review completed, N2b.2
+enforcement remains pending. No operator rerun requested.
+
+2026-11-11: Final N2b.1 retry2/2 PASS after ctypes preloading fix; full1,454
+regression/one skip and fake diagnostics3 PASS. No manual rerun needed. Earlier
+failures and fixtures retained. N2b.2 needs targeted Astra security design review.
+
+2026-11-11: N2b.1 agent-native gate FAILED before readiness; N2b.2 not run.
+Retained test-owned fixture and missing early process evidence need narrow
+diagnosis. No manual rerun or cleanup requested; do not mark this gate passed.
+
+2026-11-10: Agent-run N2a disposable WSL relay smoke PASS as roger; no operator
+rerun needed. Actual Windows interop, GPU and inference still untested/gated.
+
 2026-11-08: Disposable synthetic WSL namespace gate PASS at the unbacked N1
 scope after checkpoint 262edd2 (no sudo, GPU, models, services or private
 documents). Cancel/timeout and process cleanup verified by agent. No operator
