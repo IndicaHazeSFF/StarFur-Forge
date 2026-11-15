@@ -1,5 +1,24 @@
 # Temporary operator smoke handoff
 
+2026-11-15:R0 helper/fakes PASS:10 focused and full1,499 OK/one expected skip.
+Native one-unit gate pending after ten-gate backup. No operator visual/audio/
+game test or model involved; do not infer native resource evidence from fakes.
+One temporary unit,1 CPU/256MiB/no swap/16 tasks/10s+2s grace; no service install.
+
+2026-11-11: CPU-only direction approved; C1 ELF inspector PASS:13 focused tests,
+full1,489 OK/one expected skip. Diagnostic installed metadata matches readelf;
+no provider/real worker launched. Proposed R0 temporary user-unit canary needs
+approval (1 CPU/256MiB/no swap/16 tasks/10s+2s grace); no operator rerun needed.
+
+2026-11-11: N2b.2b inherited synthetic syscall/socket guard PASS:25 focused,
+bounded native exit0, full1,476 OK/one expected skip. Not a production allowlist;
+no operator rerun or real endpoint probe. Next integration scope needs Roger's
+CPU-only versus GPU/driver decision; actual inference/device access not approved.
+
+2026-11-11: N2b.2a private-registry/Linux-canary prerequisite PASS:15 focused,
+bounded native exit0, full1,466 OK/one expected skip. No operator rerun or real
+Windows probe. Full N2b.2 syscall/socket enforcement remains pending.
+
 2026-11-11: Startup-supervision hardening PASS:8 fake tests, bounded native root
 regression, full1,459 OK/one expected skip. Astra review completed, N2b.2
 enforcement remains pending. No operator rerun requested.

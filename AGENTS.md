@@ -40,6 +40,40 @@
 
 ## Private annotation worker direction
 
+- Roger approved R0 on2026-11-15: exactly one temporary user-owned managed unit
+  running a synthetic canary,1 CPU/256MiB/no swap/16 tasks/10s+2s kill grace.
+  scripts/private_worker_resource_smoke.py is explicit opt-in, never discovery
+  or startup. Existing root-user-slice controllers must already be enabled;
+  no ancestor/controller reconfiguration, installs, enabled/persistent unit,
+  shared-service change, model/GPU, Windows data or network workload. Native
+  success needs exact invocation/process/cgroup binding, kernel-limit reads,
+  timeout cause, full process exit and unit/cgroup/fixture cleanup. This is
+  resource evidence only, not isolation or adversarial exhaustion proof.
+
+- Roger approved CPU-only disposable synthetic-input integration as the next
+  direction. GPU, downloads, shared-service changes and private input remain
+  excluded. Existing user-managed cgroup delegation is observed, not permission
+  to create arbitrary transient units, change configuration or launch unreviewed
+  workers. The separately approved R0 exception above is synthetic/test-owned only.
+- document_job_worker_elf.py owns pure bounded supplied ELF64 little-endian
+  x86-64 dependency metadata only. Fixed loader and bounded SONAMEs; search-path
+  tags deny. It never reads/loads files, executes dependencies, resolves dlopen,
+  proves CPU-only behavior or completes image/deployment/consent verification.
+
+- scripts/private_worker_syscall_policy.py is an inert x86-64 cBPF primitive for
+  opt-in --syscall-prerequisite synthetic tests only. Explicit install requires
+  one thread/no-new-privileges and inherits across later fork/exec. It guards
+  socket families, namespace/mount changes and selected alternative paths;
+  unlisted syscalls still allow. Never treat it as a production allowlist,
+  complete sandbox, deployment evidence or private processing permission.
+
+- N2b.2a opt-in --binfmt-prerequisite mode in the root-smoke helper tests only
+  a fresh read-only user-namespace binfmt_misc instance and a fixed loader-free
+  Linux ELF exit canary inside a sealed test root. Never open the register
+  control, write status, launch Windows code or touch a real relay. Parent
+  registry observations must remain unchanged. This prerequisite is not full
+  interop, syscall/socket policy, Ollama/GPU or private-dispatch evidence.
+
 - Root-smoke startup and descendant phases wait for supervisor-owned pidfds
   before proceeding; startup failures must verify captured-process exit too.
   N2b.1 remains filesystem evidence only. Astra's private binfmt-registry and

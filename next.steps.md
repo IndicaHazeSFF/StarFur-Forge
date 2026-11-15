@@ -1,115 +1,118 @@
 # Rotating development handoff
 
-Updated 2026-11-11: Startup-supervision hardening COMPLETED; counter10/10, scoped backup due.
+Updated2026-11-15: R0 helper/fakes verified; counter10/10, backup due; native pending.
 
 ## Last verified backup
 
-WSL main and GitHub main: 3df4d3709400d3759d099ed6fc8b6c668d6c267f.
-Subject: Keep Murr's paws off stale chunks.
-Previous: 262edd245f4d04c9bea003a64e2d233beeaec8cc.
-All twelve exact accumulated paths in the committed handoff matched Windows/WSL;
-expected empty index, HEAD/branch and remote verified, exact staged set checked,
-push independently verified. No unrelated files or runtime data included.
-Ten required gates reached exactly; new-cycle counter **0/10**.
+WSL/GitHub main: 8cd059f62d3fb5d42b97f8ef1dadf9357bf29064.
+Subject: Keep Murr's cubs on a short leash.
+Previous: 3df4d3709400d3759d099ed6fc8b6c668d6c267f.
+Exact14-path staged set, Windows/WSL hashes, branch/index/remote and push verified.
+Unrelated COMMANDS edits, bytecode and runtime state excluded. Ten required gates
+completed; rotated current-cycle counter **0/10**.
 
 ## Completed scope
 
-- N1 rootless synthetic WSL namespace, inherited IPC, descendant, cancel/timeout
-  gate passed as roger; no sudo, actual inference, GPU or deployment claims.
-- W5 releases registry-owned payload references after burn, fencing or lazy
-  expiry without dropping replay fences. 14 focused / 254 subsystem OK.
-- W6 redacted current-attempt work snapshot with original expiry and exact
-  ordered remaining chunk identities. 4 focused / 258 subsystem / 1,441 full OK.
-- W7 exact plan revalidation before trusted-Core next-chunk text read;
-  stale/reordered/expired/checkpoint-changed plans deny. No reserve/write/consent.
-  9 focused / 263 subsystem / 1,446 full OK.
-One expected platform skip in each subsystem/full suite. ResourceWarning as error.
-Exact test commands, baselines and receipts: 2026-11-01.annotation-worker-design.sprint.md.
-No manual/live rerun needed. Existing operator workflow PASS remains.
+W8 exact store/plan/request equality binding; N2a synthetic pathname/descriptor
+barriers; N2b.1 restricted-root native PASS; startup supervision hardened:
+worker/child wait for captured pidfds before test phases, identity drift denies.
+Latest required runs:8 focused tests, native root regression exit0, full1,459
+OK/one expected platform skip with ResourceWarning as error. No operator rerun.
+Durable exact scope/test/copy evidence:2026-11-01.annotation-worker-design.sprint.md.
 
-## Next dependency / authority
+Astra targeted review COMPLETED. Recommended worker-private empty binfmt registry,
+restricted Linux executable image and inherited architecture-checked syscall/socket
+policy. Upstream design is not installed-kernel/native evidence. No real Windows
+execution/relay, global registry/configuration, GPU/model or private input authorized.
 
-Current slice COMPLETED: worker and child wait for pidfd capture before each test
-phase; exact child start-time/parent identity rechecked.8 focused tests, bounded
-native root regression PASS and full1,459 OK/one expected skip; counter10/10.
-Exact accumulated scoped commit/push due before further implementation. Native root test
-is one new regression gate, not another failed-run retry. Old fixtures untouched.
-Astra recommendation and limitations are in the verification plan. N2b.2
-private-registry/executable/syscall enforcement and actual inference stay pending.
-No new public command; COMMANDS/help reviewed unchanged because this is a
-development-only helper. Existing operator workflow PASS remains.
+## Next dependency / current work
 
-Historical handoff below predates completion of Astra review:
+Current helper foundation COMPLETED:10 focused tests and full1,499 OK/one expected
+skip. Counter10/10, exact16-file scoped backup due before native gate. No unit
+created. Approved native scope: exactly one temporary user unit,
+synthetic canary only, agreed1 CPU/256MiB/no swap/16 tasks/10s+2s grace.
+Native gate pending. Existing user-root controllers
+already enabled; use -.slice, no app/ancestor reconfiguration. No model/GPU,
+private input, Windows data or network workload. Native resource evidence is
+not isolation or production admission. Keep broader private worker pending.
+Murr's basic apartment remains first tangible product goal; this work is bounded
+supporting infrastructure, not a new apartment dependency.
 
-W8 passed 5 focused/268 subsystem/1,451 full WSL tests, one expected skip in
-each broader run. Exact request/plan equality remains disconnected: no admission,
-lease, atomic disclosure fence, transport or deployment authority. Sol High
-sufficed; Astra not required.
+Historical C1 handoff below; R0 approval now resolves its scope question:
 
-N2a PASS as roger with rootless private mount over the exact WSL /tmp fixture
-only. Unmasked synthetic pathname socket reachable; masked worker/child denied;
-parent view unchanged and still reachable. Unrelated inherited pipe excluded;
-child control endpoint excluded; ancillary descriptor and truncated packets
-rejected with no descriptor leak. Exact process exit and fixture removal passed.
-No Windows paths/executables, services, models, GPU or runtime data touched.
+Current slice COMPLETED: pure ELF64/x86-64 dependency metadata, no acquisition
+or launch.13 focused tests and full1,489 OK/one expected skip; counter8/10.
+Diagnostic installed read-only metadata matches readelf; no extra gate counted.
+Initial fixed-loader dependency name denial corrected by exact spelling only.
+CPU-only disposable synthetic
+direction approved by Roger; GPU/downloads/shared-service/private input excluded.
+Read-only installed binary/library/cgroup metadata inspected without execution.
+Existing user-manager delegation is available, current shell outside it. Next
+native resource gate requires exact temporary user-unit scope/approval; no unit
+or cgroup created and no real Ollama/model invoked. Plan details in verification doc.
+STOP: request approval for proposed R0 one temporary user-owned managed unit,
+synthetic canary only,1 CPU/256MiB/no swap/16 tasks/10s runtime+2s kill grace,
+no install/enable/persistent service/shared-service change or Windows/GPU/network.
+No real model integration until aggregate limits and sealed-image/policy gates.
 
-N2b.1 succeeded on final authorized retry2/2 after ordinary helper fix:
-ctypes._layout was imported lazily by capability ABI declarations after root
-detachment. Move declarations before isolation; regression fixture forbids
-new imports/file opens during capability drop. No barrier weakened.
-Native PASS verified worker/child root, capability drop, old-root detachment,
-parent view and new-fixture/process cleanup. Full provider-free suite1,454
-passed/one expected skip. Fake focused3 passed (initial2 + corrective rerun).
-Counter4 + initial focused1 + native pass1 + full1 = **7/10**.
-Earlier failures remain historical evidence, not counted as successful gates.
+N2b.2b synthetic guard COMPLETED:25 focused tests, bounded native worker/child
+socket/namespace guard plus fixed Linux exec PASS, full1,476 OK/one expected
+skip. Current-cycle counter6/10. Not a production allowlist (unlisted calls
+allow). No private-dispatch or full N2b.2 promotion. Exact scope in plan.
 
-Retain older test-owned fixtures /tmp/sf-worker-root-2s2ibp7_ and
-/tmp/sf-worker-root-4uwx2y9j; no deletion or reuse. Read-only inspection of the
-first found unchanged canary, empty root, zero parent fixture mounts and no
-matching helper processes. No new-fixture residue from final passing run.
+N2b.2a prerequisite COMPLETED:15 focused tests, native private-registry/Linux
+canary gate exit0 and full1,466 OK/one expected skip. Those three gates plus
+the three N2b.2b gates make6/10. No full N2b.2 pass. Exact scope and
+remaining limits in verification plan. Source/records not yet GitHub-backed.
 
-N2b.2 has conditional user approval, but unresolved security design remains.
-STOP for targeted Astra review, not another full audit: select a worker-scoped
-control for pinned binfmt F /init and WSL relay access while retaining reviewed
-Linux runner exec. Address execve/execveat, socket families/inherited handles,
-private root/proc/PID lifetime and exact peer identity. An all-exec-disabled
-synthetic process is not proof for Ollama. No real Windows execution/relay
-probe, GPU, inference, service or global config changes are authorized by this
-handoff. Do not weaken boundaries or silently switch/delegate models.
-Sol fixed .1; Astra is requested only for unresolved .2 security/control choice.
+Historical scope question RESOLVED by CPU-only approval; later launch gates remain:
+synthetic-input Ollama/runner containment first; GPU introduces separate device,
+driver and game-performance gates. Neither real inference nor GPU setup is
+authorized by these synthetic tests. Next scope must review fixed immutable
+binary/library/model inventory and a deny-by-default production syscall policy.
+Do not deploy the permissive synthetic guard, change shared services or infer
+private disclosure consent. Sol High still adequate for the next scoped plan.
+
+Sol High resumed by Roger. Before complete N2b.2, independently verify private
+registry support, approved Linux exec and syscall/socket inheritance. Keep
+prerequisite passes distinct from actual interop/deployment proof. Unsupported
+mechanism denies; no fallback/global reconfiguration. Plans and accepted
+limitations:docs/private_annotation_verification.plan.md.
+No production worker/private dispatch/public processing caller is connected.
+Original24h retention, Focus Mode/capacity and exact pre-IPC consent remain gates.
+
+Retain failed fixtures /tmp/sf-worker-root-2s2ibp7_ and
+/tmp/sf-worker-root-4uwx2y9j untouched. No new failed fixture in latest pass.
 
 ## Copy / test / commit / push
 
-W8/N2a, final N2b.1 and supervision follow-up PASS; counter **10/10**.
-Exact source copies verified; completion records being synchronized. No new commit
-or push; latest verified backup remains 3df4d37. Do not rotate this cycle.
-
-Accumulated new-cycle commit allowlist:
-
+Current cycle **10/10**; helper/fake code/testing PASS; completion records pending sync.
+Exact16-file accumulated commit/push due before native R0 run. No unit created.
+No operator rerun needed. This cycle's14 accumulated paths are not GitHub-backed.
+No new commit/push after8cd059f; do not imply these later slices are backed up.
+Rotation is deliberately not recursively committed: carry it into next scoped backup.
+Cleared copy queue does not mean backup.
+Accumulated current-cycle commit allowlist:
 - next.steps.md
+- session.files.md
 - AGENTS.md
 - CHANGELOG.md
 - ROADMAP.md
-- session.files.md
-- starfur.context.md
 - 2026-11-01.annotation-worker-design.sprint.md
 - docs/private_annotation_verification.plan.md
-- pipeline/document_job_worker_binding.py
-- tests/test_document_job_worker_binding.py
-
 - user.smokes.md
-
-- scripts/private_worker_relay_smoke.py
-
 - scripts/private_worker_root_smoke.py
-
 - tests/test_private_worker_root_smoke.py
-
-Rotation pre-copy baselines:
-- next.steps.md: 370069a8ceceb0b133c87ca99f66586bf74352817b5fd2bd2d36625230b8e669
-- session.files.md: 90cee7f29eda17599770253a6132aba82b53e2fefb6dee8a8839ded23a0f763d
+- scripts/private_worker_syscall_policy.py
+- tests/test_private_worker_syscall_policy.py
+- pipeline/document_job_worker_elf.py
+- tests/test_document_job_worker_elf.py
+- scripts/private_worker_resource_smoke.py
+- tests/test_private_worker_resource_smoke.py
 
 ## Operator / quota
 
-Preserve user.smokes.md and pending manual outcomes. No new operator action.
-Check quota before starting a new substantial slice; existing safety stops apply.
+Preserve user.smokes.md; previous operator workflow PASS remains. No manual rerun
+requested. Continue bounded authorized work; stop for error, material decision,
+higher-model ambiguity or existing safety gates. Check usage before substantial
+slices; most recent user reserve threshold10% five-hour remaining.

@@ -4,11 +4,9 @@
 
 None.
 
-Supervision follow-up code/records hash-verified; focused/native/full PASS.
-Counter10/10; exact accumulated scoped commit/push due. Final manifest itself
-is synchronized as the queue-closure step; a clear queue is not a backup.
-
-Final N2b.1 retry2/2 PASS; helper and records copied/hash-verified.
-Counter7/10, no new commit/push. Earlier failed attempts/fixtures preserved.
-Astra review completed; N2b.2 native enforcement remains unverified.
-A clear copy queue is not a GitHub backup; last verified backup3df4d37.
+R0 helper/fakes and records exact-copy verified Windows/WSL.10 focused/full1,499
+PASS(one expected skip), current cycle10/10. No native unit created yet.
+Final manifest itself synchronized on closure. Exact16-file accumulated commit/
+push due; latest verified backup8cd059f62d3fb5d42b97f8ef1dadf9357bf29064.
+R0 single-unit approval is synthetic only, no model/GPU/private/network workload.
+A clear queue is not a GitHub backup; prior failed fixtures remain untouched.

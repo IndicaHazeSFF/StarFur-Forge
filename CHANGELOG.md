@@ -1,3 +1,49 @@
+## 2026-11-15 - Prepare a bounded synthetic worker resource-unit gate
+
+- R0 scoped approval recorded. Add opt-in one-unit helper and provider-free
+  checks for exact invocation/process/cgroup identity, kernel limits and
+  timeout/group teardown. Existing user-root controllers required; app-slice
+  controllers/settings remain unchanged. WSL provider-free verification PASS:
+  10 focused, full1,499 OK/one expected skip. Native gate pending; counter10/10,
+  exact scoped backup due before the separate one-unit native run.
+- Fixed limits:1 CPU,256MiB,no swap,16 tasks,10s runtime+2s grace. No installs,
+  persistent/shared-service change, model/GPU, Windows data or network workload.
+  This is resource configuration/membership/timeout evidence, not a sandbox or
+  adversarial exhaustion benchmark. Murr's apartment remains the first product goal.
+
+## 2026-11-11 - Inspect supplied worker executable dependency metadata
+
+- CPU-only integration direction approved; no GPU, downloads, private input or
+  shared-service changes. Added disconnected bounded ELF64/x86-64 dependency
+  inspection over supplied bytes, fixed Linux loader and safe SONAME labels;
+  malformed/ambiguous mappings and RPATH/RUNPATH fail closed. WSL verification:
+  13 focused tests, full1,489 OK/one expected skip; counter8/10. Exact fixed
+  loader DT_NEEDED spelling compatibility corrected after installed-file refusal;
+  read-only installed metadata now agrees with readelf, without executing Ollama.
+- Read-only Linux prerequisite inspection found installed dynamic Ollama/CPU
+  libraries and existing user cgroup delegation. No provider/process launch or
+  cgroup change. A separately scoped temporary user unit remains an approval gate.
+
+## 2026-11-11 - Prepare inherited synthetic syscall/socket guards
+
+- Add inert x86-64 cBPF construction/fake tests and opt-in native fixture mode.
+  Guard denies foreign/x32 ABIs, host socket families, namespace/mount mutation
+  and selected descriptor/IO bypasses while retaining fixed Linux canary exec.
+  WSL PASS:25 focused tests, bounded native gate exit0, full1,476 OK/one
+  expected skip; counter6/10. No real endpoint or private input.
+- Unlisted syscalls still allow: this primitive is explicitly not a production
+  syscall allowlist, complete sandbox or permission to process private jobs.
+
+## 2026-11-11 - Prepare a private executable-handler prerequisite
+
+- Add opt-in N2b.2a fixture mode: fresh read-only user-namespace binfmt registry,
+  sealed root and fixed loader-free Linux exit canary, with parent-registry and
+  process/fixture cleanup checks. WSL PASS:15 focused, native prerequisite exit0,
+  full1,466 OK/one expected skip; current-cycle counter3/10. No actual
+  Windows execution, registration write, provider, GPU or private source.
+- Full N2b.2 remains pending syscall/socket/executable-policy integration;
+  a primitive pass must not become a deployment or complete interop claim.
+
 ## 2026-11-11 - Pin synthetic workers before releasing test phases
 
 - Add worker/child startup handshakes and pidfd identity revalidation before

@@ -1,6 +1,154 @@
 # Private annotation deployment verification — review draft
 
+## R0 scoped resource-unit gate — approved2026-11-15, native verification pending
+
+Helper foundation COMPLETED / WSL VERIFIED:10 focused tests and full1,499 OK/
+one expected skip. These are provider-free/fake checks; no unit/cgroup created.
+Separate one-unit native gate pending. Counter10/10 backup before native run.
+
+Roger approved the previously proposed one-unit synthetic gate. Exact helper:
+scripts/private_worker_resource_smoke.py; never normal regression discovery.
+Use root of the existing user manager (-.slice), not app.slice: read-only native
+preflight found cpu/memory/pids already enabled at root, but app.slice children
+only memory/pids. Refuse missing root controls instead of enabling any ancestor.
+Snapshot root/app controllers before/after. This placement stays inside the
+approved user-owned unit; no system unit, install/enable, sudo or persistent config.
+
+One UUID-named --collect Type=exec unit, explicit empty worker environment via
+trusted env -i, NoNewPrivileges=yes, null stdin/stdout/stderr, no network/model/
+GPU/Windows access. Kernel cpu.max must be100000/100000, memory.max268435456,
+memory.swap.max0,pids.max16. RuntimeMax10s,TimeoutStop2s,KillModecontrol-group,
+SendSIGKILLyes,Restartno. Bind exact invocation ID/MainPID, pidfd/start time,
+command line, UID/no-new-privs and kernel cgroup before fixture-file release.
+One fork child must be pinned in that exact cgroup, then both wait with SIGTERM
+ignored to exercise kill grace. Observe Result=timeout before collection,
+both pidfd exits, unit/cgroup disappearance and unchanged parent controllers.
+Remove only known test-owned fixture entries on success; preserve failed fixture.
+An early failure can stop only the captured exact invocation, never an unknown
+unit by name. No automatic retry on permission/security/cleanup uncertainty.
+
+The 40s+2s outer watchdog is not a unit limit; the unit always has10s+2s.
+This tests real configured resource controls, descendant membership and timeout
+kill, NOT hostile-code isolation, adversarial exhaustion, model execution or
+private-data admission. Other private worker gates remain. No default caller.
+References reviewed: systemd-run, systemd.resource-control and systemd.service
+official manpages; installed systemd259 help/version inspected read-only.
+
+## CPU-only reference preparation — 2026-11-11
+
+C1 COMPLETED / WSL VERIFIED:13 focused tests, full1,489 OK/one expected skip.
+Diagnostic read-only installed-file inspection matches prior readelf metadata
+(six direct dependencies), without executing Ollama. Initial narrow SONAME rule
+denied the fixed loader dependency name; exact ld-linux-x86-64.so.2 compatibility
+added and tested without accepting arbitrary loaders. Not dependency closure or
+runtime validation. Corrective reruns do not add extra required-run counts.
+
+Roger approved CPU-only disposable synthetic-input integration direction after
+N2b.2a/2b. This supersedes the pending CPU-versus-GPU choice below, not the
+remaining enforcement/launch gates. No GPU, download, shared-service change or
+private input. Local read-only inspection (no Ollama invocation) found a Linux
+x86-64 dynamically linked binary, CPU libraries alongside separate vendor
+directories, and conventional installed model-manifest metadata. Do not copy
+whole /usr, vendor directories, home directories or default host configuration.
+Package library aliases require exact reviewed target/byte binding and image
+materialization rules, not permission to follow arbitrary symlinks.
+
+New pure document_job_worker_elf.py accepts supplied bounded ELF64/x86-64 bytes
+and derives the fixed loader plus direct DT_NEEDED labels. No file acquisition,
+ldd/loader execution, recursive resolution, dlopen closure, CPU attestation,
+production ELF validity or launch authority. Unknown dynamic metadata is not
+certified safe; any RPATH/RUNPATH denies. Native image inventory/closure stays
+separate. Reference format definitions:
+- https://gabi.xinuos.com/elf/02-eheader.html
+- https://gabi.xinuos.com/elf/07-pheader.html
+- https://gabi.xinuos.com/elf/08-dynamic.html
+
+Resource prerequisite: current WSL shell is in a non-writable /non-systemd
+cgroup. User manager and app.slice delegation already exist and are writable;
+no configuration was changed or unit started. Do not try to migrate across
+non-writable common ancestors or weaken limits. Proposed separately approved
+next scope: one temporary user-owned managed unit launching only a synthetic
+canary initially, enforce aggregate CPU/RAM/swap/task/wall limits, process-tree
+kill and cleanup, no enable/install/persistence or existing-service change.
+Keep credentials/ambient environments and raw output out of the unit/journal;
+review exact executable, channel, property and lifecycle handling before use.
+Actual Ollama/runner integration follows only after those limits and sealed
+image/deny-by-default policy are demonstrated. No real inference launched yet.
+
+Proposed R0 approval scope (not yet approved/run): one uniquely named temporary
+user-owned managed unit, no sudo/install/enable/persistent configuration, synthetic
+canary only, no model, GPU, Windows access or network connection. Cap one logical
+CPU,256MiB RAM,zero swap,16 tasks,10-second runtime and2-second kill grace.
+Capture/check exact unit/cgroup ownership and kernel limits before releasing any
+bounded workload; validate descendant membership/kill and exact collection/cleanup.
+No raw stdout/stderr to journal; sanitize test environment. Inspect the exact
+helper/argv/properties before native use. If controller/delegation or any limit
+is unavailable, deny; do not change existing services or relax limits. Separate
+real CPU model inference would use separately reviewed limits/image/policy.
+
 ## Targeted Astra N2b.2 review — 2026-11-11
+
+### N2b.2b synthetic inherited guard — COMPLETED / NATIVE WSL PASS
+
+2026-11-11:25 focused tests(0.017s), native gate exit0(about0.82s), full1,476
+OK/one expected skip(25.744s). Worker/child host-family socket-creation denial,
+harmless namespace-call denial, fixed Linux exec and exact teardown passed.
+No actual Windows, inference/GPU or complete production-policy proof added.
+
+Exact fixture mode --syscall-prerequisite reuses N2b.2a root/registry/canary and
+55s+2s watchdog. It installs one-thread/no-new-privileges x86-64 cBPF after root
+sealing and capability drop, before fork. Header numbers are checked before
+old-root detachment; reject foreign/x32 ABIs. Deny non-INET socket creation and
+all new socketpairs, namespace/mount mutation, execveat, ptrace, process_vm,
+pidfd_getfd, handle-open, bpf/perf and io_uring. Clone namespace flags deny;
+clone3 returns ENOSYS for conventional clone fallback. Ordinary reviewed execve
+and fixed Linux ELF remain allowed. No path-string seccomp filtering claimed.
+Worker/child test AF_UNIX/AF_NETLINK/AF_VSOCK creation returns EPERM, private
+INET socket creation succeeds without bind/connect, and harmless unshare(0)
+is denied. Child then execs the same fixed exit42 canary. No host address,
+Windows execution, relay, GPU/model or private data is probed. Parent registry,
+mount/canary and exact process/fixture teardown must remain verified.
+
+CRITICAL: this is a limited synthetic guard, not a production allowlist.
+Unlisted/unknown syscalls still allow; tests explicitly retain that fact. No
+private processing may rely on it as complete enforcement. Production syscall
+surface, actual immutable executable/library inventory, drivers and all real
+inference descendants remain separately reviewed/measured gates. No automatic
+promotion, install/startup/application wiring or unsupported-platform fallback.
+
+Next real integration scope requires Roger's decision/approval: recommend
+CPU-only, synthetic input first to separate runner/process containment from
+GPU/device/driver authority. GPU access would require a separate device surface
+and performance validation. Neither option is authorized by the synthetic gates.
+Before any real launch, review immutable binary/library/model inventory and a
+deny-by-default production syscall policy; the permissive primitive above must
+not be silently promoted. No ordinary shared Ollama/service reconfiguration.
+
+### N2b.2a exact prerequisite scope — COMPLETED / NATIVE WSL PASS
+
+2026-11-11:15 focused fake tests, native prerequisite exit0 (about0.70s),
+full1,466 OK/one expected skip. Separate empty read-only registry, sealed root,
+Linux ELF exit42 and unchanged parent/process/fixture cleanup verified. No
+syscall/socket guard, Windows/real relay or actual inference proof added.
+
+Opt-in root helper --binfmt-prerequisite runs as roger in one fresh Linux /tmp
+fixture with the existing55s+2s watchdog. Parent reads bounded existing binfmt
+status/entry observations (never register), requiring enabled status. Worker
+creates a fresh binfmt_misc filesystem in its new user namespace, at /formats
+inside the private fixture root, read-only/nosuid/nodev/noexec. Refuse same
+filesystem device as the inherited registry, any interpreter entry, unavailable
+status or mount failure. No registration/status writes or global mount change.
+Seal private tmpfs root read-only after detaching old root; assert EROFS for a
+synthetic create. Test child revalidates root/registry, then execs fixed132-byte
+x86-64 Linux ELF containing only exit(42), no loader, network or user arguments.
+Supervisor pins child before release and verifies expected exit; parent checks
+unchanged registry/mounts/canary and exact process/known-fixture cleanup.
+No MZ/Windows canary, /init call, real relay, provider/GPU or private source.
+Any primitive failure stops; never fall back to inherited registry or change
+host settings. This gate demonstrates an empty instance and Linux execution,
+not actual Windows denial, runner compatibility or full N2b.2 enforcement.
+Kernel-version text alone is not a pass. Separate syscall/socket, namespace
+mutation and descriptor/alternative-path controls remain next dependencies.
 
 REVIEW COMPLETED / ENFORCEMENT PENDING. Roger resumed Sol High implementation
 after review. This is not a private-worker deployment or actual Windows probe.
