@@ -1381,10 +1381,55 @@ Retention/deadline corrections, advisory metadata bounds and the disposable CLI 
 
 ### COMPLETED W1 / WSL-VERIFIED — private-worker wire foundation (2026-11-05)
 
+**C7 REVIEW / C7a COMPLETED / WSL VERIFIED (2026-11-17):** Astra recommends a pure
+conservative proposed-layout checker first: exact requester-local origin target,
+same-declared-hash matching SONAME, no aliases by guessed basename, no borrowed
+ancestor search. Consistency is not safe execution. Focused35/full1,620 PASS
+(one expected skip), counter9/10;17 accumulated verified paths unbacked after
+ddf2cbd. Next explicit measured-member/layout binding contract, not construction;
+no native/image permission. Real-image verification and mixed-path/dlopen policy
+remain gated as below; apartment priority unchanged.
+
+**C7 REAL-IMAGE SECURITY GATE STILL PENDING (2026-11-17):** Before real worker image
+assembly or search-policy acceptance, resolve exact measured immutable copy/
+alias rules, absent/different SONAME handling and runtime-loaded CPU-library
+closure. C4/C5 fixture evidence and C6 metadata matches cannot certify these.
+Targeted review scope in private verification plan; no new unit/installed
+library execution or policy widening approved. No apartment/product dependency
+added; existing C1/C2 still refuse every search tag.
+
+**C6c COMPLETED / WSL VERIFIED (2026-11-17):** Pure explicit alias/declared-SONAME comparison
+requires exact provider-sidecar coverage and same raw digests. Closed matches/
+differs/absent outcomes only, not verified identity or image/search eligibility.
+Focused33/full1,609 PASS(one expected skip), counter7/10. No runtime caller or
+new native execution.15 accumulated verified paths unbacked after ddf2cbd.
+
+**C6b COMPLETED / WSL VERIFIED (2026-11-17):** Optional exact-file identity review combines
+dependency/search/SONAME metadata from one acquired byte set. Existing anchored
+read, final identity/deadline/cleanup and strict C1/C2 refusal unchanged.
+Focused40/full1,602 PASS(one expected skip), counter5/10. No alias assignment/
+image/native/private authority.
+
+**C6a COMPLETED / WSL VERIFIED (2026-11-17):** Pure supplied-byte SONAME observation for
+later exact alias identity checks; at most one bounded declared label and same
+raw hash, absence never inferred. Focused59/full1,593 PASS(one expected skip),
+counter3/10. This closes no
+measured image, actual alias/resolution, dlopen/CPU or private-admission gate.
+No filesystem/execution caller or changed product priority; C1/C2 unchanged.
+
+**C5 COMPLETED / NATIVE WSL PASS (2026-11-17):** Single approved attempt exit0:
+parent/fork/exec cwd denials, fixed mixed-path intended42/missing127 despite
+decoy13, exact bindings/limits, all captured exits and complete unit/cgroup/
+fixture cleanup; parent state unchanged. Approval consumed. Helper checkpoint
+ddf2cbd backed up; result records unbacked, new cycle1/10. Next bounded metadata
+work may describe actual SONAMEs for alias review, never infer loader/image/
+dlopen/CPU/private eligibility. Real worker remains gated; apartment priority
+unchanged. No new native unit or actual plugin execution is authorized.
+
 **C5b HELPER COMPLETED / WSL VERIFIED (2026-11-17):** Fresh one-unit synthetic gate
 adds explicit c5 identity/opt-in mode, FS unshare before guard/fork, immutable
 empty cwd and valid-directory checks across parent/fork/exec; fixed mixed-path
-canary only. Focused44/full1,584 PASS(one expected skip); native attempt unused.
+canary only. Focused44/full1,584 PASS(one expected skip); native passed above.
 No actual CPU-plugin/image/private-worker admission or C1/C2 acceptance change.
 
 **C5a COMPLETED / WSL VERIFIED (2026-11-16):** Inert synthetic cwd-guard bytecode addresses

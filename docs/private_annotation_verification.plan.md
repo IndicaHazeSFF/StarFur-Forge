@@ -1,10 +1,127 @@
 # Private annotation deployment verification — review draft
 
-## C5b helper COMPLETED / WSL VERIFIED2026-11-17 — native pending
+## C7 review / C7a COMPLETED / WSL VERIFIED2026-11-17
+
+Astra's read-only review found no basis to promote C5/C6 evidence into real
+image readiness. Concrete gap: dependency-plan target and matching SONAME do
+not prove the requester can reach that file via its own search path. C7a is
+the recommended small pure contract, now verified. Inventory targets are
+proposed final regular-file destinations; exact assignments cover all edges.
+Each dependency must be at requester's parent/name, with matching supplied
+hash/SONAME. Only no-search without dependencies or exact DT_RUNPATH=$ORIGIN
+is within this provisional subset; RPATH/mixed/default lookup refuse. PT_INTERP
+has its own fixed destination; it cannot be treated as an ordinary alias.
+Reserved runtime/build destinations and duplicate declared byte copies refuse.
+Result says internally_consistent_proposed_layout, never safe_to_execute.
+Focused35 PASS(0.024s), full1,620 OK/one expected skip(27.724s), counter9/10.
+Synthetic positive/transitive/fixed-interpreter and wrong-directory, missing/
+different identity, borrowed ancestor path, mixed/RPATH, decoy/duplicate and
+malformed/coverage cases passed. No filesystem or runtime caller.
+Next C7b may define a disconnected acquired-member/layout binding contract:
+exact current file observations and expected independent digests, sizes, modes
+and destinations under aggregate bounds. It must not claim an immutable root
+from stat metadata, copy files, select installed sources, accept mixed paths or
+emit deployment readiness. Materialization still needs the fresh scope below.
+
+Reviewed next requirements: independently pinned source digests; bounded
+no-follow copy-in with streamed actual-byte hashes/source identity checks;
+complete destination enumeration, modes and hashes; lifetime immutable seal
+then remeasure through the exact launched root, excluding outside handles and
+writable aliases. Exact RUNPATH bytes/tag/digest must be separately reviewed,
+not accepted by mixed_or_unsupported category. No ambient cache/preload/audit/
+environment/default/hwcaps influence; actual dlopen/CPU selection needs both
+enforcement and bounded observed tests. Trace success is not enforcement.
+Fresh explicit exact-input/digest/destination/limit/cleanup approval required
+before test-image materialization; copy approval never implies execution.
+Later real-binary/synthetic-input execution needs a separate precise grant;
+neither grant implies private-input disclosure. Existing C1/C2 stay unchanged.
+ABI reference: https://gabi.xinuos.com/elf/08-dynamic.html .
+
+## C7 real-image execution/design gate — STILL PENDING2026-11-17
+
+Pause before production-path acceptance, real-image construction or another
+native unit. C5 approval is consumed; synthetic loader/cwd evidence and C6
+descriptive hash/SONAME matches do not resolve these security questions:
+
+- Define the exact immutable image/copy-in contract, independently anchored
+  acquired source bytes, final source/target remeasurement and lifetime seal.
+  Resolve regular-file alias materialization without following vendor symlinks
+  or copying directories; prohibit extra/unmeasured members and outside handles.
+- Decide exact SONAME requirements for aliases, including missing labels or
+  interpreter exceptions. Default deny; never infer identity from basenames,
+  supplied sidecars or all-match review labels. Keep C1/C2 denial until a
+  distinct reviewed policy is explicitly accepted, not by changing strict APIs.
+- Specify exact preserved RUNPATH cases and how unreachable build paths and
+  empty components remain controlled for the whole lifetime. Exclude ambient
+  cache/preload/audit/environment/default/hardware-variant lookup influence;
+  a fixed two-library canary is not general loader-behavior coverage.
+- Bound actual runner/plugin runtime dlopen and CPU/hardware-library selection;
+  static DT_NEEDED and SONAME equality are not complete closure or CPU-only proof.
+- Recommend the smallest next pure contract and adversarial fixtures, separating
+  declarations, measured bytes, immutable enforcement, observed loading and
+  private disclosure authority. List exact fresh approval needed before any
+  materialization/real-library/native test. No setup/service/config/model/
+  Windows/private-input/network change is authorized by this review request.
+
+This is a narrow follow-up to C3's accepted option3 design, not a broad audit,
+new strategy choice or added gate for the Murr apartment. Focused higher-security
+review is needed before resolving these policy/implementation boundaries;
+Sol must not turn current descriptive observations into loading permission.
+
+## C6c declared alias comparison — COMPLETED / WSL VERIFIED2026-11-17
+
+Compare one explicit dependency plan against exactly one same-declared-hash
+SONAME observation per alias-provider target. No missing/extra/duplicate sidecar;
+exact case-sensitive matches, differs or absent outcomes are review labels only.
+No basename guessing, filesystem/link creation, source discovery or runtime
+caller. Even all-match output proves neither trusted/immutable backing nor
+dynamic resolution/version compatibility/dlopen closure/CPU/private eligibility.
+Focused33 PASS(0.021s), full1,609 OK/one expected skip(27.183s), counter7/10.
+
+## C6b same-acquisition identity review — COMPLETED / WSL VERIFIED2026-11-17
+
+Explicit review_worker_elf_identity_file returns dependency/search/SONAME
+observations from one bounded exact-file acquisition and parse, with equal
+raw digests. Strict and earlier search-only contracts remain unchanged. Final
+entry/handle/directory identities and deadline cover parsing; interruption
+closes owned handles without closing the caller's trusted directory fd.
+No arbitrary root selection, second-file identity inference, alias assignment,
+loader/image/CPU acceptance or runtime caller. Test-owned synthetic files only;
+focused40 PASS(0.021s), full1,602 OK/one expected skip(27.194s), counter5/10.
+
+## C6a SONAME observation — COMPLETED / WSL VERIFIED2026-11-17
+
+Small next dependency from C3's explicit alias/SONAME requirement: parse supplied
+ELF bytes only, at most one bounded DT_SONAME and same-byte hash. No tag means
+None, not a filename or identity inferred from DT_NEEDED. Duplicates (including
+identical/empty), malformed offsets/tables/strings and path-bearing labels deny.
+Existing search review and strict C1/C2 return contracts preserved. This new
+review can describe SONAME alongside search tags without accepting either.
+No file reader, alias-plan producer, image materializer, native loader, provider,
+admission or private-input caller. Focused59 PASS(0.029s), full1,593 OK/one
+expected skip(27.174s), counter3/10. Next explicit same-acquisition reader
+composition must retain final identity/deadline/owned-handle checks.
+Next actual alias comparison still needs explicit same-byte inventory binding;
+measured image/runtime resolution/dlopen/CPU remain separate gates.
+
+## C5 NATIVE WSL PASS2026-11-17 — approval consumed
+
+One explicit attempt exit0, no retry: valid-directory cwd EPERM probes held
+in parent/fork/post-exec canary; exact mixed-path intended42/missing127 with
+decoy13. Process/pidfd/unit/epoch/cgroup/resource bindings, sealed root/private
+registry/socket controls, captured exits and complete fixture/unit/cgroup cleanup
+passed; parent state unchanged. Reviewed coupled hashes in maintained sprint.
+No installed plugin/model/GPU, Windows/private input, host network or existing
+service changes. Fixture-level evidence only; C1/C2 still deny every search tag.
+Full immutable image/SONAME/dlopen/actual CPU/private disclosure remain gated.
+Helper backed up in ddf2cbd before execution; result records later/unbacked.
+New cycle1/10. No extra native unit is authorized.
+
+## C5b helper COMPLETED / WSL VERIFIED2026-11-17 — native passed above
 
 Roger approved fresh C5 scope: prepare/test/review, then exactly one c5 unit
 with unchanged C4 resource/cleanup/fixture limits. Explicit --cwd-prerequisite,
-fresh c5 unit identity, no implicit C4 repeat. Native approval unused.
+fresh c5 unit identity, no implicit C4 repeat. Native approval now consumed.
 Before root detachment, verify exact x86-64 syscall/CLONE_FS header values.
 After sealing root/drop caps but before installing guard/fork: require one
 thread and successful unshare(CLONE_FS), ensuring no prior external FS sharing.

@@ -1,7 +1,22 @@
 # Temporary operator smoke handoff
 
-C5b HELPER COMPLETED2026-11-17; focused44/full1,584 PASS(one expected skip).
-Native single attempt unused. No manual action now; backup/source review next.
+C7a pure layout checker COMPLETED: focused35/full1,620 PASS(one expected skip).
+No operator/native smoke or image construction authorized. C5 remains consumed.
+
+C6c pure declared alias comparison COMPLETED: focused33/full1,609 PASS(one
+expected skip). No manual action now. Next C7 needs security design review,
+not an operator smoke or permission to run real libraries.
+No manual/native smoke, installed artifact or model required.
+C6b optional identity reader COMPLETED: focused40/full1,602 PASS(one expected skip).
+
+C6a pure SONAME observation COMPLETED; focused59/full1,593 PASS(one expected
+skip). No manual/native smoke required. No model or installed-artifact read.
+
+C5 NATIVE PASS2026-11-17 on one approved attempt, now consumed. Cwd denials
+parent/fork/exec, intended42/missing127 with decoy13, bindings/limits and complete
+cleanup passed; parent state unchanged. No manual retry. Not real-worker/CPU/
+private admission or gaming-performance acceptance. Helper checkpoint ddf2cbd.
+C5b focused44/full1,584 PASS(one expected skip). No manual action now.
 No model/GPU/Windows/
 private input, host network, installs or shared services. Prior manual gaming
 failure/recheck remains separate from synthetic functional evidence.

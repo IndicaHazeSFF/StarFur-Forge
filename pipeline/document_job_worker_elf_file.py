@@ -15,8 +15,9 @@ import time
 
 from pipeline.document_job_blob_measurement import _identity
 from pipeline.document_job_worker_elf import ElfDependencies, MAX_ELF_BYTES, inspect_worker_elf
-from pipeline.document_job_worker_elf import _inspect_metadata
+from pipeline.document_job_worker_elf import _inspect_metadata, _parse_metadata
 from pipeline.document_job_worker_elf_search import WorkerElfSearchReview, _make_review
+from pipeline.document_job_worker_elf_soname import WorkerElfSonameReview
 
 
 class WorkerElfFileError(ValueError):
@@ -54,6 +55,21 @@ class WorkerElfReviewObservation:
             raise WorkerElfFileError("worker ELF acquisition is unavailable")
 
 
+@dataclass(frozen=True, slots=True, repr=False)
+class WorkerElfIdentityObservation:
+    file: WorkerElfFileObservation
+    search: WorkerElfSearchReview
+    soname: WorkerElfSonameReview
+
+    def __post_init__(self):
+        WorkerElfReviewObservation(self.file, self.search)
+        if type(self.soname) is not WorkerElfSonameReview:
+            raise WorkerElfFileError("worker ELF acquisition is unavailable")
+        WorkerElfSonameReview(self.soname.raw_sha256, self.soname.soname)
+        if self.file.dependencies.raw_sha256 != self.soname.raw_sha256:
+            raise WorkerElfFileError("worker ELF acquisition is unavailable")
+
+
 def inspect_worker_elf_file(directory_fd, name, *, expected_uid, max_bytes,
                             timeout_seconds, _clock=time.monotonic):
     """Strict C2 acquisition: every RPATH/RUNPATH remains refused."""
@@ -73,8 +89,20 @@ def review_worker_elf_file(directory_fd, name, *, expected_uid, max_bytes,
                     timeout_seconds=timeout_seconds, _clock=_clock, review=True)
 
 
+def review_worker_elf_identity_file(directory_fd, name, *, expected_uid, max_bytes,
+                                    timeout_seconds, _clock=time.monotonic):
+    """Observe file/dependencies/search/SONAME from one exact acquired byte set.
+
+    Same anchored read and final identity/deadline/cleanup fences; no alias,
+    loader/image/CPU acceptance, discovery, permission or public runtime caller.
+    """
+    return _acquire(directory_fd, name, expected_uid=expected_uid, max_bytes=max_bytes,
+                    timeout_seconds=timeout_seconds, _clock=_clock,
+                    review=True, identity_review=True)
+
+
 def _acquire(directory_fd, name, *, expected_uid, max_bytes,
-             timeout_seconds, _clock, review):
+             timeout_seconds, _clock, review, identity_review=False):
     """Read one regular no-link ELF and return immutable redacted observation.
 
     Caller must already trust/open the exact directory; no absolute paths,
@@ -134,7 +162,11 @@ def _acquire(directory_fd, name, *, expected_uid, max_bytes,
             raise ValueError
         raw = b"".join(chunks)
         if review:
-            metadata, search = _inspect_metadata(raw, review_search=True)
+            if identity_review:
+                metadata, search, soname = _parse_metadata(raw, review_search=True, review_soname=True)
+                named = WorkerElfSonameReview(metadata.raw_sha256, soname)
+            else:
+                metadata, search = _inspect_metadata(raw, review_search=True)
             reviewed = _make_review(metadata, search)
         else:
             metadata = inspect_worker_elf(raw)
@@ -144,6 +176,8 @@ def _acquire(directory_fd, name, *, expected_uid, max_bytes,
             raise ValueError
         remaining()
         observation = WorkerElfFileObservation(metadata, _identity(entry))
+        if identity_review:
+            return WorkerElfIdentityObservation(observation, reviewed, named)
         return WorkerElfReviewObservation(observation, reviewed) if review else observation
     except (OSError, ValueError, TypeError, AttributeError, OverflowError, RuntimeError, StopIteration):
         raise WorkerElfFileError("worker ELF acquisition is unavailable") from None

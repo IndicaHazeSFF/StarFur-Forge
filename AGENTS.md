@@ -46,11 +46,31 @@
 
 ## Private annotation worker direction
 
+- document_job_worker_layout.py owns pure proposed-layout consistency for a
+  conservative exact DT_RUNPATH=$ORIGIN subset only. It checks requester-local
+  declared targets/SONAMEs/coverage, not measured backing, actual lookup/sealing,
+  mixed paths, dlopen/CPU or launch authority. No filesystem/runtime caller.
+- document_job_worker_alias_identity.py owns pure same-declared-hash alias/
+  SONAME comparisons. Exact provider-sidecar coverage yields closed matches/
+  differs/absent labels only. Neither supplied observations nor all-match output
+  establish trusted acquisition, resolution, immutable backing or permission.
+- document_job_worker_elf_soname.py owns pure supplied-byte DT_SONAME review
+  only: same raw digest and one bounded label or explicit absence. No filename
+  inference, actual alias binding, file acquisition, loader/search acceptance,
+  image/CPU/private eligibility or runtime caller. Strict C1/C2 denial unchanged.
+- review_worker_elf_identity_file() explicitly composes dependency/search/
+  SONAME observations from the same acquired bytes under the existing anchored
+  read/final identity/deadline/owned-handle fences. It never assigns aliases,
+  reads a second source by name, grants loader/image eligibility or wires runtime.
+- C5 native PASS2026-11-17 consumed its single approval. Exact synthetic
+  parent/fork/exec cwd probes, intended42/missing127 with decoy13, bindings,
+  limits and full cleanup passed; parent state unchanged. No native retry,
+  actual plugin/image deployment, CPU or private-dispatch permission follows.
 - Roger approved C5 on2026-11-17: prepare/test/review cwd-lock/mixed-path
   canary then one temporary c5 unit under C4's same1 CPU/256MiB/no swap/16 tasks/
   10s+2s grace and cleanup limits. Fixed synthetic ELFs/exact measured Linux
   loader only; no model/GPU/Windows/private data/host network/install/service
-  change. Native attempt unused until explicitly run; no automatic retry.
+  change. That single attempt passed above; no automatic retry.
   Shared helper requires explicit --cwd-prerequisite for c5. No permission to
   repeat C4 or run actual installed CPU libraries or private processing.
 - C4 native PASS2026-11-16 consumed its one-unit approval; no repeat/new unit

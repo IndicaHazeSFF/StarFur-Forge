@@ -62,6 +62,12 @@ and runtime-loaded libraries require separate reviewed inventory/closure checks.
 
 def _inspect_metadata(raw, *, review_search=False):
     """Internal shared parser; review mode describes search tags, never approves."""
+    metadata, search, _ = _parse_metadata(raw, review_search=review_search)
+    return metadata, search
+
+
+def _parse_metadata(raw, *, review_search=False, review_soname=False):
+    """Shared bounded parser; optional observations never accept a loader image."""
     try:
         if type(raw) is not bytes or not 64 <= len(raw) <= MAX_ELF_BYTES:
             raise ValueError
@@ -113,7 +119,7 @@ def _inspect_metadata(raw, *, review_search=False):
                 raise ValueError
             return region(matches[0], size), matches[0]
 
-        needed, search = [], {}
+        needed, search, soname = [], {}, None
         if dynamics:
             offset, address, size = dynamics[0]
             if not size or size % 16 or size // 16 > MAX_DYNAMIC_ENTRIES:
@@ -121,7 +127,7 @@ def _inspect_metadata(raw, *, review_search=False):
             dynamic, bound_offset = mapped(address, size)
             if bound_offset != offset:
                 raise ValueError
-            values, references, ended = {}, [], False
+            values, references, ended, soname_reference = {}, [], False, None
             for pos in range(0, size, 16):
                 tag, value = struct.unpack_from("<qQ", dynamic, pos)
                 if ended:
@@ -138,13 +144,17 @@ def _inspect_metadata(raw, *, review_search=False):
                     references.append(value)
                     if len(references) > 32:
                         raise ValueError
+                elif tag == 14 and review_soname:  # DT_SONAME, including offset zero
+                    if soname_reference is not None:
+                        raise ValueError
+                    soname_reference = value
                 elif tag in (5, 10):  # DT_STRTAB / DT_STRSZ
                     if tag in values:
                         raise ValueError
                     values[tag] = value
             if not ended:
                 raise ValueError
-            if references or search:
+            if references or search or soname_reference is not None:
                 if set(values) != {5, 10} or not 1 <= values[10] <= MAX_STRING_BYTES:
                     raise ValueError
                 strings, _ = mapped(values[5], values[10])
@@ -169,9 +179,19 @@ def _inspect_metadata(raw, *, review_search=False):
                     if not _soname_valid(name) or name in needed:
                         raise ValueError
                     needed.append(name)
+                if soname_reference is not None:
+                    if not 0 <= soname_reference < len(strings):
+                        raise ValueError
+                    end = strings.find(b"\0", soname_reference,
+                                       min(soname_reference + 129, len(strings)))
+                    if end < 0:
+                        raise ValueError
+                    soname = strings[soname_reference:end].decode("ascii")
+                    if not _soname_valid(soname):
+                        raise ValueError
         metadata = ElfDependencies(sha256(raw).hexdigest(),
                                "executable" if kind == 2 else "shared_object",
                                interpreters[0] if interpreters else None, tuple(needed))
-        return metadata, search
+        return metadata, search, soname
     except (ValueError, UnicodeError, struct.error, OverflowError):
         raise WorkerElfError("worker ELF inspection is unavailable") from None

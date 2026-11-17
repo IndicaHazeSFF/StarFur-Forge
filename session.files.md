@@ -2,6 +2,8 @@
 
 ## Pending files
 
-None. All C5b source/tests and completion records copied and hash verified.
-Required focused44/full1,584 PASS(one expected skip). Native attempt unused.
-Cycle11 required gates; scoped cadence commit/push due. Copy is not backup.
+None. C7a exact copies/hash verification and focused/full gates passed.
+Current required counter9/10.17 accumulated verified files remain UNBACKED
+after GitHub ddf2cbd; copy success is not backup. No filler/duplicate gate.
+Next disconnected member/layout binding contract only; native/image/sealing/
+private-processing authority remains absent. C5 one-unit approval consumed.

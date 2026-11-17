@@ -1,5 +1,51 @@
+## 2026-11-17 - Check proposed worker library placement without execution
+
+- C7 review recorded; C7a COMPLETED / WSL VERIFIED. Pure exact-origin layout checker binds
+  each requester/dependency to its declared regular-file destination. Matching
+  SONAME/hash alone cannot pass a wrongly placed library. Mixed/RPATH/default
+  search, reserved destinations and duplicate declared copies refuse.
+- Focused35 PASS(0.024s), full1,620 OK/one expected skip(27.724s), counter9/10.
+  No image/copy/loader/runtime authority.17 accumulated verified paths unbacked
+  after ddf2cbd; no optional/filler run or receipt-only commit.
+  Real-image materialization, executable provenance and dlopen remain gated.
+
+## 2026-11-17 - Compare declared alias and SONAME identities
+
+- C6c COMPLETED / WSL VERIFIED: bounded pure alias comparison requires exact provider-sidecar
+  coverage and equal raw hashes; returns matches/differs/absent labels only.
+  No filename guesses, alias materialization, loader/image acceptance or caller.
+- Focused33 PASS(0.021s), full1,609 OK/one expected skip(27.183s), counter7/10.
+- Next C7 is security-design gated: exact measured/sealed real-image and
+  runtime-loading policy still unresolved; no extra native unit or production
+  search acceptance authorized. Later15 verified paths remain unbacked after
+  ddf2cbd; below the ten-gate backup cadence, no filler test or receipt commit.
+
+## 2026-11-17 - Bind ELF identity review to one exact acquisition
+
+- C6b COMPLETED / WSL VERIFIED: explicit optional file/dependency/search/SONAME review from
+  one bounded no-follow acquisition and parse. Final identity/deadline and
+  owned-handle cleanup preserved; old strict/review contracts unchanged.
+- Focused40 PASS(0.021s), full1,602 OK/one expected skip(27.194s), counter5/10.
+  Temporary synthetic
+  files only; no installed-library acquisition, native unit or runtime caller.
+
+## 2026-11-17 - Observe declared ELF library identity without loading
+
+- C6a COMPLETED / WSL VERIFIED: bounded pure DT_SONAME review with same-byte digest,
+  explicit absence and content-free malformed/duplicate refusal. Existing
+  strict dependency/search inspection is unchanged; no alias/image authority.
+- Focused59 PASS(0.029s), full1,593 OK/one expected skip(27.174s), counter3/10.
+  No new native smoke, installed artifact acquisition or worker execution.
+
 ## 2026-11-17 - Prepare the approved synthetic cwd-lock gate
 
+- C5 NATIVE WSL PASS on its single approved attempt: parent/fork/exec cwd
+  denial, intended42/missing127 with decoy13, exact process/unit/cgroup and
+  resource bindings, complete cleanup and unchanged parent state. Grant
+  consumed; no actual CPU plugin, model, Windows/private data or host network.
+  Synthetic evidence only; production search-tag denial remains unchanged.
+- Helper checkpoint ddf2cbd pushed and independently verified. New cycle1/10
+  after native gate; later result/recovery records are synced but unbacked.
 - C5b HELPER COMPLETED / WSL VERIFIED after fresh scoped approval: explicit c5 unit identity and
   opt-in mode, one-thread FS unshare before fork/guard, empty immutable cwd,
   parent/fork valid-directory probes and post-exec fixed ELF checks. Fixed
