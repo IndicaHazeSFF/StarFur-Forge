@@ -1,0 +1,119 @@
+"""Explicit POSIX ELF acquisition under a caller-trusted directory handle.
+
+Read-only, one exact basename, bounded bytes/time acceptance and identity checks.
+Return dependency/stat metadata only; no payload, root discovery, link following,
+image creation, loader execution, installed-library resolution or launch caller.
+Trusted-host stat observations are not hostile-writer/OS isolation or admission.
+"""
+from dataclasses import dataclass
+import math
+import os
+import re
+import stat
+import sys
+import time
+
+from pipeline.document_job_blob_measurement import _identity
+from pipeline.document_job_worker_elf import ElfDependencies, MAX_ELF_BYTES, inspect_worker_elf
+
+
+class WorkerElfFileError(ValueError):
+    """Content-free acquisition refusal."""
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class WorkerElfFileObservation:
+    dependencies: ElfDependencies
+    identity: tuple[int, ...]
+
+    def __post_init__(self):
+        if (type(self.dependencies) is not ElfDependencies or type(self.identity) is not tuple
+                or len(self.identity) != 8 or any(type(v) is not int for v in self.identity)):
+            raise WorkerElfFileError("worker ELF acquisition is unavailable")
+        ElfDependencies(self.dependencies.raw_sha256, self.dependencies.object_kind,
+                        self.dependencies.interpreter, self.dependencies.needed)
+        dev, ino, mode, uid, links, size, _, _ = self.identity
+        if (dev < 0 or ino <= 0 or uid < 0 or links != 1 or not stat.S_ISREG(mode)
+                or mode & 0o7022 or not 64 <= size <= MAX_ELF_BYTES):
+            raise WorkerElfFileError("worker ELF acquisition is unavailable")
+
+
+def inspect_worker_elf_file(directory_fd, name, *, expected_uid, max_bytes,
+                            timeout_seconds, _clock=time.monotonic):
+    """Read one regular no-link ELF and return immutable redacted observation.
+
+    Caller must already trust/open the exact directory; no absolute paths,
+    implicit root selection, symlink aliases, subprocess or permission producer.
+    Deadline fences acceptance, not cancellation of a blocked kernel read.
+    """
+    directory = handle = None
+    try:
+        if (os.name != "posix" or not hasattr(os, "O_NOFOLLOW")
+                or type(directory_fd) is not int or directory_fd < 0
+                or type(name) is not str or
+                re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+-]{0,127}", name) is None
+                or type(expected_uid) is not int or expected_uid < 0
+                or type(max_bytes) is not int or not 64 <= max_bytes <= MAX_ELF_BYTES
+                or type(timeout_seconds) not in (int, float) or
+                not math.isfinite(timeout_seconds) or not 0 < timeout_seconds <= 120
+                or not callable(_clock)):
+            raise ValueError
+        previous = None
+        def now():
+            nonlocal previous
+            value = _clock()
+            if (type(value) not in (int, float) or not math.isfinite(value)
+                    or previous is not None and value < previous):
+                raise ValueError
+            previous = value
+            return value
+        started = now()
+        def remaining():
+            if now() - started >= timeout_seconds:
+                raise ValueError
+        directory = os.dup(directory_fd)
+        root = os.fstat(directory)
+        if not stat.S_ISDIR(root.st_mode) or root.st_uid != expected_uid or root.st_mode & 0o022:
+            raise ValueError
+        remaining()
+        entry = os.stat(name, dir_fd=directory, follow_symlinks=False)
+        if (not stat.S_ISREG(entry.st_mode) or entry.st_uid != expected_uid
+                or entry.st_nlink != 1 or entry.st_dev != root.st_dev
+                or entry.st_mode & 0o7022 or not 64 <= entry.st_size <= max_bytes):
+            raise ValueError
+        handle = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+        if _identity(os.fstat(handle)) != _identity(entry):
+            raise ValueError
+        chunks, total = [], 0
+        while True:
+            remaining()
+            part = os.read(handle, min(65536, entry.st_size + 1 - total))
+            remaining()
+            if not part:
+                break
+            total += len(part)
+            if total > entry.st_size or total > max_bytes:
+                raise ValueError
+            chunks.append(part)
+        if total != entry.st_size:
+            raise ValueError
+        metadata = inspect_worker_elf(b"".join(chunks))
+        if (_identity(os.fstat(handle)) != _identity(entry) or
+                _identity(os.stat(name, dir_fd=directory, follow_symlinks=False)) != _identity(entry)
+                or _identity(os.fstat(directory)) != _identity(root)):
+            raise ValueError
+        remaining()
+        return WorkerElfFileObservation(metadata, _identity(entry))
+    except (OSError, ValueError, TypeError, AttributeError, OverflowError, RuntimeError, StopIteration):
+        raise WorkerElfFileError("worker ELF acquisition is unavailable") from None
+    finally:
+        active_failure = sys.exception() is not None
+        failed = False
+        for fd in (handle, directory):
+            if fd is not None:
+                try:
+                    os.close(fd)
+                except OSError:
+                    failed = True
+        if failed and not active_failure:
+            raise WorkerElfFileError("worker ELF acquisition is unavailable") from None

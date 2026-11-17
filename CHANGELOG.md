@@ -1,3 +1,74 @@
+## 2026-11-16 - Bind declared worker dependencies to explicit inventory targets
+
+- C3c COMPLETED / WSL VERIFIED: pure aliases bind every declared DT_NEEDED label to one
+  bounded inventory target; exact interpreter and graph reachability checked.
+  Missing/extra/duplicate/wrong-role targets deny. No real loader simulation,
+  installed SONAME proof, dlopen coverage or filesystem/image authority.
+- Required gates: focused declarations, POSIX temporary-file composition seam,
+  full provider-free regression PASS:8 focused(0.003s),2 integration(0.001s),
+  full1,541 OK/one expected skip(26.094s). Counter10/10; exact backup due.
+
+## 2026-11-16 - Bound proposed worker image inventories
+
+- C3b COMPLETED / WSL VERIFIED: immutable logical targets/roles and same-digest ELF/search
+  metadata, deterministic declared-inventory fingerprint,64-member/256MiB bounds.
+  Case/path-prefix collisions deny. No host-file reads, alias resolution, copy,
+  image sealing or execution eligibility; unsupported search remains unaccepted.
+- Provider-free focused9 PASS(0.009s), full1,531 OK/one expected skip(25.911s).
+  Counter7/10, backup pending. Quota cutoff renewed at25%
+  remaining; exact distro lifecycle scope otherwise unchanged.
+
+## 2026-11-16 - Classify ELF search metadata without loading authority
+
+- C3a COMPLETED / WSL VERIFIED: inert supplied-byte review distinguishes absent, exact
+  $ORIGIN and mixed/unsupported search tags; malformed input refuses. Shared
+  bounded parsing preserves C1/C2 denial. No paths returned or runtime caller.
+- Astra review conditionally supports option3, not the installed mixed RUNPATH.
+  Image/alias closure, ambient search exclusion and lifetime cwd restrictions
+  remain gates.36 focused PASS(0.026s); full1,522 OK/one expected skip(25.865s).
+  Counter5/10; exact source copy verified, backup pending.
+
+## 2026-11-16 - Select unchanged binaries with sealed-image library resolution
+
+- Roger selected option3 as the CPU-worker packaging direction: preserve binary
+  bytes and narrowly control library loading inside a sealed image. Detailed
+  image/search/alias security review remains required; C1/C2 denial is unchanged,
+  including no implicit acceptance of empty/build-directory search components.
+- Documentation only; no image, binary transform, execution, runtime/config or
+  service change. Scoped WSL retry succeeded without repair. No tests required;
+  counter3/10 unchanged, exact queued records synchronize before handoff.
+
+## 2026-11-15 - Preserve CPU-image search-path denial pending targeted review
+
+- Read-only metadata found embedded RUNPATHs in installed CPU-side libraries,
+  including a build-directory and empty search entry. Existing C1/C2 denial
+  remains unchanged. C3 implementation paused for a targeted image/search/alias
+  design review; no artifact copied, patched or executed, no service/unit change.
+- No new test gate or deployment claim. C2 verified scope and accumulated
+  cycle3/10 remain pending backup at the ten-run cadence.
+
+## 2026-11-15 - Acquire exact worker ELF metadata without following links
+
+- Add disconnected directory-handle acquisition with explicit owner, regular/
+  single-link/same-device/non-writable-to-others checks, bounded bytes/deadline,
+  post-parse identity revalidation and metadata-only output. WSL PASS:14 focused
+  tests and full1,513 OK/one expected skip(25.307s). No installed artifacts,
+  image copy, loader or runtime connected; cycle3/10, backup pending.
+- Preserve Roger's reported severe Fortnite slowdown during prior development
+  runs as failed manual coexistence acceptance with unknown cause. R0 functional
+  PASS remains, but does not cover regression/sync/WSL lifecycle overhead.
+
+## 2026-11-15 - Verify bounded synthetic worker unit limits and teardown
+
+- Approved single R0 native attempt PASS as roger: kernel CPU/RAM/swap/task caps,
+  exact invocation/process/cgroup/command binding, fork-child membership,
+  observed timeout cause, both pidfd exits and unit/cgroup/fixture cleanup.
+  Root/app parent controller snapshots unchanged. No model/GPU/private input,
+  Windows data, network workload or existing-service/configuration change.
+- Prior16-file scope committed/pushed and verified as
+  a08a9f0995be91295d52bc69d520d8519b82b20f before native run. New counter1/10;
+  completion records pending next backup. Not isolation/exhaustion proof.
+
 ## 2026-11-15 - Prepare a bounded synthetic worker resource-unit gate
 
 - R0 scoped approval recorded. Add opt-in one-unit helper and provider-free

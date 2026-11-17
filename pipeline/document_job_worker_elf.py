@@ -57,6 +57,11 @@ empty values; dependency search policy must not be inferred from source bytes.
 Unknown dynamic metadata is ignored, not certified safe. Missing dependencies
 and runtime-loaded libraries require separate reviewed inventory/closure checks.
 """
+    return _inspect_metadata(raw)[0]
+
+
+def _inspect_metadata(raw, *, review_search=False):
+    """Internal shared parser; review mode describes search tags, never approves."""
     try:
         if type(raw) is not bytes or not 64 <= len(raw) <= MAX_ELF_BYTES:
             raise ValueError
@@ -107,7 +112,7 @@ and runtime-loaded libraries require separate reviewed inventory/closure checks.
                 raise ValueError
             return region(matches[0], size), matches[0]
 
-        needed = []
+        needed, search = [], {}
         if dynamics:
             offset, address, size = dynamics[0]
             if not size or size % 16 or size // 16 > MAX_DYNAMIC_ENTRIES:
@@ -125,7 +130,9 @@ and runtime-loaded libraries require separate reviewed inventory/closure checks.
                 if tag == 0:
                     ended = True
                 elif tag in (15, 29):  # DT_RPATH / DT_RUNPATH, even empty
-                    raise ValueError
+                    if not review_search or tag in search:
+                        raise ValueError
+                    search[tag] = value
                 elif tag == 1:  # DT_NEEDED
                     references.append(value)
                     if len(references) > 32:
@@ -136,11 +143,21 @@ and runtime-loaded libraries require separate reviewed inventory/closure checks.
                     values[tag] = value
             if not ended:
                 raise ValueError
-            if references:
+            if references or search:
                 if set(values) != {5, 10} or not 1 <= values[10] <= MAX_STRING_BYTES:
                     raise ValueError
                 strings, _ = mapped(values[5], values[10])
                 strings = bytes(strings)
+                for tag, reference in tuple(search.items()):
+                    if not 0 <= reference < len(strings):
+                        raise ValueError
+                    end = strings.find(b"\0", reference, min(reference + 4097, len(strings)))
+                    if end < 0:
+                        raise ValueError
+                    text = strings[reference:end].decode("ascii")
+                    if any(ord(c) < 32 or ord(c) > 126 for c in text):
+                        raise ValueError
+                    search[tag] = text
                 for reference in references:
                     if not 0 <= reference < len(strings):
                         raise ValueError
@@ -151,8 +168,9 @@ and runtime-loaded libraries require separate reviewed inventory/closure checks.
                     if not _soname_valid(name) or name in needed:
                         raise ValueError
                     needed.append(name)
-        return ElfDependencies(sha256(raw).hexdigest(),
+        metadata = ElfDependencies(sha256(raw).hexdigest(),
                                "executable" if kind == 2 else "shared_object",
                                interpreters[0] if interpreters else None, tuple(needed))
+        return metadata, search
     except (ValueError, UnicodeError, struct.error, OverflowError):
         raise WorkerElfError("worker ELF inspection is unavailable") from None

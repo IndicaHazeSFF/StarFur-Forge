@@ -1149,6 +1149,13 @@ change production state.
 
 ### Foreground-friendly inference and resource cooperation (planned)
 
+**OPERATOR COEXISTENCE CHECK FAILED / CAUSE UNRESOLVED (2026-11-15):** Roger
+reported Fortnite below1 FPS for roughly30s during prior development work. No
+time-correlated measurements establish whether regression, sync, WSL startup or
+another cause was responsible. R0's separate functional pass limits only its
+canary unit, not the entire development workflow. Preserve this manual gate;
+revalidate whole-workload foreground impact before claiming gaming readiness.
+
 Local generation must not make the user's foreground application unusable. Add
 explicit interactive, balanced, and background resource profiles with bounded
 CPU/RAM/VRAM, wall time/output, concurrency, model residency, cancellation,
@@ -1374,7 +1381,30 @@ Retention/deadline corrections, advisory metadata bounds and the disposable CLI 
 
 ### COMPLETED W1 / WSL-VERIFIED — private-worker wire foundation (2026-11-05)
 
-**R0 helper foundation COMPLETED / WSL-VERIFIED; NATIVE GATE PENDING (2026-11-15):**10 focused tests and full1,499 OK/one expected skip. Exactly one temporary user-owned unit approved,1 CPU/256MiB/no swap/16 tasks/10s+2s grace; no native unit yet created. Existing user-root controllers required; no shared-service/configuration/parent-controller changes. No model, GPU, private input or Windows/network workload. Resource evidence does not complete isolation/production policy or private-worker deployment, and is not a gate for the basic Murr apartment product goal.
+**C3c COMPLETED / WSL VERIFIED (2026-11-16):** Pure explicit alias/DT_NEEDED assignments,
+exact interpreter target and declared reachability over C3b inventory. No real
+loader/SONAME/dlopen verification.8 focused,2 composed POSIX fixture and full
+1,541 PASS(one expected skip); counter10/10, scoped backup due. No image/execution.
+
+**C3b COMPLETED / WSL VERIFIED (2026-11-16):** Pure proposed-image inventory binds bounded
+logical file targets, roles and matching declared ELF/search hashes. Stable
+fingerprint is not measured image evidence. Byte/count/path-collision checks
+only; acquisition, alias/dependency resolution, immutable backing and loader
+policy remain pending.9 focused/full1,531 PASS(one expected skip), counter7/10.
+
+**C3a COMPLETED / WSL VERIFIED (2026-11-16):** Astra review supports option3 subject to
+measured immutable image/alias/loader rules and lifetime cwd/dlopen controls.
+Implement supplied-byte classification only; exact $ORIGIN is not eligibility.
+C1/C2 denial remains unchanged.36 focused/full1,522 PASS(one expected skip),
+counter5/10. No image/execution. Next: bounded explicit image inventory contract.
+Earlier pending-review wording below now applies to full loading-policy proof,
+not this completed read-only recommendation. Apartment order unchanged.
+
+**C3 STRATEGY SELECTION COMPLETED; SECURITY REVIEW / IMPLEMENTATION STILL PENDING (2026-11-16):** Roger selected option3: unchanged worker binaries with narrowly controlled library resolution inside a sealed image. This is not acceptance of existing RUNPATHs. Read-only metadata found `$ORIGIN` and `$ORIGIN:/build/llama-server-cpu/bin:` with an empty component; C1/C2 still intentionally deny all embedded search paths. Targeted security review must define and verify exact image/search/alias rules before implementation; binary rewriting and alternative-artifact acquisition are not selected. No image, execution or installed-file edit occurred. See docs/private_annotation_verification.plan.md. This does not block the basic apartment.
+
+**C2 explicit ELF acquisition COMPLETED / WSL VERIFIED (2026-11-15):** Exact trusted-directory handle/basename acquisition with byte/time and owner/mode/device/link/identity checks; metadata only after pure ELF inspection and final revalidation.14 focused tests and full1,513 OK/one expected skip(25.307s); cycle3/10, backup pending. No root discovery, installed-file access, image copy, loader, runtime/admission or actual CPU-model execution. Next: bounded explicit dependency-closure/image plan after the C3 search-path review, not deployment promotion.
+
+**R0 COMPLETED / NATIVE WSL PASS (2026-11-15):** Single approved transient user-unit gate verified kernel1 CPU/256MiB/no swap/16-task limits, exact worker/child identity and membership, runtime timeout10s+2s grace, process exits and unit/cgroup/fixture cleanup. Parent controller snapshots unchanged; no shared-service/configuration change. Helper passed10 focused/full1,499(one expected skip), backed up as a08a9f0 before native run. New counter1/10. No model/GPU/private input or Windows/network workload. Not isolation/production policy or private-worker deployment, nor a gate for basic Murr apartment. Next: reviewed immutable CPU image/dependency closure and deny-by-default syscall policy before actual inference.
 
 **CPU-only integration direction APPROVED; C1 ELF metadata groundwork COMPLETED / WSL-VERIFIED (2026-11-11):** Pure bounded ELF dependency inspector remains disconnected from acquisition, loading and launch.13 focused tests, full1,489 OK/one expected skip; counter8/10. Diagnostic read-only installed metadata agrees with readelf. Existing user-managed resource delegation observed; temporary worker-unit canary scope requires separate approval. No GPU/shared-service change, download, private document or actual inference. Complete immutable image/dependency closure, deny-by-default policy and aggregate resource limits remain gates.
 

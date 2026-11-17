@@ -12,6 +12,12 @@
 
 ## Standing development/test synchronization authority
 
+- For the current unattended run only (2026-11-15), Roger authorized starting
+  StarFur-Forge as roger and requires shutdown of that exact distribution after
+  final verification/sync/handoff at about25% five-hour remaining (renewed
+  2026-11-16). Do not start/
+  stop other distributions or turn this into standing lifecycle/config authority.
+  Stop earlier at existing error/design/security gates; preserve state safely.
 - Roger normally keeps StarFur-Forge WSL running in PowerShell. While he is actively messaging without saying he is away/at work, assume it is available for authorized operations and leave its lifecycle alone; do not explicitly start/stop it as routine preparation or cleanup. This is a workflow assumption, not measured service readiness. If unavailable, apply the existing diagnosis/stop rules; earlier scoped lifecycle authorization is not blanket permission to reconfigure services.
 - Until the user revokes it, the agent may run focused provider-free regression suites and scoped `starfur.py assistant` terminal smokes. Assistant smokes use disposable/test-owned state; live model calls are limited to those smokes. Visual/audio/game-performance checks and other operations require the user. This is development authorization, not a StarFur/Core/persona permission or blanket operating-system access; execution approval boundaries still apply.
 - Track the exact files edited or created by the current queued job(s) in `session.files.md`. It is a pending deployment queue, not a cumulative history or a list inferred from the whole dirty worktree. Pre-existing unrelated edits are not authorized by appearing in git status. Keep durable change/test history in CHANGELOG.md and relevant sprint records.
@@ -39,6 +45,33 @@
 - Whole-message read-only context-stat requests (including documented `show context stats`/`show me context diagnostics` aliases) return the existing Core snapshot or explicit unavailability, never model-written telemetry. Ambiguous input preserves a pending bulk-confirmation record without claiming it; otherwise the existing exact `approve all` confirmation/cancellation path remains session-owned. Shared chat/API applies the same framing before stale document extensions. This does not filter arbitrary model prose or make a model-written statistics block authoritative.
 
 ## Private annotation worker direction
+
+- document_job_worker_dependencies.py owns pure explicit logical alias/needed
+  assignments over a supplied inventory. Complete declared coverage/reachability
+  is not actual SONAME validation, loader search order, dlopen closure, CPU
+  behavior, immutable image evidence or execution permission. No symlinks made.
+- document_job_worker_image.py owns pure supplied image-member declarations,
+  canonical logical targets and aggregate byte/count bounds. Its fingerprint
+  identifies declarations, not measured/sealed bytes, dependency closure, CPU
+  behavior, deployment or permission. Roles/search labels never grant authority.
+- document_job_worker_elf_search.py owns inert supplied-byte search-tag review
+  only. Exact $ORIGIN grants no loader/image eligibility; C1/C2 still deny every
+  RPATH/RUNPATH. Unknown other tags remain unassessed, not certified safe.
+- Roger selected option3 on2026-11-16: preserve worker binaries unchanged and
+  review narrowly controlled library resolution inside a sealed image. This is
+  a design direction, not permission to accept existing RUNPATHs, execute a
+  loader, construct/deploy an image or change services. C1/C2 search-path denial
+  stays unchanged pending targeted image/search/alias security review; empty,
+  build-directory and other unproved paths receive no implicit exemption.
+- document_job_worker_elf_file.py owns explicit read-only acquisition of one
+  regular/no-link ELF basename via a caller-trusted POSIX directory fd. Owner,
+  mode/device, byte/time acceptance and pre/post entry/handle identity checks
+  bind metadata to the observed file; no raw bytes, discovery, copy, loader,
+  deployment/consent or runtime caller. Stat checks assume a trusted host;
+  deadlines do not forcibly interrupt kernel reads.
+- R0 limits cover its test unit only, not regression/synchronization/WSL-startup
+  work. Gaming coexistence remains separate operator acceptance; never infer
+  a foreground-performance pass from functional resource/isolation tests.
 
 - Roger approved R0 on2026-11-15: exactly one temporary user-owned managed unit
   running a synthetic canary,1 CPU/256MiB/no swap/16 tasks/10s+2s kill grace.

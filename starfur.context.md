@@ -2,6 +2,12 @@
 
 ## Current accepted worker refinement — 2026-11-05
 
+Design direction selected2026-11-16: keep worker binaries unchanged and control
+library resolution inside a sealed image (option3), subject to targeted security
+review. This does not approve installed RUNPATHs or alter current C1/C2 denial.
+Exact image/search/alias rules and verification remain pending in
+docs/private_annotation_verification.plan.md; no image/loader/runtime is deployed.
+
 W8 binds a bounded request digest to the exact live store/current plan and next
 chunk identity without retaining document prose. This is disconnected trusted-Core
 equality checking, not an atomic disclosure fence or permission. Full D1 and

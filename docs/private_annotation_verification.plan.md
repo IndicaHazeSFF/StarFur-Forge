@@ -1,10 +1,130 @@
 # Private annotation deployment verification — review draft
 
-## R0 scoped resource-unit gate — approved2026-11-15, native verification pending
+## C3c explicit declared assignment — COMPLETED / WSL VERIFIED2026-11-16
+
+Supplied aliases (max128) name exact inventory targets; no host lookup, links,
+normalization or loader resolution. Every declared needed label must map once
+to a declared shared-object library/interpreter; exact fixed interpreter target
+required when PT_INTERP is present. No recursive interpreter or unreachable
+libraries. Explicit plugin roots are descriptive, not proof they will load.
+Cycles are bounded by finite inventory traversal. Fingerprint binds declarations,
+not actual SONAMEs/loader behavior or accepted image. C1/C2 denial unchanged.
+Three required gates before completion: focused pure graph validation; composed
+temporary-file acquisition/inventory/assignment seam including C2 refusal; full
+regression PASS:8 focused(0.003s),2 integration(0.001s),full1,541 OK/one expected
+skip(26.094s). Counter10/10. No real library loaded, image or worker/unit launched.
+
+## C3b proposed inventory — COMPLETED / WSL VERIFIED2026-11-16
+
+Pure declarations only:1..64 immutable regular-file target descriptions, one
+declared entrypoint,64MiB/member and256MiB aggregate. Logical POSIX components
+reject traversal/host syntax, case collisions and file/directory prefix conflict.
+Same raw hash binds supplied ELF/search metadata; sorted fingerprint commits
+to declarations, never independently observed files or exact loading behavior.
+Search classifications (including unsupported) remain descriptive, not accepted.
+No file acquisition, alias resolution, dependency closure, CPU attestation,
+materialization, sealed image, loading or public runtime caller.9 focused PASS
+(0.009s), full1,531 OK/one expected skip(25.911s). Counter7/10. Next explicit
+logical alias/dependency assignment; not an actual loader search simulation.
+
+## C3 Astra review2026-11-16 — C3a COMPLETED / WSL VERIFIED
+
+Review supports unchanged binaries only under a separately proved measured,
+immutable image. Exact $ORIGIN is metadata, not eligibility. Installed mixed
+RUNPATH stays denied: empty components require lifetime cwd restrictions, not
+startup-only chdir; build paths cannot become reachable. Pin loader/runner/
+plugin/aliases/digests; exclude ambient cache/preload/audit/environment/default/
+hardware-variant paths and cover dlopen/descendants. Existing root/binfmt/
+resource/syscall fixture passes are not loader evidence. C3a is supplied-byte
+classification only;36 focused PASS(0.026s), full1,522 OK/one expected skip
+(25.865s). Counter5/10; no new native/execution/image authority. Search strings
+are parsed with zero DT_NEEDED too; no path normalization or raw path return.
+Next: bounded explicit image inventory contract, not deployment promotion.
+Before launch, separately authorized positive/decoy loader smokes remain gated.
+References: https://codebrowser.dev/glibc/glibc/elf/dl-load.c.html#468
+and https://gabi.xinuos.com/elf/08-dynamic.html . Review ran no workers/tests.
+
+## C3 strategy selected2026-11-16 — detailed review above; execution pending
+
+Roger chose option3: preserve binary bytes and use narrowly controlled library
+resolution within a sealed image. Selection is COMPLETED as a design choice,
+not proof or approval of the loading policy, image construction or execution.
+Do not transform installed/disposable binaries or obtain alternative artifacts
+under this selection. Existing C1/C2 denial stays intact until a specific
+reviewed policy is accepted and verified. No source/runtime behavior changed.
+
+Read-only installed `readelf -d` inspection (exit0, no ELF execution) found:
+- `/usr/local/lib/ollama/libggml-cpu-x64.so`: DT_RUNPATH
+  `$ORIGIN:/build/llama-server-cpu/bin:` (includes an empty search component).
+- `/usr/local/lib/ollama/libggml-base.so.0.15.3`, `llama-server` and
+  `libllama-server-impl.so` under that same directory: DT_RUNPATH `$ORIGIN`.
+- Bounded directory-name/type inspection also found versioned library symlinks
+  and separate CUDA/Vulkan directories; none was copied, followed or loaded.
+
+Observed fact: C1 `inspect_worker_elf()` rejects every RPATH/RUNPATH, including
+empty values, and C2 composes that unchanged policy. Inference: these installed
+CPU-side artifacts cannot currently supply an accepted sealed image. Static
+DT_NEEDED completeness would still not establish runtime dlopen closure or
+CPU-only behavior. No native execution/security boundary failed in this check.
+
+Do not silently permit `$ORIGIN`, drop the trailing empty component, use an
+ambient LD_LIBRARY_PATH, edit installed binaries, copy vendor directories or
+call a declaration-only image plan deployment evidence. C3 source not started.
+The earlier alternatives were a separately measured sanitized disposable copy,
+a separately approved suitable artifact, or a narrowly proved sealed-image
+loader policy. Roger selected the latter; the first two are not authorized.
+Review must specify exact permitted resolution, immutable measured inventory,
+alias/SONAME binding, loader/environment/cache/default-directory behavior,
+cwd handling and runtime-loaded modules. Empty/build-directory entries cannot
+be dismissed or treated as `$ORIGIN` by normalization. If preserving the installed
+bytes cannot satisfy a proved sealed policy, refuse and return the conflict to
+Roger rather than switching strategy or broadening search paths silently.
+
+Recommended Astra review scope: inspect C1/C2, the accepted restricted-root,
+binfmt/syscall/resource evidence and exact metadata above; recommend the smallest
+safe option3 image/search/alias contract, feasibility and deterministic tests.
+Read-only review only;
+no runtime/config/package changes, model calls, units or execution. Preserve
+default search-path denial until a specific design is accepted. Sol then
+implements the agreed provider-free slice. This is a worker integration gate,
+not an added dependency for the basic Murr apartment.
+
+## C2 exact ELF-file observation — COMPLETED / WSL VERIFIED2026-11-15
+
+Provider-free focused14 PASS; full1,513 OK/one expected skip(25.307s).
+Cycle3/10; exact source copy verified, completion records pending next backup.
+
+Read one explicit basename under a caller-trusted POSIX directory handle, never
+discover an installed root or follow package aliases. Require exact owner and
+regular single-link same-device file, no group/other writes or special mode
+bits; enforce64MiB maximum and supplied byte/time acceptance bounds. Recheck
+fd/entry/directory identity after parsing; return immutable dependency/stat
+metadata only. Preserve caller fd, close owned fds on refusal/interruption and
+refuse success after uncertain cleanup. Deadlines fence acceptance, not blocked
+kernel read cancellation; this is trusted-host measurement, not isolation.
+No actual installed artifact, copy/materialization, launch, service, GPU/model
+or private input in the first tests. Package symlink/alias handling and complete
+DT_NEEDED/dlopen closure remain separate reviewed image-plan responsibilities.
+
+Foreground note: reported Fortnite disruption during development remains an
+unresolved manual acceptance failure. R0 did not cap the whole development
+workflow. Avoid attributing cause or claiming a performance fix without measured
+correlation and operator-owned frame-time validation.
+
+## R0 scoped resource-unit gate — COMPLETED / NATIVE WSL PASS2026-11-15
+
+Single authorized native attempt exited0 with explicit PASS: kernel caps,
+worker/fork-child identity and cgroup membership, observed Result=timeout,
+both process exits, unit/cgroup disappearance, known fixture cleanup and unchanged
+root/app controller snapshots. No retries/new units. No model/private input/GPU,
+Windows data, network workload or existing-service changes. Not hostile-code
+isolation, exhaustion/performance or private-disclosure evidence. Native gate
+adds one after verified ten-gate backup a08a9f0, current counter1/10.
+Image/dependency closure and production deny-by-default policy remain gated.
 
 Helper foundation COMPLETED / WSL VERIFIED:10 focused tests and full1,499 OK/
 one expected skip. These are provider-free/fake checks; no unit/cgroup created.
-Separate one-unit native gate pending. Counter10/10 backup before native run.
+Separately approved one-unit native gate passed after verified backup.
 
 Roger approved the previously proposed one-unit synthetic gate. Exact helper:
 scripts/private_worker_resource_smoke.py; never normal regression discovery.

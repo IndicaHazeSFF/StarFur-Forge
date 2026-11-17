@@ -1,6 +1,39 @@
 # Temporary operator smoke handoff
 
-2026-11-15:R0 helper/fakes PASS:10 focused and full1,499 OK/one expected skip.
+C3c declared assignment PASS:8 focused,2 temporary-file composition and full
+1,541(one expected skip). No manual operator
+test, image or real loader/model. Gaming recheck remains separate/pending.
+
+C3b proposed image inventory PASS:9 focused/full1,531(one expected skip), no
+operator smoke, installed-file copy, model, loader or unit. Existing manual
+foreground-coexistence failure/recheck remains unchanged.
+
+C3a supplied-byte classification PASS:36 focused/full1,522(one expected skip).
+No manual operator action now; no loader/model execution or new native approval.
+
+2026-11-16:Option3 design selection recorded: unchanged binaries with controlled
+sealed-image loading. Exact policy/security review remains pending; no new
+operator smoke or execution permitted by that choice. Prior C2 PASS and gaming
+acceptance failure/recheck remain separate and unchanged.
+
+2026-11-15:C3 implementation PAUSED before image construction: installed CPU
+RUNPATHs conflict with unchanged strict parser policy. Targeted design review,
+not another operator smoke, is next. No worker/model/unit launched; C2 fixtures
+passed. No new manual test or extra gate count; gaming recheck remains pending.
+
+2026-11-15: Foreground gaming coexistence FAILED by Roger's report: Fortnite
+below1 FPS for approximately30s during prior development run. Cause unmeasured;
+regression/sync/WSL startup are not covered by R0 unit caps. Manual timed/frame-
+time recheck remains PENDING; no claim of performance repair from functional tests.
+C2 provider-free verification PASS:14 focused/full1,513(one expected skip).
+No new visual/operator action; gaming acceptance above remains unresolved.
+
+2026-11-15:R0 NATIVE WSL PASS on its single approved attempt. Kernel limits,
+worker/child membership, timeout cause, process exits and exact unit/cgroup/
+fixture cleanup verified; parent controls unchanged. No operator rerun needed,
+model/GPU/private input or Windows/network workload. No exhaustion/isolation claim.
+
+Historical pre-native checkpoint: R0 helper/fakes PASS:10 focused and full1,499 OK/one expected skip.
 Native one-unit gate pending after ten-gate backup. No operator visual/audio/
 game test or model involved; do not infer native resource evidence from fakes.
 One temporary unit,1 CPU/256MiB/no swap/16 tasks/10s+2s grace; no service install.
