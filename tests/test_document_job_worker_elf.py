@@ -35,6 +35,18 @@ def fixture(*, names=("libc.so.6", "libstdc++.so.6"), search_tag=None):
 
 
 class WorkerElfInspectionTests(unittest.TestCase):
+    def test_only_system_v_and_gnu_abi_zero_versions_are_supported(self):
+        for abi in (0, 3):
+            raw = bytearray(fixture()); raw[7] = abi
+            self.assertEqual(inspect_worker_elf(bytes(raw)).needed, ("libc.so.6", "libstdc++.so.6"))
+        for abi in (1, 2, 9, 255):
+            raw = bytearray(fixture()); raw[7] = abi
+            with self.assertRaises(WorkerElfError):
+                inspect_worker_elf(bytes(raw))
+        raw = bytearray(fixture()); raw[7:9] = bytes((3, 1))
+        with self.assertRaises(WorkerElfError):
+            inspect_worker_elf(bytes(raw))
+
     def test_dynamic_dependency_labels_hash_and_immutable_redaction(self):
         raw = fixture()
         value = inspect_worker_elf(raw)

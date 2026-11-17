@@ -1,3 +1,67 @@
+## 2026-11-17 - Prepare the approved synthetic cwd-lock gate
+
+- C5b HELPER COMPLETED / WSL VERIFIED after fresh scoped approval: explicit c5 unit identity and
+  opt-in mode, one-thread FS unshare before fork/guard, empty immutable cwd,
+  parent/fork valid-directory probes and post-exec fixed ELF checks. Fixed
+  mixed RUNPATH stays unaccepted by Core. No real plugin/model/private data.
+- Focused44 PASS(0.083s); full1,584 OK/one expected skip(29.402s). Native
+  approval unused. C4 fixture byte hashes preserved. Cadence9+2=11 required
+  gates: mandatory full fence completed after focus crossed10, before backup.
+
+## 2026-11-16 - Prepare inert current-directory restriction bytecode
+
+- C5a COMPLETED / WSL VERIFIED: pure x86-64 cBPF composition adds chdir/fchdir EPERM while
+  preserving existing synthetic guard behavior. No installer/runtime caller or
+  OS effect; default unknown-call allowance remains, not production policy.
+- Direct dependency of Astra's mixed-search-path lifetime-cwd gate. No initial
+  cwd, FS-sharing, inherited kernel enforcement or loading evidence is implied.
+  Focused18 PASS(0.036s); full1,575 OK/one expected skip(25.854s), counter9/10.
+  Native C5 needs fresh approval after C4 consumed; no filler run/extra unit.
+
+## 2026-11-16 - Verify the single approved synthetic loader gate
+
+- C4 NATIVE WSL PASS, exit0 on the one approved attempt. Intended42 and
+  missing127 despite decoy13, process/epoch/cgroup bindings, kernel limits,
+  sealed-root/private-registry/socket prerequisites, all captured exits and
+  unit/cgroup/fixture cleanup verified. Parent controllers/registry unchanged.
+- Helper83ead1a1e50327fcb770d7260164025f103fb371595bfa114eec8f7d08f395af;
+  exact measured loader bda779ea9e9ad234f60315477d7cfd0bdde861cd8ddd9df8cdaf62f18c4cec14.
+  No model/GPU/private/Windows data or shared-service changes. Approval consumed;
+  no repeat/new unit inferred. Loader prerequisite only, not full image/dlopen/
+  mixed RUNPATH/CPU/private-dispatch readiness. Counter7/10; scope unbacked.
+
+## 2026-11-16 - Prepare the opt-in bounded synthetic loader supervisor
+
+- C4b HELPER COMPLETED / WSL VERIFIED; NATIVE PENDING: exact one-unit resource/epoch binding, anchored measured
+  interpreter copy, sealed root/private registry/socket guard and pre-release
+  pidfds for namespace init and canaries. Intended42/missing127 with decoy13;
+  no actual worker/model, private input, Windows or service configuration.
+- Final fake17 PASS(0.009s); full1,567 OK/one expected skip(25.794s), counter6/10.
+  Exact reviewed loader digest required before fixture/unit creation.
+  Closed diagnostic hardening reverified without duplicate gate count.
+  Native approval was unused at preparation; the one attempt passed above.
+  Failure preserves fixture and never retries by inference.
+
+## 2026-11-16 - Prepare fixed synthetic loader fixtures
+
+- C4 scoped approval received; native attempt not yet made. C4a COMPLETED / WSL VERIFIED:
+  inert fixed main/data-only intended42/decoy13 ELF generators, no compiler/I/O/
+  execution. Main depends only on libfixture.so and exact $ORIGIN; no libc.
+- Read-only installed interpreter metadata showed GNU OSABI3/ABI0. Inspector
+  policyv2 now narrowly supports System-V/GNU ABI0; all other metadata and
+  strict search-tag denials preserved.21 focused PASS(0.004s); full1,557 OK/one
+  expected skip(26.206s), counter4/10. Native/helper verification still pending.
+
+## 2026-11-16 - Acquire review-only ELF search metadata from one exact file
+
+- C3d COMPLETED / WSL VERIFIED: separate read-only review binds file/search metadata to the
+  same bounded no-follow acquisition. Strict C2 search refusal unchanged; no
+  raw search paths returned or image/loading eligibility. Final identity,
+  deadline and handle-cleanup checks cover both paths.44 focused PASS(0.017s),
+  full1,549 OK/one expected skip(25.232s); new cycle2/10, later scope unbacked.
+- No installed file, image, model, unit or service touched. Any native dynamic-
+  loader/image gate needs separately reviewed concrete scope and authorization.
+
 ## 2026-11-16 - Bind declared worker dependencies to explicit inventory targets
 
 - C3c COMPLETED / WSL VERIFIED: pure aliases bind every declared DT_NEEDED label to one
@@ -6,7 +70,8 @@
   installed SONAME proof, dlopen coverage or filesystem/image authority.
 - Required gates: focused declarations, POSIX temporary-file composition seam,
   full provider-free regression PASS:8 focused(0.003s),2 integration(0.001s),
-  full1,541 OK/one expected skip(26.094s). Counter10/10; exact backup due.
+  full1,541 OK/one expected skip(26.094s). Ten-gate19-path backup committed and
+  independently push-verified as cb7883d771cd2648742e07b3205797970d429946.
 
 ## 2026-11-16 - Bound proposed worker image inventories
 

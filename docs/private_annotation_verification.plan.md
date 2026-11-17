@@ -1,5 +1,129 @@
 # Private annotation deployment verification — review draft
 
+## C5b helper COMPLETED / WSL VERIFIED2026-11-17 — native pending
+
+Roger approved fresh C5 scope: prepare/test/review, then exactly one c5 unit
+with unchanged C4 resource/cleanup/fixture limits. Explicit --cwd-prerequisite,
+fresh c5 unit identity, no implicit C4 repeat. Native approval unused.
+Before root detachment, verify exact x86-64 syscall/CLONE_FS header values.
+After sealing root/drop caps but before installing guard/fork: require one
+thread and successful unshare(CLONE_FS), ensuring no prior external FS sharing.
+Base guard/root checks run, then chdir to empty read-only /cwd and install C5
+guard. Parent and each forked canary issue valid-directory chdir/fchdir probes;
+must get EPERM and unchanged cwd identity. Exec retains only fd3 pointing to
+internal /decoy. Fixed ELF fstats fd3 as a directory, directly attempts chdir80/
+fchdir81, requires raw -EPERM, gets/checks exact /cwd, then returns fixture value.
+Positive42 and missing127 despite decoy13 use the exact fixed mixed RUNPATH.
+No installed plugin or model is executed; pure tests cannot attest enforcement.
+Focused44 PASS(0.083s), full1,584 OK/one expected skip(29.402s); cycle11 gates.
+These gates precede source/hash review, scoped backup and one native attempt.
+C4 fixture bytes remain identical by golden-hash assertions to the earlier native
+checkpoint. Strict C1/C2 denial and all production/dlopen/private gates remain.
+Command only after verification with measured exact loader SHA:
+`/usr/bin/timeout --signal=TERM --kill-after=2s 40s .venv/bin/python -I -B -S scripts/private_worker_loader_smoke.py --expect-loader <sha256> --cwd-prerequisite`
+
+## C5a inert cwd restriction — COMPLETED / WSL VERIFIED2026-11-16
+
+Pure cBPF construction reloads syscall number at prior common ALLOW tail and
+adds x86-64 chdir80/fchdir81 EPERM. Existing arch/x32/socket/namespace/clone
+behavior preserved; unknown calls still allow. No installer/header reader or
+runtime caller. This is not a production allowlist or evidence cwd is locked.
+It cannot attest initial empty immutable cwd, outside FS-sharing exclusion,
+kernel installation, fork/exec inheritance or complete library resolution.
+Focused18 PASS(0.036s), full1,575 OK/one expected skip(25.854s), cycle9/10.
+No native C5 approval existed at C5a; C5b approval above supersedes that status.
+Bytecode interpretation is not native enforcement.
+Rationale: C4 exact $ORIGIN tests do not cover the installed trailing-empty
+search entry. Future separately approved C5 must bind fresh private-root/FS/
+one-thread setup, immutable cwd and actual deny probes across descendants/exec;
+then a fixed mixed-path synthetic fixture. No installed plugin execution or
+acceptance by name, no silent widening of current C1/C2 policy.
+
+## C4 NATIVE WSL PASS2026-11-16 — approval consumed
+
+Single explicit attempt exit0. Helper coupled hashes/argv checked before exec;
+source83ead1a1e50327fcb770d7260164025f103fb371595bfa114eec8f7d08f395af.
+Expected loader bda779ea9e9ad234f60315477d7cfd0bdde861cd8ddd9df8cdaf62f18c4cec14,
+254864 bytes. Observed intended42/missing127 with decoy13. Native assertions
+verified exact unit epoch/MainPID/uid/cmdline/cgroup, kernel caps, namespace init/
+canary pidfds before release, read-only root/private registry/inherited socket
+guard, all exits, unit/cgroup/known fixture cleanup and unchanged parent state.
+No failed fixture or lingering C4 unit/process. No retry/new unit approved.
+No real model/GPU/private input/Windows access or shared-service change.
+This does not attest real CPU libraries, mixed/empty search-path behavior,
+complete dlopen closure or production policy. Next pure cwd-lock primitive
+addresses Astra's lifetime-cwd prerequisite; native C5 remains separately gated.
+
+## C4b helper COMPLETED / WSL VERIFIED — NATIVE PASSED ABOVE2026-11-16
+
+Exactly one UUID-named temporary user unit under existing root user-slice,
+R0 properties unchanged. Empty worker environment and null stdio. Supervisor
+pins exact invocation/MainPID/cmdline/uid/cgroup before go; nested unshare init
+and two canary children captured before root/exec release. Fixed Linux loader
+source acquired no-follow/root-owned/single-link/same-device with2MiB/2s bounds,
+pre/post identity and strict metadata; no dynamic discovery or arbitrary binary.
+Only its hash-matched copy and generated ELF fixtures enter private4MiB tmpfs.
+Private read-only empty binfmt registry, old-root detach, read-only seal, handle
+closure, cap drop and inherited synthetic socket/syscall guard precede exec.
+Positive exact $ORIGIN chooses42 despite decoy cwd; negative missing dependency
+must exit127 rather than decoy13. This tests that exact fixture/loader only.
+All pidfds/Popen, unit/cgroup/known fixture cleanup and unchanged parent registry/
+controllers must be verified. Failures retain fixture; no native retry implied.
+Final17 fake PASS(0.009s); full1,567 OK/one expected skip(25.794s), counter6/10.
+Exact expected loader digest is required and checked before fixture/unit creation.
+Final source/argv/lifecycle review covered fixed paths, sanitized environment,
+caps, captured processes before release, failure teardown, phase-only diagnostics
+and exact cleanup. Earlier15/1,565 runs preceded diagnostic hardening; reruns
+do not inflate cadence. Single native attempt passed above; approval consumed.
+Command only after exact copy/hash verification:
+`/usr/bin/timeout --signal=TERM --kill-after=2s 40s .venv/bin/python -I -B -S scripts/private_worker_loader_smoke.py --expect-loader <exact-preflight-SHA256>`
+The expected hash is mandatory and rechecked before fixture/unit creation; no
+environment/default artifact selection. Read-only preflight measured254864 bytes,
+SHA256 bda779ea9e9ad234f60315477d7cfd0bdde861cd8ddd9df8cdaf62f18c4cec14.
+
+## C4a fixture foundation — COMPLETED / WSL VERIFIED2026-11-16
+
+Roger approved C4 scope below, including one bounded synthetic native unit after
+helper preparation/tests/review. At preparation, native approval was unused;
+the single attempt subsequently passed above. Fixed ELF main
+references one data symbol through a GLOB_DAT relocation; intended DSO contains
+42, decoy13. No libc/constructor/arbitrary-code selector/compiler. Pure structural
+tests are not live loader validation. Main uses exact $ORIGIN; mixed installed
+CPU path remains denied. Installed readelf -h/-d observation of the exact Linux
+interpreter (no execution) found GNU OSABI3/ABI0. Metadata inspector policyv2
+supports only System-V/GNU ABI0; does not accept an interpreter or deployment.
+21 focused PASS(0.004s), full1,557 OK/one expected skip(26.206s); cycle4/10.
+At that fixture-only checkpoint no image/unit/loader had started. Later C4
+native PASS and consumed approval are recorded above; no real worker deployed.
+
+## C3d explicit review acquisition — COMPLETED / WSL VERIFIED2026-11-16
+
+One caller-trusted directory fd/exact basename, no discovery. Strict inspect
+entry stays unchanged and denies all search tags; separate review composes the
+shared parser/classifier over identical acquired bytes before final identity/
+expiry checks. Review may describe unsupported searches, never accept them.
+Immutable file/search hashes must match; no raw paths/payload returned. Trusted
+host observations, not hostile-host protection or accepted image provenance.
+44 focused PASS(0.017s); full1,549 OK/one expected skip(25.232s); cycle2/10.
+No actual installed files accessed; no native/image approval consumed.
+Next native/image gate is NOT authorized here: review concrete helper, exact
+artifacts, synthetic-only positive/decoy behavior, resource limits and cleanup
+first; get separately scoped operator authorization before constructing/running
+a reference image or creating another transient unit. R0 approval is consumed.
+Do not infer full dlopen/CPU/security readiness from a loader canary pass.
+
+Roger approved C4 on2026-11-16: prepare/review one explicit opt-in
+synthetic loader helper, fake tests first, then exactly one temporary user-owned
+managed unit with existing controllers only.1 CPU/256MiB/no swap/16 tasks/10s
+runtime+2s kill grace. Test-owned generated ELF fixtures and one exact measured
+Linux interpreter copied into a sealed fixture root; positive intended-library
+and negative missing/decoy cases only. Reuse reviewed namespace/root/binfmt/
+identity controls, no host network/Windows data/executables/private input,
+Ollama/model/GPU, compiler/download/install or shared-service change. Exact
+invocation/descendant membership/exit and unit/cgroup/fixture cleanup required;
+stop on uncertainty, no repeat by inference. This is loader prerequisite
+evidence only; loader/environment/search-policy completeness stays gated.
+
 ## C3c explicit declared assignment — COMPLETED / WSL VERIFIED2026-11-16
 
 Supplied aliases (max128) name exact inventory targets; no host lookup, links,
@@ -12,7 +136,8 @@ not actual SONAMEs/loader behavior or accepted image. C1/C2 denial unchanged.
 Three required gates before completion: focused pure graph validation; composed
 temporary-file acquisition/inventory/assignment seam including C2 refusal; full
 regression PASS:8 focused(0.003s),2 integration(0.001s),full1,541 OK/one expected
-skip(26.094s). Counter10/10. No real library loaded, image or worker/unit launched.
+skip(26.094s). Ten-gate scoped backup verified cb7883d771cd2648742e07b3205797970d429946;
+new cycle0/10. No real library loaded, image or worker/unit launched.
 
 ## C3b proposed inventory — COMPLETED / WSL VERIFIED2026-11-16
 

@@ -1,61 +1,64 @@
 # Rotating development handoff
 
-Updated2026-11-16:C3c explicit declared dependency assignment COMPLETED / WSL VERIFIED.
+Updated2026-11-17:C5b helper COMPLETED / WSL VERIFIED; native attempt UNUSED.
 
 ## Last verified backup
 
-WSL/GitHub main:a08a9f0995be91295d52bc69d520d8519b82b20f.
-Subject: Keep Murr's worker paws inside the playpen.
-Previous:8cd059f62d3fb5d42b97f8ef1dadf9357bf29064.
-No later commit/push claimed. Windows index is separate/stale; exclude unrelated
-WSL COMMANDS edits, bytecode and runtime. No restoration or cleanup authorized.
+WSL/GitHub main:cb7883d771cd2648742e07b3205797970d429946.
+Subject: Give Murr's worker a carefully packed den.
+Previous:a08a9f0995be91295d52bc69d520d8519b82b20f.
+Exact19-path hashes/staged-set/main/HEAD/index/remote and independent push verified.
+Windows index is separate/stale; exclude unrelated COMMANDS/bytecode/runtime.
+Later19 accumulated paths below remain UNBACKED. Clear queue is not backup.
 
-## Completed scope and required gates
+## Completed work / required gates
 
-C1 pure ELF dependency metadata; C2 exact trusted-directory read-only acquisition
-PASS14 focused/full1,513(one expected skip). R0 single approved native resource
-unit PASS; approval consumed, no further units implied. C3a inert search metadata
-PASS36 focused/full1,522(one expected skip). C1/C2 deny all search tags unchanged.
-Current cycle10/10: R0 native, C2 focused/full, C3a focused/full, C3b focused/full,
-C3c focused/integration/full. Scoped commit/push due before new implementation.
-Prior source/hash/commands and Astra review evidence remain in the worker sprint.
-Basic Murr apartment is still first tangible goal, not blocked on this worker.
+C3d PASS44 focused/full1,549; C4a PASS21/full1,557; C4b final PASS17/full1,567.
+Full runs each one expected skip. C4 single native PASS exit0: intended42,
+missing127 despite decoy13; bindings/limits/root/registry/socket prerequisites,
+all captured exits/unit/cgroup/fixture cleanup and unchanged parent state.
+C4 approval consumed; no repeat implied. Helper at C4 native checkpoint
+83ead1a1e50327fcb770d7260164025f103fb371595bfa114eec8f7d08f395af.
+Loader254864 bytes bda779ea9e9ad234f60315477d7cfd0bdde861cd8ddd9df8cdaf62f18c4cec14.
+C5a pure cwd bytecode PASS18/full1,575(one expected skip), no native C5 evidence.
+Current cycle11 required gates: previous9 + C5b focused44 PASS(0.083s) and
+full1,584 OK/one expected skip(29.402s). Mandatory full fence finished after
+focus crossed10; scoped cadence backup now due before native execution.
+No optional/filler/duplicate run and no falsely completed pending verification.
 
-## Current slice / next dependencies
+## C5 approved scope / current implementation
 
-Completed C3b supplied immutable inventory: logical destinations, roles, matching declared
-ELF/search hashes, deterministic declaration fingerprint, bounded count/bytes
-and collision rejection. No acquisition, copy, alias resolution, loader, model,
-unit or public runtime wiring. C3b focused9/full1,531 PASS(one expected skip). C3c PASS:8 focused(0.003s),2 composed POSIX fixture(0.001s),
-full1,541 OK/one expected skip(26.094s).
-Astra supports option3 (unchanged binaries) conditionally on exact immutable
-image, loader/env/cache/alias/default-path/dlopen and process-lifetime cwd proof.
-Installed mixed RUNPATH stays denied. C3c binds explicit logical aliases/dependency edges; actual sealing/loading requires separate reviewed
-implementation and authorized native positive/negative loader gates.
-Full D1 consent/admission, OS egress and production allowlist remain unconnected.
+Roger approved2026-11-17: prepare/test/review then one temporary C5 unit with same
+1 CPU/256MiB/no swap/16 tasks/10s+2s grace and complete cleanup. Native UNUSED.
+No actual installed plugin/model/GPU/Windows/private data, host network,
+compiler/download/install or shared-service/config changes. No automatic retry.
+Shared loader helper uses explicit --cwd-prerequisite and fresh c5 identity.
+Before guard/fork, verify exact ABI, one thread and unshare(CLONE_FS); sealed
+root/old-root detach and handle/cap cleanup from C4 preserved. Base guard/root
+checks precede switching to empty immutable /cwd and installing cwd guard.
+Valid-directory probes in init/child require EPERM and unchanged cwd identity.
+Post-exec fixed mixed-path ELF fstats internal inherited fd3 as directory,
+requires chdir/fchdir -EPERM and exact /cwd, then returns intended symbol42.
+Negative missing library must exit127 rather than decoy13. No public runtime
+caller; unknown syscalls still allow, not production policy or private admission.
+C4 main/library/decoy byte hashes preserved by fake assertions. No real C4 rerun.
 
-## Operator / resource / lifecycle gates
+## Operator / lifecycle / quota
 
-Preserve user.smokes.md; no new manual action for this inert slice.
-Roger's severe Fortnite slowdown report remains FAILED manual coexistence
-acceptance with unmeasured cause; manual frame-time recheck pending. Synthetic
-R0 limits do not cover full regression/sync/WSL lifecycle overhead.
-No GPU, download, private input, Windows data, service/config or install changes.
-Old failed synthetic root fixtures remain untouched.
-Scoped retry of prior WSL E_ACCESSDENIED succeeded via execution approval with
-no repair. Distro available; do not start/stop it as routine preparation.
-Past exact-distro shutdown instruction stands at quota-end after verification/
-sync/handoff, now25% five-hour remaining per Roger. Touch no other distro.
-Stop earlier at existing copy/security/error/material-choice gates; no bypass.
-Sol High current implementation model; Astra only for unresolved design ambiguity.
+Keep user.smokes.md. Prior Fortnite slowdown remains failed manual coexistence
+acceptance with unknown cause; frame-time recheck pending. Functional synthetic
+results are not gaming acceptance. Old failed root fixtures untouched.
+Murr apartment remains first tangible goal, not gated on worker completion.
+At25% five-hour remaining finish verify/sync/handoff and terminate only
+StarFur-Forge as requested. No other distro/service changes. Stop earlier on
+copy/security/uncertain-effect/design/model gates; Sol High currently sufficient.
 
 ## Copy / test / commit / push
 
-Pending copy queue in session.files.md. Exact11-path C3c preflight matched target
-hashes/new-file absence. Source/test initial copy verified; C3c source/test/completion records hash verified; final closure synchronized.
-Commit/push now due at10/10; no unrelated files. Commit/push exact
-accumulated verified scope at10; duplicate or optional runs do not inflate count.
-Clear copy queue is not backup. Carry all sub-ten unbacked scope forward.
+Exact14 queued targets copied/hash verified before focused/full PASS. Completion
+records now queued; scope in session.files.md. Commit/push completed
+verified scope after cadence crossing, before one authorized native C5 attempt.
+No native attempt made or extra unit created. Preserve all sub-ten/unbacked scope.
 
 ## Exact accumulated commit allowlist
 
@@ -67,14 +70,14 @@ Clear copy queue is not backup. Carry all sub-ten unbacked scope forward.
 - 2026-11-01.annotation-worker-design.sprint.md
 - docs/private_annotation_verification.plan.md
 - user.smokes.md
-- starfur.context.md
 - pipeline/document_job_worker_elf_file.py
-- tests/test_document_job_worker_elf_file.py
-- pipeline/document_job_worker_elf.py
 - pipeline/document_job_worker_elf_search.py
-- tests/test_document_job_worker_elf_search.py
-- pipeline/document_job_worker_image.py
-- tests/test_document_job_worker_image.py
-- pipeline/document_job_worker_dependencies.py
-- tests/test_document_job_worker_dependencies.py
-- tests/test_document_job_worker_image_flow.py
+- tests/test_document_job_worker_elf_review_file.py
+- pipeline/document_job_worker_elf.py
+- tests/test_document_job_worker_elf.py
+- scripts/private_worker_loader_fixture.py
+- tests/test_private_worker_loader_fixture.py
+- scripts/private_worker_loader_smoke.py
+- tests/test_private_worker_loader_smoke.py
+- scripts/private_worker_cwd_policy.py
+- tests/test_private_worker_cwd_policy.py

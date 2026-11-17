@@ -1381,10 +1381,51 @@ Retention/deadline corrections, advisory metadata bounds and the disposable CLI 
 
 ### COMPLETED W1 / WSL-VERIFIED — private-worker wire foundation (2026-11-05)
 
+**C5b HELPER COMPLETED / WSL VERIFIED (2026-11-17):** Fresh one-unit synthetic gate
+adds explicit c5 identity/opt-in mode, FS unshare before guard/fork, immutable
+empty cwd and valid-directory checks across parent/fork/exec; fixed mixed-path
+canary only. Focused44/full1,584 PASS(one expected skip); native attempt unused.
+No actual CPU-plugin/image/private-worker admission or C1/C2 acceptance change.
+
+**C5a COMPLETED / WSL VERIFIED (2026-11-16):** Inert synthetic cwd-guard bytecode addresses
+the explicit lifetime-cwd dependency before mixed RUNPATH consideration. Only
+chdir/fchdir branch composition; no installer, OS enforcement, FS-sharing proof
+or production policy.18 focused/full1,575 PASS(one expected skip), counter9/10;
+Native C5 was unapproved at C5a; fresh C5b approval is recorded above.
+No optional test or duplicate gate to fill cadence.
+No product/apartment priority or full private-worker status changed.
+
+**C4 COMPLETED / NATIVE WSL PASS (2026-11-16):** Single approved unit exit0:
+intended42/missing127 despite decoy13, exact bindings/limits, sealed root and
+private registry/socket guard, captured exits and unit/cgroup/fixture cleanup.
+Parent controls/registry unchanged. No model/GPU/private/Windows input or shared
+service changes. Approval consumed; counter7/10, unbacked after cb7883d.
+This is exact-fixture loader evidence, not mixed RUNPATH, full image/dlopen/CPU
+or private admission. Next: process-lifetime cwd restriction groundwork; any
+further native unit requires separate approval.
+
+**C4b helper COMPLETED / WSL VERIFIED; NATIVE PASSED ABOVE (2026-11-16):** One approved opt-in synthetic loader
+unit with bound kernel limits, sealed root, private registry/socket guard and
+captured processes before release.17 fake/full1,567 PASS(one expected skip),
+historical counter6/10. Exact source/argument review completed; native passed above.
+No real inference or private admission.
+
+**C4 scoped canary APPROVED; C4a fixtures COMPLETED / WSL VERIFIED (2026-11-16):** Fixed
+inert dynamic-loader fixtures and narrow GNU ABI0 metadata compatibility only.
+21 focused/full1,557 PASS(one expected skip), counter4/10. Helper/native not run. One
+approved bounded synthetic unit is not actual CPU worker/private deployment.
+
+**C3d COMPLETED / WSL VERIFIED (2026-11-16):** Explicit exact-file review returns bound
+file/search metadata under C2 acquisition checks, not loading/image eligibility.
+Strict inspect refusal unchanged; no installed-file/image/native execution.
+44 focused/full1,549 PASS(one expected skip), new cycle2/10. Actual image construction/loading
+still requires concrete policy review and separately scoped authorization.
+
 **C3c COMPLETED / WSL VERIFIED (2026-11-16):** Pure explicit alias/DT_NEEDED assignments,
 exact interpreter target and declared reachability over C3b inventory. No real
 loader/SONAME/dlopen verification.8 focused,2 composed POSIX fixture and full
-1,541 PASS(one expected skip); counter10/10, scoped backup due. No image/execution.
+1,541 PASS(one expected skip); ten-gate19-path backup verified cb7883d.
+No image/execution. New cycle starts0/10; no recursive receipt commit.
 
 **C3b COMPLETED / WSL VERIFIED (2026-11-16):** Pure proposed-image inventory binds bounded
 logical file targets, roles and matching declared ELF/search hashes. Stable

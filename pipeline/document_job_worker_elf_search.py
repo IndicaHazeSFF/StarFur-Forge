@@ -39,10 +39,15 @@ def review_worker_elf_search(raw: bytes) -> WorkerElfSearchReview:
     """
     try:
         metadata, search = _inspect_metadata(raw, review_search=True)
-        tags = tuple(name for tag, name in ((15, "rpath"), (29, "runpath")) if tag in search)
-        category = ("no_search_tag" if not search else "exact_origin"
-                    if len(search) == 1 and next(iter(search.values())) == "$ORIGIN"
-                    else "mixed_or_unsupported")
-        return WorkerElfSearchReview(metadata.raw_sha256, category, tags)
+        return _make_review(metadata, search)
     except WorkerElfError:
         raise WorkerElfError("worker ELF search review is unavailable") from None
+
+
+def _make_review(metadata, search):
+    """Trusted parser composition only; never an acceptance producer."""
+    tags = tuple(name for tag, name in ((15, "rpath"), (29, "runpath")) if tag in search)
+    category = ("no_search_tag" if not search else "exact_origin"
+                if len(search) == 1 and next(iter(search.values())) == "$ORIGIN"
+                else "mixed_or_unsupported")
+    return WorkerElfSearchReview(metadata.raw_sha256, category, tags)

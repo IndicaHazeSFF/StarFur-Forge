@@ -1,5 +1,36 @@
 # Temporary operator smoke handoff
 
+C5b HELPER COMPLETED2026-11-17; focused44/full1,584 PASS(one expected skip).
+Native single attempt unused. No manual action now; backup/source review next.
+No model/GPU/Windows/
+private input, host network, installs or shared services. Prior manual gaming
+failure/recheck remains separate from synthetic functional evidence.
+
+C5a inert cwd restriction PASS:18 focused/full1,575(one expected skip).
+At that C5a checkpoint: no installer or native attempt. C4 approval consumed;
+fresh bounded C5b scope is now approved above, not a manual pasted smoke.
+
+C4 NATIVE WSL PASS on one approved attempt: intended42/missing127 despite
+decoy13, bindings/limits and complete process/unit/cgroup/fixture cleanup,
+unchanged parent state. Approval consumed. No manual rerun/model/GPU test;
+not full image/mixed RUNPATH/CPU/security or gaming-performance acceptance.
+
+C4b final helper/fakes PASS17 and full1,567(one expected skip); source/argv reviewed,
+coupled hashes checked before
+the one approved native attempt, now passed above. No manual action now; no model/GPU/private/Windows
+data. Functional loader pass cannot close gaming-performance acceptance.
+
+C4 scope APPROVED2026-11-16 while Roger away/not gaming. Native single attempt
+was unused at preparation, subsequently passed above. C4a fixed inert ELF generators PASS21 focused/full1,557(one expected
+skip); no manual action or native
+unit now. Preserve prior gaming failure/recheck separately from functional tests.
+
+C3d exact-file review PASS:44 focused/full1,549(one expected skip). No
+operator test now. Native image/loader canary scope requires separate approval;
+no new model, unit, installed artifact or GPU operation is authorized.
+Next operator action is scope approval for proposed synthetic C4, not a pasted
+manual smoke command. Existing foreground-performance recheck remains pending.
+
 C3c declared assignment PASS:8 focused,2 temporary-file composition and full
 1,541(one expected skip). No manual operator
 test, image or real loader/model. Gaming recheck remains separate/pending.

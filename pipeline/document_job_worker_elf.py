@@ -10,7 +10,7 @@ from hashlib import sha256
 import re
 import struct
 
-POLICY = "worker-elf64-x86-dependencies-v1"
+POLICY = "worker-elf64-x86-dependencies-v2"
 MAX_ELF_BYTES = 64 * 1024 * 1024
 MAX_PROGRAM_HEADERS = 128
 MAX_DYNAMIC_ENTRIES = 256
@@ -73,7 +73,8 @@ def _inspect_metadata(raw, *, review_search=False):
 
         header = struct.unpack("<16sHHIQQQIHHHHHH", region(0, 64))
         ident, kind, machine, version, _, phoff, _, flags, ehsize, phsize, phnum, *_ = header
-        if (ident != b"\x7fELF\x02\x01\x01" + b"\0" * 9 or kind not in (2, 3) or
+        if (ident[:7] != b"\x7fELF\x02\x01\x01" or ident[7] not in (0, 3) or
+                ident[8:] != b"\0" * 8 or kind not in (2, 3) or
                 machine != 62 or version != 1 or flags != 0 or ehsize != 64 or
                 phsize != 56 or not 1 <= phnum <= MAX_PROGRAM_HEADERS or phoff < 64):
             raise ValueError

@@ -46,6 +46,42 @@
 
 ## Private annotation worker direction
 
+- Roger approved C5 on2026-11-17: prepare/test/review cwd-lock/mixed-path
+  canary then one temporary c5 unit under C4's same1 CPU/256MiB/no swap/16 tasks/
+  10s+2s grace and cleanup limits. Fixed synthetic ELFs/exact measured Linux
+  loader only; no model/GPU/Windows/private data/host network/install/service
+  change. Native attempt unused until explicitly run; no automatic retry.
+  Shared helper requires explicit --cwd-prerequisite for c5. No permission to
+  repeat C4 or run actual installed CPU libraries or private processing.
+- C4 native PASS2026-11-16 consumed its one-unit approval; no repeat/new unit
+  may be inferred from it. Fresh C5 scope is recorded above, never inferred.
+- scripts/private_worker_cwd_policy.py owns inert synthetic cBPF composition
+  adding chdir/fchdir denial only. Explicit one-thread/no-new-privs C5 installer
+  and fixed ABI preflight are opt-in, not a Core/runtime entry point. Unknown syscalls
+  still allow; tuples prove neither kernel enforcement, initial immutable cwd,
+  absence of outside FS sharing, nor production isolation/loader eligibility.
+- scripts/private_worker_loader_smoke.py is the explicit C4/C5 one-unit synthetic
+  helper, never discovery/startup. Fixed loader source, generated fixtures and
+  existing R0/root helper primitives only; observe exact process/cgroup/pidfd
+  bindings and sealed root/private registry/socket guards before canaries.
+  Native success requires intended42/missing127 despite decoy13 plus complete
+  process/unit/cgroup/fixture cleanup and unchanged parent state. A pass is not
+  production loader/dlopen/CPU or private-dispatch evidence; no native retry.
+  C5 uses a fresh unit identity, CLONE_FS unshare before guard/fork, immutable
+  empty cwd and valid-directory probes through fork/exec. Internal sealed-root
+  decoy fd3 is the sole fd retained by the C5 exec canary, never a host handle.
+- Roger approved C4 on2026-11-16: prepare/review an opt-in synthetic loader
+  helper/fakes, then exactly one temporary user unit capped1 CPU/256MiB/no swap/
+  16 tasks/10s+2s grace, existing controllers only. Disposable fixed ELF fixtures
+  and one exact measured Linux interpreter in a sealed root; positive and
+  missing/decoy negative tests only. No Ollama/GPU/private or Windows data,
+  host network, compiler/download/install or service/config changes. Verify
+  invocation/process/cgroup binding and complete cleanup. Single native attempt,
+  no retry by inference. This exception is not real-worker/image deployment.
+- scripts/private_worker_loader_fixture.py emits only fixed inert x86-64 ELF
+  bytes for that explicit canary. Import/tests never write or execute them.
+  Worker ELF metadata policyv2 supports only System-V/GNU OSABI0/3 with ABI
+  version0; other class/machine/version and search-tag denials remain unchanged.
 - document_job_worker_dependencies.py owns pure explicit logical alias/needed
   assignments over a supplied inventory. Complete declared coverage/reachability
   is not actual SONAME validation, loader search order, dlopen closure, CPU
@@ -64,6 +100,11 @@
   stays unchanged pending targeted image/search/alias security review; empty,
   build-directory and other unproved paths receive no implicit exemption.
 - document_job_worker_elf_file.py owns explicit read-only acquisition of one
+  basename; strict inspect still denies all search tags, while explicit review
+  returns same-acquired-byte file/search observations only. Review is not an
+  acceptance adapter, permission or image evidence; no raw search path returned.
+  Both paths share final identity/deadline and owned-handle cleanup checks.
+  It otherwise owns one
   regular/no-link ELF basename via a caller-trusted POSIX directory fd. Owner,
   mode/device, byte/time acceptance and pre/post entry/handle identity checks
   bind metadata to the observed file; no raw bytes, discovery, copy, loader,
