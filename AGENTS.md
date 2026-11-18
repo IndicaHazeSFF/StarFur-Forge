@@ -46,6 +46,19 @@
 
 ## Private annotation worker direction
 
+- Roger conditionally approved C8 synthetic helper preparation then ONE native
+  attempt2026-11-18 if preparation/tests/security review pass. Same1 CPU/256MiB/
+  no swap/16 tasks/10s+2s grace, existing controllers only. Fixed generated ELF
+  bytes and exact measured loader only, no installed worker/model/GPU/network/
+  Windows/private data/service changes. Explicit --lookup-prerequisite, new c8
+  identity; intended42/decoy13/direct-missing127/transitive-missing127 and full
+  cleanup required. No native retry; failures retain fixture and stop. Approval
+  UNUSED; preparation passed but loader-digest preflight drift BLOCKS execution.
+  No repinning/retry by inference, not a C4/C5 repeat or GitHub push grant.
+- scripts/private_worker_lookup_fixture.py generates only fixed synthetic
+  no-search main/intermediate/leaf bytes. No supplied/installed transformation,
+  file write, compiler or execution. Shared loader helper C8 mode executes only
+  this reviewed fixture set after exact binding checks; no runtime wiring.
 - document_job_worker_lookup_requirements.py owns pure declared provider-path/
   SONAME requirements tied to a recomputed inert profile. Resident interpreter
   reuse and private-library-path labels are requirements, not observed lookup

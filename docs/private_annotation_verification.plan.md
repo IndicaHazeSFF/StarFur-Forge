@@ -1,5 +1,39 @@
 # Private annotation deployment verification — review draft
 
+## C8e helper COMPLETED / NATIVE BLOCKED2026-11-18
+
+Focused38 PASS(0.049s), full1,649 OK/one expected skip(26.036s), counter10/10.
+Initial fake selector test expected wrong exception type, corrected to ValueError
+and rerun without gate inflation. C4/C5 fixture compatibility preserved.
+Exact8 coupled Windows/WSL source hashes verified. Read-only preflight acquired
+the fixed Linux loader but its SHA256 no longer equals the reviewed bda779...
+cec14 pin: assertion STOP before any fixture/unit/native command. Actual new
+digest was not logged, so do not invent it. No cause established and no package/
+service/config query/change performed. Native approval UNUSED but BLOCKED:
+needs read-only current-artifact review and fresh expected-pin acceptance before
+execution. Never repin to make a check pass, retry or infer artifact equivalence.
+Preparation checkpoint may be locally committed; GitHub push remains held.
+
+Roger approved preparation and, only after successful fake/full/security review,
+exactly ONE native attempt. Shared loader helper adds explicit
+--lookup-prerequisite and distinct starfur-c8 identity; no C4/C5 rerun.
+Fixed generated 8KiB main retains C5 post-exec cwd/fd probes but no search tag;
+fixed intermediate libfixture.so needs libfixture-leaf.so with no search tags.
+Four sealed-root directories: positive has intended42+leaf7; decoy has decoy13+
+leaf7; negative has main only; transitive has main+intended but missing leaf.
+Fixed direct loader --inhibit-cache --library-path /<case> --glibc-hwcaps-mask
+EMPTY_STRING /<case>/main; no shell/options from caller/model. Expected42/13/
+127/127. Six pidfds cover unshare/init/four paused-before-exec canaries.
+Existing rootless root/binfmt/socket/cwd guards, FS unshare, fd3 internal decoy,
+unit epoch/cgroup/process binding, parent-state checks and exact cleanup remain.
+One transient user unit1 CPU/256MiB/no swap/16 tasks/10s+2s grace, existing
+controllers only. Exact measured Linux loader bda779ea9e9ad234f60315477d7cfd0bdde861cd8ddd9df8cdaf62f18c4cec14.
+No installed vendor/CPU worker, model/GPU, private/Windows data, network workload,
+compiler/download/install, config/service or GitHub action. Fixture-only scope
+does not prove resident-interpreter SONAME reuse, real CPU compatibility, runtime
+dlopen/code closure or descendant-exec enforcement. Native failure retains
+fixture, verifies owned cleanup and STOPS, no automatic retry. Native UNUSED.
+
 ## C8d declared lookup requirements — COMPLETED / WSL VERIFIED2026-11-18
 
 Recompute exact C8c profile from supplied inventory/forms, then require exact

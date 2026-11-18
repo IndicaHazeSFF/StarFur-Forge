@@ -2,7 +2,8 @@
 
 ## Pending files
 
-None. C8c/C8d exact source/test/completion copies/hash verified. Latest focused26/
-full1,645 PASS(one expected skip), counter8/10.16 accumulated paths unbacked
-after4e8f48d. User-requested clean local commit due; GitHub push held. Stop at
-precise next native/image scope gate, not quota exhaustion. No new unit started.
+None. C8e prep source/test/completion copies verified; focused38/full1,649
+PASS(one expected skip), counter10/10, no remote-backup rotation. Native NOT
+issued: exact-loader-digest preflight drift. Approval unused but BLOCKED; no
+repin/retry. Local tested checkpoint due; GitHub push held. All20 accumulated
+paths remain remote-unbacked. No unit/fixture/native process created.

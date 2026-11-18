@@ -1381,6 +1381,15 @@ Retention/deadline corrections, advisory metadata bounds and the disposable CLI 
 
 ### COMPLETED W1 / WSL-VERIFIED — private-worker wire foundation (2026-11-05)
 
+**C8e HELPER COMPLETED / NATIVE BLOCKED (2026-11-18):** Fixed synthetic
+main/intermediate/leaf and explicit c8 direct-loader helper; same inherited
+guards/caps/bindings/cleanup, four fixed outcomes. Focused38/full1,649 PASS
+(one expected skip), counter10/10. Coupled8 source hashes passed, but measured
+loader differs from reviewed digest: STOP before fixture/unit/native attempt.
+Native UNUSED; read-only artifact review/new pin approval needed, no retry or
+automatic repin. No actual worker/image/
+private authority or C1/C2/C7a widening; initial-loader fixture only.
+
 **C8d COMPLETED / WSL VERIFIED (2026-11-18):** Separate pure lookup-requirement checker
 binds declared provider roles/paths/SONAMEs to a recomputed C8c profile. Resident
 interpreter and regular aliases are distinct. No actual loader behavior or

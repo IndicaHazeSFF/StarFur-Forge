@@ -1,3 +1,17 @@
+## 2026-11-18 - Prepare conditional synthetic direct-loader verification
+
+- C8e HELPER COMPLETED / WSL VERIFIED: fixed generated no-search main/transitive library/leaf and
+  opt-in c8 helper mode, fixed direct-loader arguments, four positive/decoy/
+  missing outcomes, inherited cwd/root/syscall guards and six pinned processes.
+- Focused38 PASS(0.049s), full1,649 OK/one expected skip(26.036s), counter10/10.
+  Initial test expected TypeError rather than ValueError; corrected and same
+  gate rerun, no count inflation. Coupled8 source hashes passed preflight, but
+  measured loader digest differs from reviewed pin: STOP before unit/fixture
+  creation. Native UNUSED; actual new digest not logged by failed assertion.
+  No automatic repin/retry. Local checkpoint due; GitHub push held.
+  No vendor/model/private/Windows
+  or service/GitHub effects. Prior C4/C5 grants remain consumed; no retry.
+
 ## 2026-11-18 - Bind declared lookup requirements to an inert profile
 
 - C8d COMPLETED / WSL VERIFIED: separate pure provider/SONAME/path requirements against a

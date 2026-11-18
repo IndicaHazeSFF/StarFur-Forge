@@ -1,5 +1,11 @@
 # Temporary operator smoke handoff
 
+C8e helper/fake/full PASS38/full1,649(one expected skip). Native BLOCKED:
+exact-loader-digest preflight drift; no unit/fixture/attempt issued. Approval
+UNUSED but requires current artifact review and accepted pin before execution.
+No automatic repin/retry or manual smoke now. No real vendor/
+model/GPU/private/Windows data or GitHub push. Stop on native failure, no retry.
+
 C8c inert profile COMPLETED: focused22/full1,640 PASS(one expected skip).
 C8d declared lookup requirements COMPLETED: focused26/full1,645 PASS(one expected
 skip). No manual/

@@ -1,4 +1,4 @@
-"""C4/C5 explicit single-unit synthetic prerequisites, NOT worker deployment.
+"""C4/C5/C8 explicit single-unit synthetic prerequisites, NOT worker deployment.
 
 No discovery/startup call. Fixed fixtures + one measured Linux interpreter only.
 One bounded transient user unit; no installs/config/shared-service/model changes.
@@ -36,6 +36,7 @@ resource = _load("c4_resource", HERE / "private_worker_resource_smoke.py")
 root_test = _load("c4_root", HERE / "private_worker_root_smoke.py")
 fixture_bytes = _load("c4_fixture", HERE / "private_worker_loader_fixture.py")
 cwd_policy = _load("c5_cwd", HERE / "private_worker_cwd_policy.py")
+lookup_fixtures = _load("c8_lookup", HERE / "private_worker_lookup_fixture.py")
 elf = _load("c4_elf", HERE.parent / "pipeline/document_job_worker_elf.py")
 Refusal = resource.Refusal
 need = resource.need
@@ -51,7 +52,7 @@ def failure_label(error):
 
 
 def names(unit, directory):
-    need(type(unit) is str and re.fullmatch(r"starfur-c[45]-[0-9a-f]{32}\.service", unit), "unit_refused")
+    need(type(unit) is str and re.fullmatch(r"starfur-c[458]-[0-9a-f]{32}\.service", unit), "unit_refused")
     token = unit[len("starfur-c4-"):-len(".service")]
     need(type(directory) is str and re.fullmatch(r"/tmp/sf-worker-loader-" + token + r"-[a-z0-9_]{8}", directory), "fixture_refused")
     return token
@@ -71,6 +72,22 @@ def unit_command(unit, directory, python, script):
 def identity(s):
     return (s.st_dev, s.st_ino, s.st_mode, s.st_uid, s.st_nlink,
             s.st_size, s.st_mtime_ns, s.st_ctime_ns)
+
+
+def cases(lookup=False):
+    need(type(lookup) is bool, "mode_refused")
+    return (("positive", 42), ("decoy", 13), ("negative", 127), ("transitive", 127)) if lookup else (("positive", 42), ("negative", 127))
+
+
+def canary_command(label, lookup):
+    need(label in dict(cases(lookup)), "case_refused")
+    path = "/" + label + "/main"
+    return (("/lib64/ld-linux-x86-64.so.2", "--inhibit-cache", "--library-path", "/" + label,
+             "--glibc-hwcaps-mask", "", path) if lookup else (path,))
+
+
+def success_record(digest, lookup):
+    return dict(ok=True, **dict(cases(lookup)), pinned=6 if lookup else 4, loader_hash=digest)
 
 
 def acquire_loader():
@@ -188,7 +205,8 @@ def stage(cfg, fd):
         control.settimeout(4)
         control.sendall(b"boot"); need(control.recv(32) == b"go", "stage_release_refused")
         names(cfg["unit"], cfg["root"])
-        cwd = cfg["unit"].startswith("starfur-c5-")
+        lookup = cfg["unit"].startswith("starfur-c8-")
+        cwd = lookup or cfg["unit"].startswith("starfur-c5-")
         need(os.getpid() == 1 and all(root_test.namespaces()[n] != cfg["outside"][n] for n in root_test.NS), "namespace_unverified")
         need(Path("/proc/self/uid_map").read_text().split() == ["0", str(cfg["uid"]), "1"], "uid_map_refused")
         directory = Path(cfg["root"])
@@ -207,17 +225,25 @@ def stage(cfg, fd):
         if cwd: cwd_policy.verify_abi()
         phase = "root"
         root_test.checked(lib.mount(b"tmpfs", os.fsencode(new), b"tmpfs", 6, b"size=4m,mode=0700"), "tmpfs_refused")
-        for name in ("proc", "formats", "old-root", "lib64", "positive", "negative", "decoy", "cwd"):
+        for name in ("proc", "formats", "old-root", "lib64", "positive", "negative", "decoy", "cwd", "transitive"):
             (new / name).mkdir(mode=0o700)
         (new / "marker").write_bytes(root_test.MARKER)
         root_test.checked(lib.mount(b"proc", os.fsencode(new / "proc"), b"proc", 14, None), "proc_refused")
         root_test.checked(lib.mount(b"binfmt_misc", os.fsencode(new / "formats"), b"binfmt_misc", 15, None), "registry_refused")
         root_test.require_empty_registry(new / "formats", cfg["registry_device"])
         write_new(new / "lib64/ld-linux-x86-64.so.2", loader, 0o500)
-        for name in ("positive", "negative"):
-            write_new(new / name / "main", fixture_bytes.cwd_canary_bytes() if cwd else fixture_bytes.canary_bytes(), 0o500)
-        write_new(new / "positive/libfixture.so", fixture_bytes.library_bytes(), 0o400)
-        write_new(new / "decoy/libfixture.so", fixture_bytes.library_bytes(decoy=True), 0o400)
+        if lookup:
+            for name, _ in cases(True):
+                write_new(new / name / "main", lookup_fixtures.main_bytes(), 0o500)
+            for name in ("positive", "decoy", "transitive"):
+                write_new(new / name / "libfixture.so", lookup_fixtures.library_bytes(decoy=name == "decoy"), 0o400)
+            for name in ("positive", "decoy"):
+                write_new(new / name / "libfixture-leaf.so", lookup_fixtures.leaf_bytes(), 0o400)
+        else:
+            for name in ("positive", "negative"):
+                write_new(new / name / "main", fixture_bytes.cwd_canary_bytes() if cwd else fixture_bytes.canary_bytes(), 0o500)
+            write_new(new / "positive/libfixture.so", fixture_bytes.library_bytes(), 0o400)
+            write_new(new / "decoy/libfixture.so", fixture_bytes.library_bytes(decoy=True), 0o400)
         need(sha256((new / "lib64/ld-linux-x86-64.so.2").read_bytes()).hexdigest() == cfg["loader_hash"], "image_loader_changed")
         new_id = root_test.identity(new.stat())
         root_test.checked(lib.syscall(ctypes.c_long(155), ctypes.c_char_p(os.fsencode(new)),
@@ -235,7 +261,7 @@ def stage(cfg, fd):
         root_test.probe(probe_cfg, new_id, {fd}); root_test.probe_syscall_guard(lib)
         if cwd:
             os.chdir("/cwd"); cwd_policy.install(lib); probe_cwd_locked()
-        for label, expected in (("positive", 42), ("negative", 127)):
+        for label, expected in cases(lookup):
             phase = label
             read_fd, write_fd = os.pipe()
             child = os.fork()
@@ -249,8 +275,8 @@ def stage(cfg, fd):
                         probe_cwd_locked(); keep_private_decoy_fd()
                     else:
                         os.chdir("/decoy"); root_test.close_except(set())
-                    path = "/positive/main" if label == "positive" else "/negative/main"
-                    os.execve(path, (path,), {"LANG": "C"})
+                    argv = canary_command(label, lookup)
+                    os.execve(argv[0], argv, {"LANG": "C"})
                 finally:
                     os._exit(111)
             os.close(read_fd)
@@ -290,13 +316,15 @@ def supervise(cfg):
             root_test.receive_phase(parent, b"boot")
             init, handle = pinned_child(process.pid, cfg, argv); handles.append(handle)
             parent.sendall(b"go")
-            for label in (b"positive", b"negative"):
+            lookup = cfg["unit"].startswith("starfur-c8-")
+            for text, _ in cases(lookup):
+                label = text.encode("ascii")
                 root_test.receive_phase(parent, label)
                 _, handle = pinned_child(init, cfg, argv); handles.append(handle)
                 parent.sendall(b"go-" + label)
             root_test.receive_phase(parent, b"passed"); parent.sendall(b"finish")
             need(process.wait(timeout=2) == 0, "stage_exit_refused")
-            need(len(handles) == 4 and all(select.select([h], [], [], 1)[0] for h in handles), "descendant_exit_unverified")
+            need(len(handles) == (6 if lookup else 4) and all(select.select([h], [], [], 1)[0] for h in handles), "descendant_exit_unverified")
         finally:
             try:
                 if process.poll() is None:
@@ -325,23 +353,22 @@ def worker(unit, directory):
     try:
         supervise(cfg)
         need(root_test.registry_snapshot() == registry, "parent_registry_changed")
-        resource.publish(root, "child", dict(ok=True, positive=42, negative=127, pinned=4,
-                                             loader_hash=go["loader_hash"]))
+        resource.publish(root, "child", success_record(go["loader_hash"], unit.startswith("starfur-c8-")))
     except BaseException as error:
         resource.publish(root, "child", dict(ok=False, failure=failure_label(error)))
         raise
     while True: signal.pause()
 
 
-def main(expected_digest, *, cwd=False):
-    need(type(cwd) is bool, "mode_refused")
+def main(expected_digest, *, cwd=False, lookup=False):
+    need(type(cwd) is bool and type(lookup) is bool and not (cwd and lookup), "mode_refused")
     need(type(expected_digest) is str and re.fullmatch(r"[0-9a-f]{64}", expected_digest), "expected_loader_digest_refused")
     need(sys.platform == "linux" and os.getuid() == 1000 and os.uname().machine == "x86_64"
          and hasattr(signal, "pidfd_send_signal"), "supported_host_required")
     uid = os.getuid(); snapshot = resource.parent_snapshot(uid); registry = root_test.registry_snapshot()
     raw, digest = acquire_loader()
     need(digest == expected_digest, "reviewed_loader_changed")
-    token = uuid.uuid4().hex; unit = ("starfur-c5-" if cwd else "starfur-c4-") + token + ".service"
+    token = uuid.uuid4().hex; unit = ("starfur-c8-" if lookup else "starfur-c5-" if cwd else "starfur-c4-") + token + ".service"
     need(resource.unit_info(unit, uid).get("LoadState") == "not-found", "unit_exists")
     root = Path(tempfile.mkdtemp(prefix="sf-worker-loader-" + token + "-", dir="/tmp"))
     binding = None; handle = None; group = resource.parent_group(uid) / unit
@@ -366,7 +393,7 @@ def main(expected_digest, *, cwd=False):
         if (type(result) is dict and set(result) == {"ok", "failure"} and result["ok"] is False
                 and type(result["failure"]) is str and re.fullmatch(r"[A-Za-z0-9_:]{1,192}", result["failure"])):
             raise Refusal(result["failure"])
-        need(result == dict(ok=True, positive=42, negative=127, pinned=4, loader_hash=digest), "loader_gate_failed")
+        need(result == success_record(digest, lookup), "loader_gate_failed")
         need(resource.unit_info(unit, uid).get("InvocationID") == binding, "cleanup_epoch_changed")
         need(resource.command(("/usr/bin/systemctl", "--user", "--no-ask-password", "stop", "--", unit),
                               uid, capture=False, timeout=4).returncode == 0, "unit_stop_refused")
@@ -398,7 +425,7 @@ def main(expected_digest, *, cwd=False):
         raise
     finally:
         if handle is not None: os.close(handle)
-    print("PASS " + ("C5 cwd parent/fork/exec denied, mixed intended42/missing127" if cwd else "C4 intended42/missing127") +
+    print("PASS " + ("C8 direct loader intended42/decoy13/missing127/transitive-missing127" if lookup else "C5 cwd parent/fork/exec denied, mixed intended42/missing127" if cwd else "C4 intended42/missing127") +
           " with decoy13, exact bindings/limits and complete cleanup")
     print("Synthetic loader prerequisite only; not real-worker/dlopen/CPU/security readiness")
 
@@ -411,9 +438,10 @@ if __name__ == "__main__":
             stage(json.loads(sys.argv[2]), int(sys.argv[3]))
         else:
             need(len(sys.argv) in (3, 4) and sys.argv[1] == "--expect-loader" and
-                 (len(sys.argv) == 3 or sys.argv[3] == "--cwd-prerequisite"), "arguments_refused")
+                 (len(sys.argv) == 3 or sys.argv[3] in ("--cwd-prerequisite", "--lookup-prerequisite")), "arguments_refused")
             signal.signal(signal.SIGTERM, resource.interrupt)
-            main(sys.argv[2], cwd=len(sys.argv) == 4)
+            main(sys.argv[2], cwd=len(sys.argv) == 4 and sys.argv[3] == "--cwd-prerequisite",
+                 lookup=len(sys.argv) == 4 and sys.argv[3] == "--lookup-prerequisite")
     except BaseException as error:
         label = failure_label(error)
         print("STOP loader prerequisite: " + label, file=sys.stderr); sys.exit(1)

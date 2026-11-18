@@ -1,9 +1,18 @@
 # Rotating development handoff
 
-Updated2026-11-18: C8d COMPLETED; clean local commit due, native/image scope gate.
+Updated2026-11-18: C8e helper verified; native BLOCKED by loader-digest drift.
 Latest quota cutoff10% five-hour remaining supersedes earlier5% cutoff.
 
 ## Last verified backup
+
+Latest LOCAL WSL commit d6e1bdbd89074a6f36c0b04b734d8c01cc513d29
+Subject: Keep Murr's loader plans on a short leash.
+Exact16 source/target/recorded hashes, whitespace, prior HEAD/main/empty index,
+exact staged set and remote URL verified. Commit succeeded; index empty.
+NOT PUSHED: GitHub mutations remain held. All16 commit paths below remain
+unbacked remotely. Do NOT rotate handoff/counter or claim GitHub backup.
+Post-commit receipt edits to next.steps/session.files/sprint are local uncommitted
+records, synchronized to WSL; no recursive receipt commit. Counter stays8/10.
 
 WSL/GitHub main 4e8f48d69990df7200d8a4be7117d2d48150007f
 Subject: Check Murr's library paws before opening the den.
@@ -31,11 +40,25 @@ No actual plugin/model/GPU/Windows/private input, host network or service change
 
 ## Next dependency / authority
 
+C8e focused38 PASS(0.049s), full1,649 OK/one expected skip(26.036s).
+Counter10/10; initial wrong test exception expectation corrected, same gate.
+Exact8 coupled source hashes passed, but read-only loader preflight failed
+expected SHA256 equality to bda779...cec14. No actual new digest logged, no
+cause established, no unit/fixture/native command issued. Approval UNUSED,
+execution BLOCKED. Stop; no repin/retry. Roger needs read-only artifact review
+and expected-pin acceptance before native continuation. Do not assume update
+or change services/packages. Local tested checkpoint due; push held.
+Roger approved ONE native c8 attempt only if preparation goes well, same
+1 CPU/256MiB/no swap/16 tasks/10s+2s grace. Explicit lookup mode, fixed generated
+ELFs/exact measured loader, four42/13/127/127 outcomes, six pidfds and full
+cleanup. No real vendor/model/private/Windows/network/service or GitHub action.
+No retry after native failure. Native UNUSED. Exact12 copy/test verified;
+completion records synced. Counter10/10, no remote-backed rotation.
 C8b fixed-loader/one-private-directory DESIGN approved in verification plan.
 No image/materialization/loader execution permission or accepted policy added.
 C8c focused22 PASS(0.018s), full1,640 OK/one expected skip(26.483s), counter6/10.
 C8d focused26 PASS(0.016s), full1,645 OK/one expected skip(25.783s), counter8/10.
-All16 accumulated paths source/tests verified; completion records final sync.
+All16 accumulated paths source/tests verified and locally committed; receipt sync verified.
 Stop at native/image scope gate before quota cutoff: no precise new helper/unit/
 materialization approval exists. Next propose/review fixed synthetic direct-loader
 and transitive-dependency helper scope; actual execution needs fresh exact grant.
@@ -116,3 +139,7 @@ alone. Latest quota cutoff5% remains for resumed work. No tests added for cadenc
 - tests/test_document_job_worker_launch_profile.py
 - pipeline/document_job_worker_lookup_requirements.py
 - tests/test_document_job_worker_lookup_requirements.py
+- scripts/private_worker_loader_smoke.py
+- tests/test_private_worker_loader_smoke.py
+- scripts/private_worker_lookup_fixture.py
+- tests/test_private_worker_lookup_fixture.py

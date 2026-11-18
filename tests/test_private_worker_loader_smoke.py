@@ -23,6 +23,18 @@ def info(fd, raw, *, unsafe=False):
 
 
 class LoaderSmokeFakeTests(unittest.TestCase):
+    def test_c8_fixed_direct_loader_argv_and_four_correlated_cases(self):
+        unit = UNIT.replace('-c4-', '-c8-')
+        self.assertIn('--unit=' + unit, smoke.unit_command(unit, ROOT, smoke.PYTHON, smoke.SCRIPT))
+        self.assertEqual(smoke.cases(True), (('positive',42),('decoy',13),('negative',127),('transitive',127)))
+        self.assertEqual(smoke.canary_command('positive', True),
+                         ('/lib64/ld-linux-x86-64.so.2','--inhibit-cache','--library-path','/positive',
+                          '--glibc-hwcaps-mask','','/positive/main'))
+        self.assertEqual(smoke.success_record('a'*64, True)['pinned'], 6)
+        for label in ('../bad', 'arbitrary', 'positive;exit'):
+            with self.assertRaises(smoke.Refusal): smoke.canary_command(label, True)
+        with self.assertRaises(smoke.Refusal): smoke.main('a'*64, cwd=True, lookup=True)
+
     def test_c5_has_distinct_bound_unit_identity_with_same_resource_caps(self):
         unit = UNIT.replace("-c4-", "-c5-")
         args = smoke.unit_command(unit, ROOT, smoke.PYTHON, smoke.SCRIPT)
