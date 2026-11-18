@@ -1,3 +1,86 @@
+## 2026-11-18 - Bind declared lookup requirements to an inert profile
+
+- C8d COMPLETED / WSL VERIFIED: separate pure provider/SONAME/path requirements against a
+  recomputed C8c profile, with resident interpreter identity distinct from a
+  regular library alias. No actual lookup/default/descendant-exec claims.
+- Focused26 PASS(0.016s), full1,645 OK/one expected skip(25.783s), counter8/10.
+  No filesystem/image/native/private or GitHub action. Clean local checkpoint
+  requested by Roger; stop before separately scoped native/image work, not
+  because quota reached10%. No filler test or inferred native grant.
+
+## 2026-11-18 - Describe an inert fixed-loader launch profile
+
+- C8b DESIGN approved; C8c COMPLETED / WSL VERIFIED: fixed initial argv/environment bound
+  to declared image/member/search digests and roles, exact form fingerprints
+  and closed unresolved requirements. No execution/readiness status available.
+- Focused22 PASS(0.018s), full1,640 OK/one expected skip(26.483s), counter6/10.
+  No installed read/image/loader/runtime/GitHub mutation.
+  Latest user cutoff10% five-hour remaining; clean local commit authorized,
+  push held. Existing C1/C2/C7a and private/native gates unchanged.
+
+## 2026-11-18 - Propose concrete sealed-image lookup direction
+
+- C8b design review COMPLETED / PROPOSAL PENDING: fixed measured interpreter
+  argv, one private library directory and regular SONAME destinations, unchanged
+  bytes. No ambient library path/cache/audit/preload or unmeasured alternatives.
+- Flags are not isolation or descendant-exec policy; real pinned compatibility,
+  fresh complete image measurements and runtime/code/private gates remain.
+  Roger's design approval requested before inert C8c contract. Documentation
+  only, no tests/native/image/GitHub mutation; counter unchanged4/10.
+
+## 2026-11-18 - Distinguish exact declared search forms without approval
+
+- C8a COMPLETED / WSL VERIFIED: pure supplied-byte form labels and bounded fingerprint,
+  no normalization or raw path output. Known mixed RUNPATH recognition never
+  relaxes C1/C2, C7a or existing broad search-review categories.
+- Focused27 PASS(0.012s), full1,634 OK/one expected skip(26.441s), counter4/10.
+  No installed reads, native unit, image or GitHub
+  mutation. A concrete accepted lookup policy remains separately gated.
+
+## 2026-11-18 - Complete the current declared-name candidate inventory
+
+- C7c.4 approved exact libdl.so.2 observation COMPLETED:14,408 bytes, root-owned
+  regular/single-link and final identity/bounds checked; only libc.so.6 needed.
+- Across15 separately observed files,13 declared dependency names have unique
+  SONAME candidates, no unmatched/ambiguous names. This is not fresh atomic
+  acquisition, runtime dlopen closure, image/search/CPU acceptance or execution.
+  Counter unchanged2/10. Next concrete sealed-image lookup policy remains gated.
+
+## 2026-11-18 - Observe nine approved dependency candidates
+
+- C7c.3 read-only observation COMPLETED: nine exact root-owned regular/single-
+  link libraries,15,665,512 bytes, shared15s/128MiB aggregate and64MiB/member
+  limits, final file/directory identities unchanged. No execution/copy/services.
+- Newly declared libdl.so.2 remains unobserved. System-library lookup falls
+  outside C7a's narrow subset; no policy widening. Observations across runs
+  are not atomic/fresh closure or approved pins. Counter unchanged2/10.
+
+## 2026-11-17 - Inspect exact dependency alias metadata without traversal
+
+- C7c.2 approved read-only metadata inspection COMPLETED:12 dependency names
+  in two exact directories,24 entries, six same-directory alias strings. No
+  target traversal/content reads/scan/execution; final identities unchanged.
+- Nine new exact regular-file candidates proposed for bounded hash/ELF review,
+  not yet approved. Counter unchanged2/10; no deployment evidence or new test.
+
+## 2026-11-17 - Observe five approved candidate Linux worker files
+
+- C7c read-only observation COMPLETED: five exact root-owned regular/single-link
+  files,4,847,192 bytes total, shared15s/128MiB aggregate and64MiB/member bounds,
+  final file/directory identity checks unchanged. No binary execution or copy.
+- CPU plugin SONAME absent and mixed search still unsupported; incomplete
+  dependency closure is not image readiness. Further source discovery requires
+  fresh scope. No required-test counter increment for read-only inspection (2/10).
+
+## 2026-11-17 - Bind supplied worker member observations to layout
+
+- C7b COMPLETED / WSL VERIFIED: pure exact expected digest/size/source-mode/uid and complete
+  observation coverage, reusing C7a layout/SONAME checks. Snapshot fingerprint
+  includes stat identity; not trusted pin provenance, freshness or a seal.
+- Focused27 PASS(0.016s), full1,627 OK/one expected skip(26.137s), counter2/10.
+  No acquisition/copy/image/native/runtime caller. Exact10 later paths unbacked
+  after4e8f48d. Next installed-source selection needs fresh bounded approval.
+
 ## 2026-11-17 - Check proposed worker library placement without execution
 
 - C7 review recorded; C7a COMPLETED / WSL VERIFIED. Pure exact-origin layout checker binds

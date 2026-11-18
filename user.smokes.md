@@ -1,5 +1,46 @@
 # Temporary operator smoke handoff
 
+C8c inert profile COMPLETED: focused22/full1,640 PASS(one expected skip).
+C8d declared lookup requirements COMPLETED: focused26/full1,645 PASS(one expected
+skip). No manual/
+native smoke, real image, loader or provider required.
+Paused before separate native/image scope; clean local commit requested. No
+operator action tonight. Next is a reviewed synthetic helper/fixture scope,
+not permission to run installed libraries or private input.
+
+C8b lookup design proposal ready for Roger's DESIGN approval only. No manual
+or native test now. Fixed-loader argv does not attest descendant exec or real
+image readiness. C8a focused27/full1,634 PASS remains latest test checkpoint.
+
+C8a pure search-form review COMPLETED: focused27/full1,634 PASS(one expected
+skip). No manual/native smoke, installed read, image or GitHub action. Next
+concrete lookup-policy design needs Sol High; current descriptive forms confer
+no execution permission. Existing manual gaming recheck remains outstanding.
+
+C7c.4 libdl observation COMPLETED:14,408 bytes, no new dependency. Cross-run
+15-file/13-needed-name candidate coverage complete as metadata only. No manual
+test or runtime/image permission. Next concrete lookup-policy design gate;
+actual dlopen/CPU and gaming coexistence acceptance still outstanding.
+
+C7c.3 nine-file observation COMPLETED2026-11-18, no operator smoke needed.
+15,665,512 bytes; no execution/copy; final identities checked. New libdl.so.2
+candidate needs approval before acquisition. C7a/system lookup and full image
+gates unchanged; counter2/10, no extra test run.
+
+C7c.2 exact dependency entry metadata PASS:24 entries, six bounded alias strings,
+no follow/content read. Next nine exact candidates require hash/ELF scope
+approval. No operator smoke, worker, model or image created. Counter2/10.
+
+C7c five-file read-only observation COMPLETED, no operator smoke required.
+No new worker/model started. Additional dependency entry/readlink scope is
+proposed but NOT APPROVED; existing image/native/privacy gates remain.
+
+C7b pure member/layout binding COMPLETED: focused27/full1,627 PASS(one expected
+skip). No manual
+or native smoke, installed source acquisition or image creation required.
+Next C7c installed-source read-only proposal requires scope approval, not a
+manual model smoke. No candidate file has been inspected under that proposal.
+
 C7a pure layout checker COMPLETED: focused35/full1,620 PASS(one expected skip).
 No operator/native smoke or image construction authorized. C5 remains consumed.
 

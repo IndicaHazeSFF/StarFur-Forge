@@ -14,8 +14,8 @@
 
 - For the current unattended run only (2026-11-15), Roger authorized starting
   StarFur-Forge as roger and requires shutdown of that exact distribution after
-  final verification/sync/handoff at about25% five-hour remaining (renewed
-  2026-11-16). Do not start/
+  final verification/sync/handoff at about10% five-hour remaining (cutoff updated
+  2026-11-18). Do not start/
   stop other distributions or turn this into standing lifecycle/config authority.
   Stop earlier at existing error/design/security gates; preserve state safely.
 - Roger normally keeps StarFur-Forge WSL running in PowerShell. While he is actively messaging without saying he is away/at work, assume it is available for authorized operations and leave its lifecycle alone; do not explicitly start/stop it as routine preparation or cleanup. This is a workflow assumption, not measured service readiness. If unavailable, apply the existing diagnosis/stop rules; earlier scoped lifecycle authorization is not blanket permission to reconfigure services.
@@ -46,6 +46,50 @@
 
 ## Private annotation worker direction
 
+- document_job_worker_lookup_requirements.py owns pure declared provider-path/
+  SONAME requirements tied to a recomputed inert profile. Resident interpreter
+  reuse and private-library-path labels are requirements, not observed lookup
+  or enforcement. No filesystem/loader/permission caller; all gates unresolved.
+- Roger approved C8b DESIGN only2026-11-18; C8c inert proposal work allowed,
+  not image writing, loader/native execution or private input. Sol High active;
+  current cutoff10% five-hour remaining. A local verified commit is authorized
+  at a clean stop; GitHub push remains held under the earlier restriction.
+- document_job_worker_launch_profile.py owns pure declared image/search binding
+  to fixed initial-process argv/environment and non-clearable unresolved gates.
+  It never accepts deployment or descendant exec; supplied forms are not measured
+  provenance or policy grants. No runtime, writer or permission producer.
+- C8b lookup design review2026-11-18 proposes explicit measured-loader argv and
+  one sealed /worker library directory; DESIGN APPROVAL PENDING. No launch/image
+  or search-policy acceptance. Initial loader flags do not cover later exec;
+  descendants, runtime code loading and private admission remain separate gates.
+- Current testing permission renewed2026-11-18 excludes GitHub mutations and
+  Windows system/unrelated-data effects. Keep normal exact queued source sync;
+  do not commit/push under this grant, even at cadence, without clarification.
+- document_job_worker_search_form.py owns pure exact supplied-byte search-form
+  labels/fingerprint only. Recognizing mixed RUNPATH is not accepting it; no
+  loader/image/cwd/default-search/dlopen/CPU/private authority or runtime caller.
+- C7c.4 approved exact libdl.so.2 read/hash observation completed2026-11-18.
+  Cross-run15-file/13-needed-name coverage is descriptive only, not fresh atomic
+  inputs, runtime dlopen closure, accepted search policy, image or launch grant.
+- C7c.3 approved exact nine-file read/hash/ELF observation completed2026-11-18,
+  15,665,512 bytes with final identities/bounds checked. Additional libdl.so.2
+  acquisition is not authorized by that completed scope. Cross-run observations
+  are not one fresh snapshot or approved pins; C7a remains narrow/unwidened.
+- C7c.2 approved metadata/readlink-only observation completed2026-11-17:
+  12 exact dependency names in two anchored directories, no links followed or
+  contents read. Named next source candidates are proposals, not acquisition,
+  copying, loader or private-processing authority.
+- Roger approved C7c exact five-file read-only source observation2026-11-17.
+  Completed with identity/deadline/aggregate checks unchanged; descriptive only.
+  No recursive/extra source selection, symlink traversal, copy, image, loader,
+  native unit or private processing follows from that bounded inspection.
+- Roger selected Sol6.1 Medium for bounded work on2026-11-17, overriding the
+  default High guidance for this run. Ask before escalation for unresolved
+  security/design/reasoning ambiguity; no silent switching or delegation.
+- document_job_worker_member_binding.py owns pure exact supplied observation/
+  independent-caller-pin/layout equality only. Source hash/size/mode/uid and
+  complete coverage bind descriptive snapshots; no live acquisition, freshness,
+  immutable seal, provenance authentication, deployment or disclosure authority.
 - document_job_worker_layout.py owns pure proposed-layout consistency for a
   conservative exact DT_RUNPATH=$ORIGIN subset only. It checks requester-local
   declared targets/SONAMEs/coverage, not measured backing, actual lookup/sealing,

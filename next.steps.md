@@ -1,70 +1,102 @@
 # Rotating development handoff
 
-Updated2026-11-17: C7 review / C7a COMPLETED / WSL VERIFIED.
-C5 NATIVE WSL PASS; approval consumed, NEVER repeat.
+Updated2026-11-18: C8d COMPLETED; clean local commit due, native/image scope gate.
+Latest quota cutoff10% five-hour remaining supersedes earlier5% cutoff.
 
 ## Last verified backup
 
-WSL/GitHub main ddf2cbdb6941b4bf1e5b3491bedae21205e59fca
-Keep Murr's loader paws inside the den.
-Exact19-path source/target hashes, staged set, main/HEAD/index/remote and
-independent GitHub ls-remote verified. Previous cb7883d771cd2648742e07b3205797970d429946.
-Cycle11 gates backed up; C5 native1 + C6a2 + C6b2 + C6c2 + C7a2: now9/10.
-Windows index separate/stale; unrelated COMMANDS/bytecode/runtime excluded.
-Later receipts below UNBACKED; copy is not GitHub backup.
+WSL/GitHub main 4e8f48d69990df7200d8a4be7117d2d48150007f
+Subject: Check Murr's library paws before opening the den.
+Previous ddf2cbdb6941b4bf1e5b3491bedae21205e59fca.
+Exact17 accumulated Windows/WSL recorded hashes, path containment, regular files,
+scoped whitespace, main/HEAD/empty index, exact staged set and remote verified.
+Push and independent git ls-remote origin refs/heads/main matched.
+User explicitly requested this sub-ten backup at9/10; completed-cycle counter
+rotated to0/10. C7b focused/full passed: current2/10. No filler/duplicate tests.
+Windows index remains separate/stale.
+Unrelated WSL COMMANDS/bytecode/runtime excluded and untouched.
 
-## Current slice / authority
+## Completed scope / evidence
 
-C5b helper COMPLETED / WSL VERIFIED: focused44 PASS(0.083s);
-full1,584 OK/one expected skip(29.402s). No production/Core caller.
-C5 native approved2026-11-17 exactly once:1 CPU/256MiB/no swap/16 tasks/
-10s+2s grace. Explicit --cwd-prerequisite, fixed synthetic ELF and measured
-Linux loader only. No actual plugin/model/GPU, Windows/private input, host
-network, install or existing service/config change. Outcome PASS exit0, consumed.
-Exact loader/controller/registry read-only preflight PASS; initial diagnostic
-JSON bytes serialization corrected without creating a unit. Coupled7 hashes
-source-target verified; receipt in maintained sprint. C4 approval consumed.
-Strict C1/C2 search denial unchanged; this cannot grant production image/
-dlopen/CPU/private-dispatch readiness. No automatic native retry.
+C5 single native PASS: parent/fork/exec cwd denial, intended42/missing127 with
+decoy13, exact bindings/limits, full captured exits/unit/cgroup/fixture cleanup,
+unchanged parent state. C4/C5 native approvals consumed; NEVER repeat/infer unit.
+C6a SONAME supplied-byte review: focused59/full1,593 PASS(one expected skip).
+C6b same-acquisition identity: focused40/full1,602 PASS(one expected skip).
+C6c declared alias comparison: focused33/full1,609 PASS(one expected skip).
+C7 Astra security review recorded; C7a proposed-layout consistency COMPLETED:
+final focused35 PASS(0.024s), full1,620 OK/one expected skip(27.724s).
+All code/result records through C7a backed up in the commit above.
+No actual plugin/model/GPU/Windows/private input, host network or service change.
 
-## Next action / gates
+## Next dependency / authority
 
-C7a pure exact-origin proposed layout subset verified: focused35 PASS(0.024s),
-full1,620 OK/one expected skip(27.724s). Exact10 queued copies/hash verified.
-No materialization, actual libraries or native units. Astra review recorded in
-verification plan; real immutable-image/mixed-search/dlopen gates remain.
-C6b focused40 PASS(0.021s), full1,602 OK/one expected skip(27.194s).
-C6c focused33 PASS(0.021s), full1,609 OK/one expected skip(27.183s).
-Exact10 copy/hash verified, no extra native attempt or installed read. Comparison output
-never promotes a declaration to trusted identity or image/loader eligibility.
-C6a focused59 PASS(0.029s), full1,593 OK/one expected skip(27.174s).
-Pure observations only; no native unit, installed artifact or production caller.
-All accumulated15 paths source/target verified; completion receipts synced.
+C8b fixed-loader/one-private-directory DESIGN approved in verification plan.
+No image/materialization/loader execution permission or accepted policy added.
+C8c focused22 PASS(0.018s), full1,640 OK/one expected skip(26.483s), counter6/10.
+C8d focused26 PASS(0.016s), full1,645 OK/one expected skip(25.783s), counter8/10.
+All16 accumulated paths source/tests verified; completion records final sync.
+Stop at native/image scope gate before quota cutoff: no precise new helper/unit/
+materialization approval exists. Next propose/review fixed synthetic direct-loader
+and transitive-dependency helper scope; actual execution needs fresh exact grant.
+Initial-process flags cannot attest descendant-exec control; that enforcement,
+runtime code loads and real pinned compatibility remain separate future gates.
+Current ask is not a unit/test/image grant. No manual smoke now; counter4/10.
+All16 accumulated paths remain unbacked after4e8f48d. Local clean-stop commit
+authorized; no GitHub push under current restriction. Current counter8/10.
+C8a exact supplied-byte search-form labels/fingerprint completed: focused27
+PASS(0.012s), full1,634 OK/one expected skip(26.441s), counter4/10.
+No acceptance policy or runtime/installed-file call. Exact10 copies verified;
+all12 accumulated paths UNBACKED after4e8f48d. C8b design review now completed
+on Sol High; fixed-loader/one-directory direction approved for inert work only.
+No silent weakening of C1/C2/C7a or C8a recognition-to-permission conversion.
+Continue C8c then next dependency under gates; no worker running or
+distro lifecycle change; no manual/native test required for C8a.
+Latest testing grant excludes GitHub changes and Windows system/unrelated
+files; no commit/push until clarified. Normal Windows source/queued WSL sync
+continues. No native image/loader permission inferred from test authorization.
+C7b focused27 PASS(0.016s), full1,627 OK/one expected skip(26.137s).
+Disconnected supplied-member/layout
+binding contract under exact expected digest/size/mode/coverage budgets.
+It is not copying, a lifetime seal, deployment evidence or permission to launch.
+C7a covers a conservative exact DT_RUNPATH=$ORIGIN subset only; strict C1/C2
+search denial and mixed-path/dlopen/CPU/private-admission gates remain unchanged.
+Actual source selection/materialization/native unit needs fresh precise scope.
+Five exact candidate files observed,4,847,192 bytes, unchanged identities;
+CPU plugin lacks SONAME/mixed search still unsupported; closure incomplete.
+C7c.2 metadata scope approved/completed:24 entries, six same-directory alias
+strings; no link traversal/content read and final identities unchanged.
+C7c.3 nine files15,665,512 bytes and C7c.4 approved libdl.so.2,14,408 bytes,
+identities unchanged in each run. Cross-run15 observations cover13 needed
+names uniquely; no unmatched/ambiguous names. Not fresh coherent inputs,
+runtime dlopen closure or approved pins. Next concrete sealed-image lookup
+policy design must address system default search and exact mixed RUNPATH;
+current C7a/C1/C2 unchanged. No additional reads/copy/native action inferred.
+Review the design gate in verification plan before implementation; no source
+substitution, copy or execution inferred. Sol Medium sufficient for bounded
+read-only work; ask before unresolved security/design escalation.
+See docs/private_annotation_verification.plan.md for Astra review and gates.
+Murr apartment remains first tangible goal, not gated on private worker completion.
 
-Native output: cwd parent/fork/exec denied, mixed intended42/missing127 with
-decoy13, exact bindings/limits and complete cleanup. Parent state unchanged.
-No failed fixture or extra unit. C6a/b/c metadata work complete. Next C7 is a
-targeted security-design review before real-image acceptance/construction:
-measured/sealed copy and aliases, missing/different SONAME policy, preserved
-search forms/default influences and actual runtime-loaded CPU closure. Exact
-review scope in docs/private_annotation_verification.plan.md. No automatic
-production acceptance, native retry/unit or real-library execution authority.
-Review/C7a completed. Next C7b is a disconnected acquired-member/layout binding
-contract under exact size/mode/digest/coverage budgets, not copying/sealing or
-deployment evidence. No actual source selection, native unit or materialization
-without fresh scope. Sol High sufficient for that bounded contract; preserve
-real-image/mixed-search/dlopen gates. Leave distro lifecycle alone before quota gate.
-Keep user.smokes.md; manual Fortnite coexistence remains failed/pending user
-recheck, not closed by functional tests. Murr apartment first tangible goal.
-At25% five-hour remaining finish verify/sync/handoff and terminate ONLY
-StarFur-Forge. Earlier safety/design/model gates pause without lifecycle changes.
+## Operator acceptance / lifecycle
+
+Retain user.smokes.md. Prior Fortnite coexistence failure/unknown cause and
+manual frame-time recheck remain pending; functional tests do not close them.
+No manual smoke required for C7a. No test worker left running by this task.
+Leave distribution lifecycle alone on this explicit pause; no service changes.
+On a future unattended resume follow Roger's renewed lifecycle/quota authority,
+not a blanket grant to start/stop distributions or rerun consumed native tests.
 
 ## Copy / tests / commit / push
 
-Code and19-path ddf2cbd backup verified. Later17-path copy/tests verified.
-Native command issued once, exit0. Helper/source checkpoint backed up; later
-result/recovery and C6a/b/c/C7a records/code UNBACKED. Required gate counter9/10.
-No filler tests or recursive receipt-only commit; preserve scope until cadence.
+17-path code/test/result checkpoint COMMITTED/PUSHED/INDEPENDENTLY VERIFIED.
+Post-push rotation/receipt records copied and hash verified, but UNBACKED until
+the next ordinary commit; no recursive receipt-only commit. Counter0/10.
+Exact10 C7b files copied/hash verified and focused/full passed. Completion
+records synchronized; all10 accumulated paths UNBACKED after4e8f48d. Counter2/10.
+Counter unchanged2/10: read-only observation is not a required test suite/smoke.
+No native action. Explicit scope-approval pause, not quota cutoff; leave distro
+alone. Latest quota cutoff5% remains for resumed work. No tests added for cadence.
 
 ## Exact accumulated unbacked commit allowlist
 
@@ -76,12 +108,11 @@ No filler tests or recursive receipt-only commit; preserve scope until cadence.
 - ROADMAP.md
 - docs/private_annotation_verification.plan.md
 - user.smokes.md
-- pipeline/document_job_worker_elf.py
-- pipeline/document_job_worker_elf_soname.py
-- tests/test_document_job_worker_elf_soname.py
-- pipeline/document_job_worker_elf_file.py
-- tests/test_document_job_worker_elf_identity_file.py
-- pipeline/document_job_worker_alias_identity.py
-- tests/test_document_job_worker_alias_identity.py
-- pipeline/document_job_worker_layout.py
-- tests/test_document_job_worker_layout.py
+- pipeline/document_job_worker_member_binding.py
+- tests/test_document_job_worker_member_binding.py
+- pipeline/document_job_worker_search_form.py
+- tests/test_document_job_worker_search_form.py
+- pipeline/document_job_worker_launch_profile.py
+- tests/test_document_job_worker_launch_profile.py
+- pipeline/document_job_worker_lookup_requirements.py
+- tests/test_document_job_worker_lookup_requirements.py

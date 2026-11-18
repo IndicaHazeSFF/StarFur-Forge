@@ -2,8 +2,7 @@
 
 ## Pending files
 
-None. C7a exact copies/hash verification and focused/full gates passed.
-Current required counter9/10.17 accumulated verified files remain UNBACKED
-after GitHub ddf2cbd; copy success is not backup. No filler/duplicate gate.
-Next disconnected member/layout binding contract only; native/image/sealing/
-private-processing authority remains absent. C5 one-unit approval consumed.
+None. C8c/C8d exact source/test/completion copies/hash verified. Latest focused26/
+full1,645 PASS(one expected skip), counter8/10.16 accumulated paths unbacked
+after4e8f48d. User-requested clean local commit due; GitHub push held. Stop at
+precise next native/image scope gate, not quota exhaustion. No new unit started.

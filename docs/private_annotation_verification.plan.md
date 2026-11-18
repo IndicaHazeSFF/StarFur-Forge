@@ -1,5 +1,278 @@
 # Private annotation deployment verification — review draft
 
+## C8d declared lookup requirements — COMPLETED / WSL VERIFIED2026-11-18
+
+Recompute exact C8c profile from supplied inventory/forms, then require exact
+same-hash SONAME coverage and planned destinations for all declared DT_NEEDED
+edges. Fixed resident interpreter role/path/digest is not a regular alias copy;
+other providers require /worker/<needed-name> library targets. Return only a
+bounded requirements fingerprint/count and unchanged unresolved requirements.
+This is not an actual resolution simulator or version/symbol/dlopen/CPU test.
+No filesystem, materializer, native/runtime or permission caller. Focused26
+PASS(0.016s), full1,645 OK/one expected skip(25.783s), counter8/10.
+Real loader reuse, default search and descendant enforcement stay gated.
+
+Next separately scoped step: propose/review synthetic direct-loader/transitive
+dependency fixtures and an opt-in helper with existing one-unit resource caps
+and exact pidfd/unit/root/cleanup bindings. Before any materialization/execution
+approval must specify fixed generated inputs, measured loader digest, allowed
+argv/mounts, positive/decoy/missing outcomes, caps and no-retry rules. No helper
+or native approval exists yet. Real vendor binaries/model/private input remain
+excluded. Do not infer a native grant from the latest general test authorization.
+
+## C8c inert launch profile — COMPLETED / WSL VERIFIED2026-11-18
+
+Roger approved C8b direction for inert contracts only. Pure supplied inventory
+and exact per-member search-form fingerprints bind to fixed initial loader argv,
+environment and unconditionally unresolved enforcement/compatibility/admission
+requirements. Exactly one fixed entrypoint, CPU plugin and resident interpreter,
+regular library destinations and no duplicate declared byte copies. Search/raw
+digest/role/path/coverage consistency is descriptive, not fresh measurement.
+No dependency resolution/SONAME closure claim; that is a separate next checker.
+No argv knobs, renderer/model authority, readiness status, I/O, writer, native
+unit or runtime caller. Focused22 PASS(0.018s), full1,640 OK/one expected skip
+(26.483s), counter6/10; strict C1/C2/C7a
+unchanged. User now requests10% five-hour cutoff, local commit at clean stop;
+GitHub push held. Actual copying/execution still needs separate precise grant.
+
+## C8b concrete lookup design — REVIEW COMPLETED / DESIGN APPROVED2026-11-18
+
+Roger approved this DESIGN direction only: an explicit measured-loader
+invocation and one private library directory, preserving all binary bytes.
+No source/test/launcher implementation, copying, image construction, native
+unit, actual loader execution, service/config change or private input is approved.
+This is a refinement of option3, not a deployed/accepted search policy.
+
+### Proposed final namespace and byte bindings
+
+- One sole interpreter at /lib64/ld-linux-x86-64.so.2. Its observed SONAME may
+  satisfy the exact ld-linux-x86-64.so.2 dependency as resident-interpreter
+  identity, never by another alias copy. Real loader reuse must be tested.
+- /worker/llama-server and /worker/libggml-cpu-x64.so are explicit entry/plugin
+  roots. Missing SONAME on the CPU plugin is not an ordinary dependency-alias
+  exemption: exact path/hash/role and bounded plugin selection remain required.
+- The other12 SONAME-bearing library candidates each get exactly one regular
+  file /worker/<SONAME>. Versioned vendor/system source basenames change only
+  in a future disposable copy; bytes/digests never change. No symlinks or
+  redundant version-name copies. Duplicate providers or target collisions deny.
+- All15 candidate digests/identities remain historical observations, not a
+  release allowlist. Before any future materialization require independently
+  selected/approved pins, fresh whole-set acquisition under aggregate bounds,
+  exact copied-byte hashes and final source checks, destination enumeration,
+  immutable root seal and remeasurement through the exact launched namespace.
+  No claim of cross-run coherence from the current observation receipts.
+- /cwd is empty/read-only/lifetime locked with no outside FS-struct sharing.
+  /build is absent, not an alternative source. No writable executable aliases,
+  outside directory handles, host-root mounts or arbitrary executable extras.
+  Any required proc/IPC/input mounts need separate exact exposure rules; do not
+  copy C5's diagnostic proc layout into production or call it complete isolation.
+
+### Proposed launch/search semantics (NOT an executable command grant)
+
+Trusted Core would construct a fixed argument vector, never a shell string:
+(/lib64/ld-linux-x86-64.so.2, --inhibit-cache, --library-path, /worker,
+ --glibc-hwcaps-mask, EMPTY_STRING, /worker/llama-server, ...reviewed arguments).
+EMPTY_STRING is a real empty argv element, not an empty search-path component.
+No model/user text selects the loader, flags, library path, image or executable.
+No --preload/--audit/--inhibit-rpath or caller-selected loader switches. Minimal
+explicit environment excludes all ambient LD_*/GLIBC_TUNABLES and credentials.
+Direct invocation intentionally changes entry invocation semantics; compatibility
+with the pinned runner/plugin path/argv behavior must be verified, never assumed.
+
+Primary glibc source documents direct interpreter invocation and the cache,
+library-path and hwcaps options: https://codebrowser.dev/glibc/glibc/elf/dl-usage.c.html .
+Lookup source also retains compiled default directories and loaded-object name
+reuse: https://codebrowser.dev/glibc/glibc/elf/dl-load.c.html . These sources are
+mechanistic context, NOT evidence that our installed interpreter has identical
+behavior or that these flags exclude defaults/contain execution by themselves.
+
+Require only exact no-search / DT_RUNPATH=$ORIGIN / the observed byte-exact
+mixed DT_RUNPATH on separately pinned members; RPATH/lookalikes/unknown search
+forms deny. Unknown other dynamic tags still require separate compatibility/
+security coverage; recognizing a form is not accepting the whole ELF object.
+The mixed form is preserved, not normalized: /worker is its origin, its build
+directory must remain absent, and its empty component sees only immutable /cwd.
+Absence of /etc/ld.so.cache, /etc/ld.so.preload and all unplanned executable
+members/default-directory/hwcaps alternatives must be verified in the sealed
+namespace. Flags supplement this namespace restriction; they do not replace it.
+No default-directory file becomes implicitly trusted. Library/code resolution
+must resolve to the exact planned bytes or fail, including explicit dlopen paths.
+
+### Separate mandatory enforcement/compatibility gates
+
+1. C1/C2/C7a remain unchanged. Future policy has its own version and descriptive
+   contract, not a bypass of strict APIs or conversion of C8a labels to grants.
+2. Resident interpreter identity versus DT_NEEDED must be bound distinctly from
+   regular aliases. Avoid relying on incidental dependency order or duplicate
+   ELF copies to make system libraries load.
+3. Loader argv options are initial-process scope, NOT inherited exec policy.
+   Before real inference/private input require an enforceable descendant-exec
+   boundary or a separately reviewed proof that every allowed exec maintains
+   the same namespace/code-resolution restrictions. A supplied boolean, trace
+   or statement that the runner normally does not exec cannot satisfy this.
+   If this cannot be enforced with unchanged binaries, stop and return the
+   conflict to Roger/Astra; no permissive fallback or binary patch is implied.
+4. Sealed disk inventory does not prevent anonymous executable mappings,
+   memfd/proc-fd alternatives, generated code or malicious existing code.
+   Production process/kernel containment and writable-input-to-code boundaries
+   remain separate. Neither SONAME closure nor loader flags certify hostile-code
+   safety, no-network/private IPC, CPU-only behavior or model-file safety.
+5. No GPU/vendor devices/libraries, network fallback, host proxies or shared
+   Ollama. No automatic backend/model fallback or repeated effect on uncertainty.
+   Actual runtime plugin discovery, optional NSS/locale/config requirements and
+   code loads must be bounded and tested; absence must fail safely, not trigger
+   host mounts, downloads or broader package copies.
+
+### Small next slices and acceptance gates
+
+- C8c after Roger approves this DESIGN: pure proposed namespace/launch-profile
+  contract binding exact image/member/search digests, roles, fixed argv choices
+  and closed outstanding requirements. It returns a proposal/fingerprint only,
+  never ready/eligible/permission. No image writer or runtime caller. Medium
+  can implement this bounded inert contract; escalate unresolved design issues.
+- Follow with a separate pure resolution-requirement checker over explicit
+  edges/provider roles and destinations, preserving C7a. Reject duplicate/shadow
+  copies, misbound resident interpreter, stale/missing digests, unsupported tags,
+  build/cwd/cache/hwcaps extras, generic arguments and policy-version mismatch.
+- Focused provider-free suite then full regression for each source slice. No
+  native smoke needed merely to construct/check proposals. No filler gates.
+- Only later, with a fresh exact materialization/execution grant: a test-owned
+  sealed-root positive/decoy/missing synthetic gate for direct-loader/system
+  dependencies, resident interpreter reuse, immutable cwd and descendant exec
+  behavior. Specify caps, inputs/digests, cleanup and one-attempt/retry policy
+  before creating a unit. Real binaries and synthetic inference are separate
+  later approvals; no private documents before full admission/enforcement.
+
+Decision requested now: approve this fixed-loader/one-directory direction for
+inert contract work only, or retain kernel PT_INTERP launch and separately prove
+the exact pinned loader's compiled default-directory layout. Recommendation is
+the former for explicitness, not because its flags alone are an isolation layer.
+
+## C8a exact search-form review — COMPLETED / WSL VERIFIED2026-11-18
+
+Pure supplied ELF bytes only: distinguish no search, exact DT_RUNPATH=$ORIGIN,
+the exact known DT_RUNPATH=$ORIGIN:/build/llama-server-cpu/bin:, and unsupported
+forms. RPATH, empty/tag conflicts and lookalikes never normalize into RUNPATH.
+Bound raw-file hash plus fingerprint of exact tag/text pairs; return closed
+labels, not paths. Unknown other dynamic tags remain unassessed. This is a
+precondition for any future exact-policy proposal, NOT that proposal's approval.
+No change to C1/C2 denial, C7a subset or search-review categories. No native,
+installed-file, image, loader, provider/private or GitHub action. Focused27
+PASS(0.012s), full1,634 OK/one expected skip(26.441s), counter4/10.
+Next C8b requires Sol High for concrete planned system-directory/loader-default/
+mixed-tag policy DESIGN, not automatic acceptance or execution. Specify exact
+input hashes/tag forms, interpreter role, complete final namespace, absent
+cache/hwcaps/preload/audit/writable aliases, lifetime cwd, source freshness and
+runtime-code constraints. Do not expand C7a or turn C8a labels into permission.
+Native/real-image scope still requires a distinct precise grant and review.
+Windows source edits stay in normal queued workflow;
+the renewed testing grant excludes Windows system/unrelated-data effects.
+
+## C7c candidate-source observation — APPROVED / COMPLETED2026-11-17
+
+Roger approved the exact scope below. One read-only terminal acquisition
+completed exit0,4,847,192 bytes across five files; root-owned single-link regular
+files, anchored non-writable-to-others directories, bounds and final identities
+passed. No bytes retained/copied and no code/loader/model executed. Full exact
+identity/hash/dependency observation in maintained sprint. Loader digest equals
+the prior C5 digest. Not approved deployment pins or immutable image evidence.
+CPU plugin has no SONAME and mixed search; that forbids inferring a named alias,
+not every explicit plugin role. Runtime plugin loading and source closure remain
+unverified. Base library declares libggml-base.so.0 despite versioned basename;
+an eventual regular-file destination must match actual requester requirements.
+
+C7c.2 APPROVED / COMPLETED: bounded metadata-only entry/type and readlink
+inspection in exactly /usr/local/lib/ollama and /usr/lib/x86_64-linux-gnu, only
+basenames in these five observations' DT_NEEDED sets, max32 names/directory and
+15s acceptance deadline. Readlink text is descriptive only, never followed;
+no traversal to targets, recursive scan, contents/hash reads, copy, execution,
+models/network/services/Windows/private data. Report missing/symlink/regular
+labels and bounded safe target classification only. This would identify the
+next exact regular-file source proposal; it cannot approve those sources.
+Observed24 entries for12 names, six same-directory alias strings; final entry/
+directory identities unchanged. No links followed or file contents read.
+Directory0 vendor: libggml.so.0 -> libggml.so.0.15.3,
+libllama-common.so.0 -> libllama-common.so.0.0.1,
+libllama.so.0 -> libllama.so.0.0.1, libmtmd.so.0 -> libmtmd.so.0.0.1;
+base alias points to already observed libggml-base.so.0.15.3. Directory1 system:
+libstdc++.so.6 -> libstdc++.so.6.0.35; libc.so.6,libgcc_s.so.1,libm.so.6,
+libpthread.so.0 are regular. These are observations, not trusted alias bindings.
+
+C7c.3 APPROVED / COMPLETED2026-11-18: read/hash/ELF review of exactly nine new
+candidate basenames: vendor directory /usr/local/lib/ollama:
+libggml.so.0.15.3,libllama-common.so.0.0.1,libllama.so.0.0.1,libmtmd.so.0.0.1;
+system directory /usr/lib/x86_64-linux-gnu:
+libstdc++.so.6.0.35,libc.so.6,libgcc_s.so.1,libm.so.6,libpthread.so.0.
+Same anchored no-follow root-owner/regular/single-link/mode and final identity
+checks;64MiB/member,128MiB aggregate,15s acceptance deadline. No recursive
+discovery, automatic substitute, link following, copying/loader/execution/
+models/network/services/Windows/private files. Refusal/drift stops. This is
+candidate observation only, not approved pins, complete closure or a seal.
+All nine acquired successfully,15,665,512 bytes; final member/directory
+identities unchanged during this run. Exact digest/identity/SONAME/dependency
+records in maintained sprint. libggml.so.0.15.3 additionally needs libdl.so.2,
+which was not in the approved list and was NOT inspected. The system libraries
+have dependencies without origin search tags; C7a remains conservative and
+inapplicable to a complete real image, not silently broadened. libc.so.6 also
+declares the fixed PT_INTERP; that observation is not an interpreter-role grant.
+Separate five/nine-file runs are NOT one fresh coherent snapshot. Any later
+measured-image proposal must revalidate its exact full inputs under one budget.
+
+C7c.4 APPROVED / COMPLETED2026-11-18: exact
+/usr/lib/x86_64-linux-gnu/libdl.so.2 only, anchored no-follow regular/single-link/
+root-owner/mode/final identity checks,64MiB maximum and15s acceptance deadline.
+Read hash/bounded ELF metadata only; no symlink following/substitute/discovery,
+copy/execution/model/service/network/Windows/private data. Stop on refusal.
+This would fill one currently known metadata gap, not certify runtime dlopen
+closure, CPU-only behavior, immutable image or private-disclosure authority.
+Observed14,408 bytes, SONAME libdl.so.2, needed libc.so.6, no search tag;
+all checks and final identities unchanged. No new dependency name appeared.
+Cross-run15-file supplied metadata now covers13 distinct DT_NEEDED names with
+unique observed SONAME candidates; no unmatched/ambiguous names. This does NOT
+prove runtime-loaded closure or a fresh unified snapshot; no approved pins.
+
+NEXT DESIGN GATE: concrete measured sealed-image lookup policy. Current C7a
+models a narrow origin-only subset, not the installed system libraries' default
+lookup or the CPU plugin's mixed RUNPATH. Define exact planned final regular-file
+destinations/aliases, loader-specific default search influences, interpreter
+binding, permitted byte-exact tag forms, empty immutable cwd, and absent cache/
+preload/audit/hardware-variant/writable-code paths. Preserve C1/C2 and C7a as-is;
+do not mutate observations or normalize away search components. Follow with
+provider-free contracts/adversarial fixtures before any separately approved
+materialization/native test. No additional installed-file reads are needed
+merely to summarize current candidate-name coverage. Real image/runtime/dlopen/
+CPU/private-disclosure enforcement remains incomplete and separately gated.
+
+Original approved observation scope (consumed/completed, not ongoing discovery):
+
+Next requires explicit installed-source selection. Proposed read-only scope:
+exact /usr/local/lib/ollama/{llama-server,libllama-server-impl.so,
+libggml-cpu-x64.so,libggml-base.so.0.15.3} and
+/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 only. Use anchored no-follow
+regular/single-link/root-owned/non-writable-to-others checks; deny any symlink,
+change, missing/unsupported input rather than discover substitutes. At most
+64MiB/member,128MiB aggregate and15s total acceptance deadline. Output only
+redacted identity/digest/count/bounded dependency/search/SONAME observations;
+no raw bytes/paths in public diagnostics. Kernel reads cannot be forcibly
+cancelled by acceptance deadlines. No loader/ldd/model, link following,
+recursive resolution/copy/materialization, network, service/config, Windows
+or private-document access. Observation is not approved pins or immutable-image
+evidence. Stop on refusal/drift; no substitute file or broader scan by inference.
+This completed observation grants no further acquisition, native unit or image permission.
+
+## C7b supplied member/layout binding — COMPLETED / WSL VERIFIED2026-11-17
+
+Pure expected-member pins (logical target, independent caller-selected digest,
+byte count, exact source mode and uid) must cover all inventory members once.
+Supplied file/search/SONAME observations must match complete metadata and pins,
+with no duplicate source inode. C7a checks the resulting proposed layout.
+Bounded fingerprint includes source identities; source mode is not destination
+mode policy. No I/O, current-file revalidation, handles, copy, seal, authenticity,
+live freshness, CPU/deployment or consent authority. Focused27 PASS(0.016s),
+full1,627 OK/one expected skip(26.137s), counter2/10.
+Next must design explicit exact-source measurement/copy planning before any
+materialization; existing C1/C2/mixed-search/native/disclosure gates unchanged.
+
 ## C7 review / C7a COMPLETED / WSL VERIFIED2026-11-17
 
 Astra's read-only review found no basis to promote C5/C6 evidence into real

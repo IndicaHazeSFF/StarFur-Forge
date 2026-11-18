@@ -1381,6 +1381,69 @@ Retention/deadline corrections, advisory metadata bounds and the disposable CLI 
 
 ### COMPLETED W1 / WSL-VERIFIED — private-worker wire foundation (2026-11-05)
 
+**C8d COMPLETED / WSL VERIFIED (2026-11-18):** Separate pure lookup-requirement checker
+binds declared provider roles/paths/SONAMEs to a recomputed C8c profile. Resident
+interpreter and regular aliases are distinct. No actual loader behavior or
+enforcement claimed; focused26/full1,645 PASS(one expected skip), counter8/10.
+Next real image/direct-loader work needs precise review/approval; no native/
+runtime authority. Clean local checkpoint authorized, GitHub push held.
+
+**C8c COMPLETED / WSL VERIFIED (2026-11-18):** Pure initial-process launch
+proposal binds declared inventory/search hashes, fixed argv/environment and
+closed unresolved enforcement/admission gates. No loader/image runtime or
+readiness/permission. Focused22/full1,640 PASS(one expected skip), counter6/10;
+C1/C2/C7a unchanged.
+
+**C8b DESIGN REVIEW COMPLETED / DESIGN APPROVED (2026-11-18):** Recommend
+fixed measured-loader arguments and one sealed private library directory with
+regular exact SONAME targets and a single resident interpreter. Flags alone
+are not isolation/default-search exclusion or inherited exec control. Concrete
+proposal/gates in verification plan; Roger approved inert C8c direction only,
+contract. No image/native/private permission, no priority change, counter4/10.
+
+**C8a COMPLETED / WSL VERIFIED (2026-11-18):** Pure byte-exact supplied search-form review
+distinguishes no tag, exact-origin RUNPATH and the known origin/build/empty
+RUNPATH from unsupported lookalikes. Labels/fingerprint only, no accepted
+lookup policy, image/cwd/default-path proof or runtime authority. Focused27/
+full1,634 PASS(one expected skip), counter4/10. Existing C1/C2/C7a unchanged;
+next concrete lookup-policy design needs higher reasoning before acceptance.
+No product priority change or native/image/production permission.
+
+**C7c.4 READ-ONLY OBSERVATION COMPLETED (2026-11-18):** Exact approved libdl.so.2,
+14,408 bytes, unchanged identity/bounds, only libc.so.6 needed. Cross-run15-file
+observations cover13 declared dependency names uniquely, with no unmatched names.
+This is not fresh atomic closure, runtime dlopen/CPU proof or an image grant.
+Next concrete sealed-image lookup policy must handle planned system directories
+and exact mixed RUNPATH separately; C7a/C1/C2 stay unchanged. Counter2/10.
+
+**C7c.3 READ-ONLY OBSERVATION COMPLETED (2026-11-18):** Nine approved exact
+additional libraries,15,665,512 bytes; bounds/identity checks passed without
+copy/execution. New libdl.so.2 dependency remains unobserved; C7a deliberately
+does not model system default lookup. No real-image eligibility or widening.
+Cross-run observations are not fresh atomic closure. Counter unchanged2/10;
+next exact libdl candidate observation needs fresh scope.
+
+**C7c.2 METADATA OBSERVATION COMPLETED (2026-11-17):** Approved12 dependency
+names across two directories (24 entries), six same-directory alias strings,
+no link traversal/content read and unchanged identities. Nine exact additional
+file candidates now proposed, pending scoped hash/ELF acquisition approval.
+No recursive discovery/copy/loader authority; counter unchanged2/10.
+
+**C7c READ-ONLY OBSERVATION COMPLETED (2026-11-17):** Approved five exact Linux
+candidate files acquired with no-follow/owner/link/byte/deadline/final identity
+checks,4,847,192 bytes total. CPU plugin has no SONAME and mixed search; a plugin
+root is not automatically an alias provider. Closure incomplete, no sources
+accepted/copied/executed. Further bounded source discovery needs fresh scope;
+real-image/mixed-search/dlopen/CPU/private gates remain. Counter unchanged2/10.
+
+**C7b COMPLETED / WSL VERIFIED (2026-11-17):** Disconnected supplied-member binding checks
+all declared destinations against exact caller pins and complete observations,
+then C7a layout. Hash/size/source-mode/uid/identity equality is not independent
+pin provenance, live acquisition, immutable image or permission. Focused27/
+full1,627 PASS(one expected skip), counter2/10. Next C7c exact installed-source
+read-only observation proposed, pending Roger's precise scope approval; no
+production/mixed-search/native authority or priority change.
+
 **C7 REVIEW / C7a COMPLETED / WSL VERIFIED (2026-11-17):** Astra recommends a pure
 conservative proposed-layout checker first: exact requester-local origin target,
 same-declared-hash matching SONAME, no aliases by guessed basename, no borrowed
