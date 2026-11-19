@@ -46,6 +46,21 @@
 
 ## Private annotation worker direction
 
+- C8 native PASS2026-11-19 consumed the ONE synthetic approval. Approved c0b...
+  loader, intended42/decoy13/direct-missing127/transitive-missing127, bindings,
+  limits, captured exits/unit/cgroup/fixture cleanup and unchanged parent state
+  verified. No retry/new unit inferred. Not real-worker/dlopen/CPU/private or
+  descendant-exec proof. Earlier unused/blocker wording is historical only.
+- Roger explicitly accepted C8 expected loader SHA256
+  c0b20d6e1ced12abfe0b1ef2b5b68017950beaaea3df69eb6949d73e0ecf7b40
+  on2026-11-19 for the already approved ONE synthetic attempt only. Fresh
+  coupled-source/loader/controller preflight PASS. Old pin blocker resolved;
+  no package authenticity claim or extra native/private/GitHub scope. Native
+  attempt next; after interruption inspect evidence, never automatically repeat.
+- Current-loader read-only review2026-11-18 found SHA256 c0b20d6e1ced12abfe0b1ef2b5b68017950beaaea3df69eb6949d73e0ecf7b40,
+  safe metadata and local libc6:amd64 2.43-2ubuntu2.7 checksum match. This is not
+  package authenticity or updater-cause proof. Explicit new-pin acceptance is
+  required before the still-unused native attempt; no silent repin or retry.
 - Roger conditionally approved C8 synthetic helper preparation then ONE native
   attempt2026-11-18 if preparation/tests/security review pass. Same1 CPU/256MiB/
   no swap/16 tasks/10s+2s grace, existing controllers only. Fixed generated ELF

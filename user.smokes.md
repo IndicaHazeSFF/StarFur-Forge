@@ -1,5 +1,19 @@
 # Temporary operator smoke handoff
 
+C8e NATIVE WSL PASS2026-11-19: intended42/decoy13/direct-missing127/transitive-
+missing127, exact bindings/limits and complete cleanup; parent unchanged.
+Single approval consumed; no operator rerun or extra unit. No manual smoke
+now. Not real-worker/CPU/dlopen/descendant-exec/private readiness; previous
+manual gaming coexistence acceptance remains pending separately.
+
+C8 pin accepted2026-11-19; exact c0b20d6e...0ecf7b40 and coupled-source/
+controller preflight PASS. Single approved native attempt next. No manual
+rerun or additional unit/model/private scope; inspect outcome after interruption.
+
+Loader review completed: c0b20d6e...0ecf7b40, safe metadata and local libc6
+2.43-2ubuntu2.7 checksum match, not authenticity/update-cause proof. Explicit
+current-pin acceptance needed; native still UNUSED, no repin/retry/manual smoke.
+
 C8e helper/fake/full PASS38/full1,649(one expected skip). Native BLOCKED:
 exact-loader-digest preflight drift; no unit/fixture/attempt issued. Approval
 UNUSED but requires current artifact review and accepted pin before execution.

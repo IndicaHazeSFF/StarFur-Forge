@@ -1,5 +1,64 @@
 # Private annotation deployment verification — review draft
 
+## C8e NATIVE WSL PASS2026-11-19 — approval consumed
+
+Single authorized command exit0:
+`/usr/bin/timeout --signal=TERM --kill-after=2s 40s .venv/bin/python -I -B -S scripts/private_worker_loader_smoke.py --expect-loader c0b20d6e1ced12abfe0b1ef2b5b68017950beaaea3df69eb6949d73e0ecf7b40 --lookup-prerequisite`.
+Observed fixed intended42/decoy13/direct-missing127/transitive-missing127.
+Six pidfd-bound processes, exact unit epoch/MainPID/uid/cmdline/cgroup, kernel
+resource caps, sealed-root/private-registry/socket/cwd prerequisites, captured
+exits and full unit/cgroup/fixture cleanup verified; parent state unchanged.
+No retained failed fixture or lingering helper unit/process. Fixed synthetic
+ELFs and exact measured loader only, no vendor/model/GPU/private/Windows input,
+network workload, service/config/package or GitHub change. Approval consumed;
+never repeat/new unit by inference. Counter10+1=11; no remote-backed rotation.
+
+Scope limit: this proves fixed direct-loader arguments and transitive lookup
+under this test root only. Resident-interpreter SONAME reuse, real runner/plugin
+compatibility and optional/runtime code loads, descendant-exec enforcement,
+production syscall/namespace/private IPC/admission and whole-image freshness
+are still separate gates. Next may prepare a narrowly reviewed resident-loader
+reuse fixture/proposal, not execute it; any next native unit needs fresh scope.
+Do not silently clear C8c/C8d unresolved requirements or enable private dispatch.
+Earlier pin-pending/native-next paragraphs below are preparation history only.
+
+## C8 expected pin ACCEPTED / NATIVE NEXT2026-11-19
+
+Roger explicitly accepted exact current SHA256
+c0b20d6e1ced12abfe0b1ef2b5b68017950beaaea3df69eb6949d73e0ecf7b40
+for the already conditionally approved single synthetic C8 attempt. No service/
+package pin or installed file is changed: expected test argument only. Fresh
+exact8 coupled Windows/WSL sources,8 doc baselines, measured loader digest and
+existing parent controllers/registry preflight PASS. Same tested helper as local
+4fd221d; old bda pin blocker resolved by explicit acceptance, not inferred.
+Native next, no attempt yet at record creation. On interruption treat attempt
+as potentially consumed; inspect actual evidence, no automatic repeat. Fixed
+synthetic cases only, same caps/cleanup and no vendor/model/private/Windows/
+network/service/GitHub action. Counter10/10 unchanged before native gate.
+
+## Current-loader review COMPLETED / PRIOR PIN DECISION2026-11-18
+
+Roger authorized read-only review, not repin/native execution. Anchored loader
+acquisition confirms root-owned regular/single-link safe modes,254,864 bytes,
+supported shared-object metadata, no interpreter/DT_NEEDED. Current SHA256:
+c0b20d6e1ced12abfe0b1ef2b5b68017950beaaea3df69eb6949d73e0ecf7b40.
+Old bda779...cec14 observation inode40796; current inode19913 and different
+mtime. Replacement is observed, cause/authenticity is not established.
+Read-only dpkg-query exact-file ownership: libc6:amd64; version2.43-2ubuntu2.7,
+install ok installed. Root-owned no-follow bounded local libc6:amd64.md5sums
+read (2MiB/5s maximum) and second same-SHA loader acquisition found MD5
+367ff89bae02590a8df07c23cbc82a78 matches the local record. MD5 is only weak
+local consistency, not authenticated package provenance or a security approval.
+Inference: package replacement is consistent with evidence; no package history/
+logs established the updater or reason. No package/service/config/GitHub writes.
+
+Decision requested: accept exactly the current SHA above for the already
+conditionally approved ONE synthetic C8 attempt, or keep blocked for further
+provenance review. No pin changed, fixture/unit/native command issued or loader
+executed. Grant UNUSED. On acceptance, fresh coupled-source and same-digest
+preflight is still mandatory; no fallback/repin/retry or added scope. Counter
+unchanged10/10; no test run for this read-only review.
+
 ## C8e helper COMPLETED / NATIVE BLOCKED2026-11-18
 
 Focused38 PASS(0.049s), full1,649 OK/one expected skip(26.036s), counter10/10.

@@ -1381,6 +1381,27 @@ Retention/deadline corrections, advisory metadata bounds and the disposable CLI 
 
 ### COMPLETED W1 / WSL-VERIFIED — private-worker wire foundation (2026-11-05)
 
+**C8e COMPLETED / NATIVE WSL PASS (2026-11-19):** Single approved attempt exit0,
+accepted c0b20d6e...0ecf7b40 loader. Intended42/decoy13/direct-missing127/
+transitive-missing127, process/pidfd/unit/cgroup bindings and resource caps,
+namespace/cwd/socket prerequisites, all exits and complete cleanup; parent
+state unchanged. Approval consumed, no repeat/new unit. Counter11 (GitHub push
+held, no rotation). Next resident-interpreter reuse/descendant execution and
+real-image/runtime-code/private gates remain; not a broad worker readiness pass.
+
+**C8e PIN ACCEPTED / HISTORICAL PRE-NATIVE CHECKPOINT (2026-11-19):** Roger accepted exact current
+SHA256 c0b20d6e1ced12abfe0b1ef2b5b68017950beaaea3df69eb6949d73e0ecf7b40
+for the already conditionally approved one synthetic attempt. Coupled-source/
+loader/controller preflight PASS, code unchanged from tested4fd221d checkpoint.
+No repeat/extra unit/private/runtime scope. Counter10/10; native pending.
+
+**C8e ARTIFACT REVIEW COMPLETED / PRIOR PIN DECISION (2026-11-18):** Current
+loader SHA256 c0b20d6e1ced12abfe0b1ef2b5b68017950beaaea3df69eb6949d73e0ecf7b40,
+supported metadata/size and safe owner/link/mode; inode/time differ. Installed
+libc6:amd64 2.43-2ubuntu2.7 local checksum matches, not authenticated provenance
+or update-cause proof. No repin/native attempt; explicit Roger acceptance of
+new expected pin needed. Counter unchanged10/10; runtime gates unchanged.
+
 **C8e HELPER COMPLETED / NATIVE BLOCKED (2026-11-18):** Fixed synthetic
 main/intermediate/leaf and explicit c8 direct-loader helper; same inherited
 guards/caps/bindings/cleanup, four fixed outcomes. Focused38/full1,649 PASS

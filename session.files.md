@@ -2,8 +2,8 @@
 
 ## Pending files
 
-None. C8e prep source/test/completion copies verified; focused38/full1,649
-PASS(one expected skip), counter10/10, no remote-backup rotation. Native NOT
-issued: exact-loader-digest preflight drift. Approval unused but BLOCKED; no
-repin/retry. Local tested checkpoint due; GitHub push held. All20 accumulated
-paths remain remote-unbacked. No unit/fixture/native process created.
+None. Exact8 C8e native-PASS outcome records copied/hash verified. Approval
+consumed, no repeat/new unit.11 required gates retained, no rotation while
+GitHub push held. All20 accumulated paths remotely unbacked after4e8f48d.
+Current outcome records uncommitted locally after4fd221d; local checkpoint due.
+No worker/unit/fixture remains; production/private gates unchanged.

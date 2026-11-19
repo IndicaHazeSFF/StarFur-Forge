@@ -1,3 +1,32 @@
+## 2026-11-19 - Verify the single synthetic direct-loader attempt
+
+- C8e NATIVE WSL PASS exit0 on the single authorized attempt with accepted
+  c0b20d6e...0ecf7b40 loader. Intended42/decoy13/direct-missing127/transitive-
+  missing127, six pidfd bindings, resource/namespace/cwd/socket prerequisites,
+  captured exits and complete unit/cgroup/fixture cleanup; parent unchanged.
+- Approval consumed, no retry/new unit. Synthetic lookup evidence only, not
+  resident-interpreter reuse, real worker/dlopen/CPU/descendant/private readiness.
+  Counter11 required gates, no rotation while GitHub push held. No package/
+  service/config/Windows/private/model changes. Native result local checkpoint due.
+
+## 2026-11-19 - Accept the reviewed synthetic-test loader pin
+
+- Roger accepted exact c0b20d6e...0ecf7b40 interpreter for the previously approved
+  single C8 synthetic attempt. Fresh8-source/8-doc hash and actual-loader/
+  existing-controller/registry preflight PASS. No source/service/config change.
+- Native attempt next; not executed when this record was written. No retry or
+  extra unit/private/model/GitHub permission. Counter10/10 unchanged so far.
+
+## 2026-11-18 - Review the changed loader without repinning
+
+- Current read-only acquisition:254,864 bytes, safe root-owned regular/single-
+  link supported ELF, no interpreter/DT_NEEDED. Different inode/time and SHA256
+  c0b20d6e1ced12abfe0b1ef2b5b68017950beaaea3df69eb6949d73e0ecf7b40.
+- Installed libc6:amd64 2.43-2ubuntu2.7 owns the file; its local MD5 matches.
+  Consistent with package replacement, not authenticity or proven updater cause.
+  No repin/native/unit/fixture/package/service/GitHub change; explicit expected-
+  pin acceptance pending. Counter unchanged10/10; no additional tests run.
+
 ## 2026-11-18 - Prepare conditional synthetic direct-loader verification
 
 - C8e HELPER COMPLETED / WSL VERIFIED: fixed generated no-search main/transitive library/leaf and
