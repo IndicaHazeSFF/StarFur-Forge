@@ -1,5 +1,21 @@
 # Temporary operator smoke handoff
 
+**Current (2026-11-24): no operator smoke due.** C8al disposable WSL pidfd
+capability PASS; the separate managed approval is unused. The Fortnite recheck remains
+pending; your earlier disposable annotation workflow PASS still stands.
+
+C8m: no operator smoke. One conditional synthetic run approved but unused.
+No native path exists for the new fixture yet.
+
+C8h fake capture binding verified: focused 29/full 1,661 OK (one skip).
+No operator/native test; live supervisor scope remains separate.
+
+C8g supplied-map comparison verified: focused 23/full 1,655 OK (one skip).
+No operator or native test. A live binding/acquisition scope is still needed.
+
+C8f inert fixture verified (focused29/full1,651 OK, one expected skip).
+No operator/native test. Future mapping gate requires new scoped approval.
+
 C8e NATIVE WSL PASS2026-11-19: intended42/decoy13/direct-missing127/transitive-
 missing127, exact bindings/limits and complete cleanup; parent unchanged.
 Single approval consumed; no operator rerun or extra unit. No manual smoke

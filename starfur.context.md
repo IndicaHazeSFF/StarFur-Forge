@@ -1,5 +1,11 @@
 # StarFur Forge: project context and architecture map
 
+The cooperative canary's C8l one-shot evidence has a dedicated pinned
+test-only WSL directory outside the repository and its disposable fixture.
+It does not store production state or give a native launch permission.
+The directory is empty; the pin and restart/refusal rules are in the
+private annotation verification plan.
+
 ## Current accepted worker refinement — 2026-11-05
 
 Design direction selected2026-11-16: keep worker binaries unchanged and control

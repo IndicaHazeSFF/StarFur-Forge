@@ -1,3 +1,241 @@
+## 2026-11-26 - Bound resident action summaries
+
+- H1 follow-ups reject malformed visual actions, route traces, candidate counts and tool schema versions. Shared WSL regression: 74 passed.
+
+- Apartment snapshots expose only recognized Core action fields. Invalid action labels cannot mask zero-provider status. WSL: 67 tests passed.
+
+## 2026-11-26 - Park the managed canary's named-fixture cleanup path
+
+- C8ap separates exact worker exit from exclusive fixture lifetime. The current design cannot prove later access is excluded or that deletion targets the checked object. Design only; existing refusal behavior unchanged.
+
+## 2026-11-26 - Review managed worker retirement evidence
+
+- C8ao documents why a successful process exit plus a unit removal notice cannot prove which invocation retired. Native cleanup stays blocked; no runtime change.
+
+## 2026-11-26 - Shorten agent instructions and the active handoff
+
+- Preserve the original rules as reference only; keep a five-slice recap
+  separate from active authority, blockers and exact unbacked work. Docs only.
+
+## 2026-11-25 - Join worker exit and teardown in the test supervisor
+
+- C8an wires the exit reader into a disconnected post-start controller.
+  It holds the verified worker handle through retirement and withholds
+  cleanup on ambiguous outcomes. No unit or filesystem adapter wired.
+
+## 2026-11-24 - Prepare the cooperative worker exit reader
+
+- C8am adds a disconnected bounded reader for a borrowed worker pidfd.
+  Exit evidence alone does not imply successful teardown. Mock tests only.
+
+## 2026-11-24 - Verify retained pidfd exit status after reap on WSL
+
+- One approved disposable check observed a clean process exit from a
+  non-parent after the actual parent reaped it. No managed unit or receipt.
+
+## 2026-11-24 - Validate the synthetic pidfd exit response
+
+- C8ak checks byte length and the returned EXIT bit before reading the raw
+  status. No runtime query or other fields exposed.
+
+## 2026-11-24 - Require exact simulated worker exit before retirement
+
+- C8aj replaces the fake supervisor's success flag with bound terminal
+  evidence. Missing exit status, wrong handle, or incomplete teardown refuses.
+
+## 2026-11-23 - Queue HybridAgent for an optional local benchmark
+
+- Compare the released 8B model with a matched text-reasoning baseline before
+  contemplating provider integration or custom post-training. Docs only.
+
+## 2026-11-23 - Track small loop-trained models as an optional benchmark
+
+- Added a future comparison of recurrent-depth and conventional small models
+  with and without StarFur context. No runtime or priority change.
+
+## 2026-11-23 - Review how to verify the self-exiting test worker
+
+- C8ai specifies exact pidfd exit evidence independent of transient unit
+  collection, plus separate teardown checks. Design only; no native action.
+
+## 2026-11-23 - Compare exact cooperative launch manifest declarations
+
+- C8ah refuses changed or incomplete supplied manifests against independent
+  pins. No measured source closure, launcher, or service change.
+
+## 2026-11-23 - Pin the cooperative canary's test evidence directory
+
+- C8ag created and verified the exact approved WSL directory outside the
+  repo and disposable fixture. No receipt written or service started.
+
+## 2026-11-23 - Bind the canary charge to its reviewed scope
+
+- C8af computes a receipt digest only on exact supplied approval, directory
+  and preflight-pin equality. No native directory or launcher wired.
+
+## 2026-11-22 - Record the one-shot canary charge separately from its fixture
+
+- C8ae adds an unwired exclusive, synchronized receipt for the approved
+  synthetic test. An existing or partial entry refuses; no native submit.
+
+## 2026-11-22 - Exercise canary startup and self-exit without a service
+
+- Added a fake lifecycle gate for ambiguity, stale readiness, replacement
+  epochs, one-shot go, and complete self-exit evidence. No native adapter.
+
+## 2026-11-22 - Review ambiguous startup of the temporary canary service
+
+- C8ac specifies a self-exiting worker and a no-retry, retain-evidence path
+  when start or cleanup cannot be confirmed. No launcher or service changed.
+
+## 2026-11-22 - Record the canary's consuming wait separately
+
+- C8ab distinguishes whether a wait consumed status from whether that exit
+  was expected and timely. No native waiter or supervisor wired.
+
+## 2026-11-22 - Distinguish a canary release write from acceptance
+
+- C8aa records the one-shot write outcome separately from whether the
+  exchange met its deadline. A late or uncertain write cannot be repeated.
+  No native caller or runtime impact.
+
+## 2026-11-22 - Leave the negative canary's exit for its supervisor
+
+- The disconnected negative-control helper now observes exit 127 without
+  consuming status, including on timeout after observation. No native caller.
+
+## 2026-11-22 - Prepare the canary's exact two-slot handoff
+
+- Added a disconnected, mock-tested handoff that preserves both channel ends
+  across slot collisions, checks the exact inventory and refuses on setup
+  failure. No native backend or caller.
+
+## 2026-11-22 - Review the cooperative canary handoff before launch
+
+- Documented the exact two-descriptor exec boundary and separate ownership
+  of release, child exit and cleanup. Current helpers cannot safely be wired
+  together unchanged. No execution or runtime behavior change.
+
+## 2026-11-22 - Own and split the cooperative canary's private channels
+
+- C8w prepares two private close-on-exec pipe pairs and exact role-local
+  cleanup. No native caller or inheritance changes; tests use mocks.
+
+## 2026-11-22 - Compare exact cooperative loader page coverage
+
+- Accept equivalent adjacent 4 KiB rows only in the cooperative path.
+  Permissions, file offsets, backing identity and coverage remain exact.
+
+## 2026-11-22 - Record the loader mapping comparison gate
+
+- C8u verified the expected loader digest and inspected program headers
+  without running the fixture. Cooperative row representation policy is
+  undecided; native approval remains unused.
+
+## 2026-11-22 - Require a silent missing-leaf control
+
+- C8t rejects any readiness from the cooperative negative control and
+  accepts normal exit 127 only from its exact child handle. Mock-only.
+
+## 2026-11-22 - Gate canary release on validated cooperative capture
+
+- C8s requires exact readiness and EOF, bounded map verification, and a
+  pending child before one release write. No native caller or launch.
+
+## 2026-11-22 - Pair the cooperative canary's process and directory handles
+
+- C8r adds a scoped, disconnected binding for a trusted parent's exact child.
+  It checks child exit without reaping and closes only handles it acquired.
+
+## 2026-11-21 - Reject cooperative capture if the exact child exits
+
+- C8q checks a caller-bound child pidfd before and after mapping capture,
+  without reaping it. No process selection, live caller, or launch.
+
+## 2026-11-21 - Bound cooperative mapping capture to an owned task anchor
+
+- C8p adds a disconnected fixed-name reader with strict byte and acceptance
+  limits. It returns only a redacted comparison; no process selection,
+  native launch, or release wiring.
+
+## 2026-11-21 - Plan a sub-1-bit local-model benchmark
+
+- Roadmap only: compare LittleBit with existing quantized baselines, then
+  evaluate a larger model against a measured 12 GB VRAM stretch target.
+  No implementation, runtime, or milestone-order changes. AGENTS reviewed;
+  no authority or module changes needed.
+
+## 2026-11-21 - Inspect metadata of an owned cooperative pipe end
+
+- C8o adds a disconnected Linux metadata reader for one existing descriptor,
+  with exact identity/flag checks and no descriptor mutation. Caller still
+  owns anonymous provenance, exact inventory and continuity through exec.
+
+## 2026-11-21 - Validate the cooperative canary descriptor split
+
+- C8n adds an inert check for the two exact pipe ends inherited by the
+  fixture and their complementary parent ends. No live pipe or caller.
+
+## 2026-11-21 - Prepare the fixed cooperative canary entry bytes
+
+- C8m adds an inert entry variant with one readiness marker, exact release
+  token and refusal exits. Existing modes are unchanged; no materializer
+  or native caller is connected.
+
+## 2026-11-21 - Specify native cooperative supervision gates
+
+- C8l design only: define exact descriptor ownership, check capture before
+  release, and separate deadline fencing from confirmed termination/cleanup.
+  Native implementation and runtime eligibility remain gated.
+
+## 2026-11-20 - Validate a fake cooperative mapping review
+
+- A read-only synthetic transcript check requires readiness and EOF,
+  capture before release, separate exit controls and verified cleanup.
+  Reuses the bounded map comparator; no OS, fixture writer or launch path.
+
+## 2026-11-20 - Separate synthetic mapping evidence from process-stop evidence
+
+- C8k targeted review rejects outer numeric attach and proposes a tracer-free
+  fixed-fixture test with a narrower claim. Native implementation remains
+  blocked; existing isolation and tests are unchanged.
+
+## 2026-11-20 - Block native canary attachment on PID lifetime
+
+- C8j review completed: the live tracer's numeric attach target is not bound
+  by the existing pidfd. Require a reviewed task-lifetime and wait/cleanup
+  topology before a native adapter; no helper, execution, or policy change.
+
+## 2026-11-20 - Gate the fake held-stop review on two controls and cleanup
+
+- C8i checks the exact synthetic task/stop sequence before returning a
+  mapping summary; wrong or missing events and incomplete cleanup refuse.
+  No native tracing or process control was added.
+
+## 2026-11-19 - Specify the held-stop canary verification gate
+
+- C8i design only: separate the trusted outer tracer from the unchanged
+  in-root syscall policy. Require an owned exec/entry stop, bounded anchored
+  acquisition, independently reviewed map identity, and negative control plus
+  cleanup. No helper or live execution added.
+
+## 2026-11-19 - Fence a supplied mapping snapshot to a paused canary
+
+- C8h COMPLETED / WSL VERIFIED: fake-only bounded stream capture with pre/post exact
+  caller-attested process and pause identity. No live acquisition or native unit.
+- Focused 29 PASS; full 1,661 OK (one skip). Next: separately reviewed OS wiring.
+
+## 2026-11-19 - Compare synthetic resident-loader map records
+
+- C8g COMPLETED / WSL VERIFIED: bounded supplied-map comparison; no live
+  acquisition. Focused 23 PASS; full 1,655 OK (one skip).
+
+## 2026-11-19 - Prepare a resident-interpreter dependency fixture
+
+- C8f COMPLETED / WSL VERIFIED: inert intermediate adds a bare loader DT_NEEDED while
+  preserving the leaf, code/data, and existing C8 cases. No runtime caller.
+- Focused29 PASS; full1,651 OK with one expected skip. Counter13, no rotation.
+
 ## 2026-11-19 - Verify the single synthetic direct-loader attempt
 
 - C8e NATIVE WSL PASS exit0 on the single authorized attempt with accepted

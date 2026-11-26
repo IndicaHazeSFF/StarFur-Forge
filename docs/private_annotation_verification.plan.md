@@ -1,5 +1,595 @@
 # Private annotation deployment verification — review draft
 
+## C8ap — identity-bound retirement alternative: park native C8l
+
+**Design review complete; no-go for implementation on the reviewed launch topology.** The safety question is whether the controller can retire *only this attempt's disposable fixture*, not whether the worker returned success. This would be a different acceptance contract from C8ai/C8an, not a new way to set `epoch_continuity=True`. No contract change is accepted here.
+
+| Required before cleanup | Evidence available | Missing guarantee |
+| --- | --- | --- |
+| All original consumers have exited | The retained worker pidfd identifies that process. Exact child handles and the sole parent's reap records can account for individually bound children. A pinned cgroup object can distinguish it from a later object at the same path. | Prove the consumer set was complete from before release: no unaccounted fork, migration or handle handoff. An empty cgroup is occupancy **now**, not irreversible retirement or an inventory of outstanding handles. |
+| No later consumer can acquire this fixture | The legacy `unit_command()` gives the worker the host fixture path in argv. The worker opens it by name; the nonce and deadline govern valid work, not pathname access. | A delayed/replacement worker could open that path even if it ultimately rejects go. Mode 0700 does not separate processes with the same UID. Neither a spent charge nor closing the controller's fd revokes another holder. No exclusive acquisition boundary is established. |
+| Cleanup cannot remove another object | The legacy `main()` checks directory contents and loader bytes, then unlinks named entries and removes the root by path. C8an has only an injected cleanup callback. | A pinned parent directory fixes the parent, not the identity of the child currently at a name. A check followed by unlink/rmdir is not atomic compare-and-remove. Need exclusive control over every mutable parent through the final operation, including the fixture root's parent, or no host pathname cleanup at all. |
+
+**Why this matters:** A can exit with the expected status and its cgroup can empty. B can then open the still-named fixture. The observations about A remain true while the justification for deleting the fixture is false. Likewise, validating one directory entry does not authorize deleting a replacement. These are possible histories, not observed WSL incidents. See [kernel cgroup v2 process semantics](https://docs.kernel.org/admin-guide/cgroup-v2.html#processes) and [Linux unlink/unlinkat semantics](https://man7.org/linux/man-pages/man2/unlink.2.html).
+
+**Reopen criterion, not a new work queue:** if this native proof becomes necessary, first design an attempt-private workspace with no reusable host fixture path in manager arguments and no external directory tree for the controller to delete. A candidate is a fresh private filesystem per activation, with a one-use, identity-bound delivery of the reviewed inputs to the original worker only. Show who creates, holds, can duplicate and finally releases *each* process, mount, file and IPC reference; rule out propagation, replay and reacquisition by later activations under the stated same-UID trust assumptions. Specify what survives a controller crash: a separate durable spent receipt is not a fixture and must never be cleaned with it. A private mount alone proves none of this. Separately define observable pass/refusal evidence for exact cases, worker/descendant exits, quiescence, final reference release, parent invariants and manager status (unknown where unproved). Reject the design if any enforcement primitive needs unapproved host access or a different threat model.
+
+**Disposition:** keep the existing gates unchanged. No adapter, deletion, native attempt or repeat probe. If uncertainty follows a future charge, never retry or perform automatic cleanup; retain available evidence and report incomplete. Resume independent provider-free work rather than adding more mocks of missing OS guarantees. This does not block the resident apartment or conventional annotation planning.
+
+## C8ao — manager/invocation continuity review (design complete; native gate closed)
+
+**Decision:** do not implement a native producer of `Retirement.epoch_continuity` from polling or D-Bus notifications. The required claim spans the live pre-go binding through collection of that invocation; it is not “no replacement was noticed.” No reviewed source establishes that interval. This finding is specific to the proposed cooperative test, not a retroactive change to older canary results.
+
+| Evidence | What it establishes | What it cannot establish |
+| --- | --- | --- |
+| Existing `unit_info()` and repeated `InvocationID`/not-found checks in `private_worker_loader_smoke.py` | State observed by separate requests against a reusable name | Which invocation disappeared between observations, or manager continuity |
+| A future `GetUnitByPIDFD` reply from the expected manager while the worker is pinned and gated | Unit name/path and invocation associated with that process **at lookup** | Later collection identity or uninterrupted execution of that manager |
+| Matched job result, manager owner, unit-change/removal notifications | Correlation and reasons to refuse (e.g. replacement, reload, disconnect) | A complete invocation history. A job is not a worker lifetime; removal carries name/path but no invocation ID. A unique bus name identifies a connection, not a manager generation. |
+| Exact pinned worker exit and descendant/case receipts | Facts about those exact processes and cases | Teardown of every consumer of the fixture, unit identity or safe fixture deletion |
+
+**Counterexample:** a monitor sees A start, a successful A worker exit, removal of the expected name and final absence. If an intervening same-name instance B was missed, the removal could describe B. Even starting observation before submission, filtering by sender, draining the queue and observing no disconnect cannot distinguish the two histories from those records alone. Refuse on known gaps, overflow, replacement, reload, restart, timeout or malformed observations; an apparently clean stream still cannot confer positive authority. Do not subscribe merely to rediscover this limitation.
+
+**Basis:** the [systemd manager interface](https://www.freedesktop.org/software/systemd/man/latest/org.freedesktop.systemd1.html) specifies the lookup and signal payloads; [D-Bus names](https://dbus.freedesktop.org/doc/dbus-specification.html#message-protocol-names-bus) are connection-scoped. Upstream v259 [unit change queue](https://github.com/systemd/systemd/blob/v259/src/core/unit.c) skips already-queued units, and [unit signal code](https://github.com/systemd/systemd/blob/v259/src/core/dbus-unit.c) logs a failed removal send. These are interface/source observations, not measurements of the installed WSL manager. The C8an supervisor and its tests consume supplied retirement evidence; they do not produce it.
+
+**Recommended decision for Roger:** authorize *design only* of an alternative, identity-bound retirement contract for the one synthetic fixture. Ask whether exact process and cgroup identities can establish quiescence, how to exclude a later consumer/restart holding or reopening the fixture, and how to bind cleanup to that exact fixture without a name/path race. Require independent answers to all three before proposing any change to C8ai/C8an. Keep manager continuity explicitly **unknown** if not proved; do not set the existing boolean, treat an empty cgroup snapshot as stable exclusion, or call an incomplete run a pass. If no defensible substitute is found, park native C8l. The other option now is to park it immediately and continue independent work.
+
+**Authority unchanged:** no bus subscription, descriptor transfer to a manager, new reference, service change, receipt charge, native run, cleanup, or retry. Existing conditional approval does not cover a revised acceptance contract. Any such contract needs separate review and Roger's acceptance before implementation or running. On ambiguous evidence after charge, retain fixture and spent receipt. No private processing.
+
+C8an composes the post-acknowledgement acceptance flow. A single verified
+pin context encloses pre-go recheck, both case results, retirement evidence
+and the raw query on that exact pidfd. Only successful joined retirement and
+pin close permit a test-fixture cleanup callback under the same deadline;
+any refusal invalidates the attempt without retry. All manager, result and
+fixture callbacks are unwired. A retirement boolean is only a supplied
+observation, never evidence that a disappeared unit exited successfully.
+
+Native retirement is gated on manager/invocation continuity. Legacy
+`unit_info()` uses separate name-based `systemctl show` requests. A
+matching pre-go snapshot and a later not-found snapshot do not reveal
+intervening replacement or manager restart. Review bounded evidence
+before treating these as `epoch_continuity`; no new manager operation,
+subscription, or weaker acceptance is implied.
+
+C8am provides an unwired exit reader over one caller-held worker pidfd.
+Checks identity/noninheritance, nonblocking readiness, exact v0 query and
+deadline before and after acquisition. No wait, reap, signal, alternate
+process or retry. Caller establishes the live ABI and binds the exact
+descriptor; the returned status is separate from case/cleanup decisions.
+
+## C8al one disposable post-reap capability check — PASS
+
+Roger approved one isolated WSL check, separate from C8l. An owned parent
+forked a gated child and transferred its live pidfd to the non-parent test
+controller over an anonymous local socketpair. The child exited normally;
+the actual parent consumed its exact exit before acknowledging. The
+controller checked readiness and the v0 response on that same held fd;
+EXIT was present and raw wait status was zero. Both processes were reaped.
+This verifies this WSL kernel path for the disposable process only; no
+systemd unit, relay, evidence-directory action, or managed-canary attempt.
+This capability grant is consumed. Next verify the reviewed launch pins,
+real supervisor identity/lifetime and teardown; do not infer production
+readiness or permission to repeat.
+
+C8ak decodes only a supplied x86-64 little-endian v0 response: 64 bytes,
+returned EXIT mask bit, signed raw wait status at byte 60. It does not submit
+the ioctl, establish response provenance, validate the live ABI, or accept
+worker success itself. C8aj still joins exact exit with case/cleanup evidence.
+
+C8aj replaces C8ad's original fake success flag with a supplied normalized
+worker-exit observation. Exact binding, readiness, returned EXIT presence,
+raw normal-zero status and monotonic freshness are required in addition to
+both cases and separate cleanup. ABI parsing and native capability remain
+unverified; no pidfd query or native scope added.
+
+## C8ai exact worker terminal evidence — review complete; no native probe
+
+**Finding.** The outer controller pins the *service main process* before go
+(`resource.pin_record()`), but is not its reaper. The old loader helper's
+`worker()` publishes its result and pauses; `main()` stops the unit and
+checks pidfd readiness and disappearance. Do not copy that sequence into
+the self-exiting cooperative mode. A worker can publish a good result and
+then crash. C8ad's `retire(worker_succeeded=True, ...)` consumes a supplied
+fact; its tests do not provide that fact. Once systemd collects a unit its
+execution metadata need no longer be available. [systemd unit collection](https://www.freedesktop.org/software/systemd/man/latest/systemd.unit.html#Unit%20Garbage%20Collection)
+
+**Recommended evidence source.** Keep the existing bound process pidfd open
+across go, result publication, main-process exit and manager reap. On the
+outer controller only, request exit information on *that same handle* using
+Linux `PIDFD_GET_INFO` / `PIDFD_INFO_EXIT`. This observes the kernel's
+record without becoming the reaper or keeping a D-Bus unit reference. Linux
+v6.18's [pidfs implementation](https://github.com/torvalds/linux/blob/v6.18/fs/pidfs.c)
+has an explicit post-reap exit-info path; the [UAPI](https://github.com/torvalds/linux/blob/v6.18/include/uapi/linux/pidfd.h)
+requires checking which fields were actually returned. Here `uname -r`
+reported 6.18.58.1-microsoft-standard-WSL2; the installed public header
+declares the request, mask and signed exit-code field. The installed
+systemctl client reports 259.5-0ubuntu3.4. These are compatibility leads,
+not live kernel/manager or ioctl evidence. No service or pidfd was probed.
+
+**Acceptance in the proposed adapter.**
+
+1. Before go, bind the unique nonzero invocation, nonce, unit/cgroup,
+   main PID, argv, uid and pinned live process as required by C8ac. Keep
+   exclusive ownership of that handle; no close/reopen, descriptor-number
+   substitution, PID rediscovery or controller-restart adoption.
+2. Require the exact case evidence (positive capture/release/exit 42 and
+   negative no-ready/no-release/exit 127). Independently fence terminal
+   observation within the attempt's monotonic deadline. Readability alone
+   is never success. Use a verified ABI and bounded buffer; accept only a
+   successful ioctl, returned EXIT mask bit, and exact raw normal-zero
+   process wait status. Do not interpret a default zero field without the
+   bit, a signal number, or the case's exit 42 as worker success. Ancillary
+   credentials/namespace data are neither required nor logged. Refuse on
+   missing, late, malformed, unsupported or ambiguous evidence.
+3. Join, do not substitute: exact main-process success **and** both case
+   receipts, all pinned descendant exits, uninterrupted epoch binding,
+   collected unit, absent cgroup, unchanged parent state and exact fixture
+   cleanup. Unit not-found after a bound run is a cleanup observation only.
+   Any observed replacement, manager disconnect that loses continuity, or
+   failing/unknown cleanup still refuses even with a normal-zero status.
+   Keep the spent charge and retain failure evidence; no retry.
+
+**Rejected shortcuts.** No `waitid(P_PIDFD)` on systemd's non-child,
+post-collection status lookup by unit name, journal scrape, wrapper exit
+alone, new post-stop helper, or name-based stop. In particular
+[`systemd-run --wait` in v259](https://github.com/systemd/systemd/blob/v259/src/run/run.c)
+can translate manager success into CLI exit zero; that is not the exact
+worker wait status. Manager references could extend object lifetime but
+change the submission/collection protocol; no fallback or new bus
+authority is selected. Other kernels/backends remain unsupported here.
+
+**Next gate.** First test a supplied terminal observation against its bound
+attempt: normal zero after collection, missing EXIT bit with zero field,
+nonzero/signaled exit after good case evidence, unreadable/short/error
+response, wrong or reused handle, expiry, replacement and missing cleanup.
+Then review ABI acquisition and request a separately scoped disposable
+non-child/post-reap capability check if needed *before* spending the only
+managed attempt. No actual launch-plan pin, ioctl, canary, manager change,
+or private dispatch is approved by this review.
+
+C8ah compares exact supplied source and fixture hashes, command
+specification digest and fixed limit policy. The expected source list must
+be reviewed against actual transitive imports (including launch helpers);
+equality against a short list does not establish closure. The command
+specification must cover the full new-mode argv/environment, startup and
+self-exit contract, and positive/negative fixture composition. No pins for
+an actual launcher are selected here. Still require separate terminal and
+cleanup evidence; no charge or native operation.
+
+## C8ag dedicated test evidence anchor — verified; approval unused
+
+Roger approved creating and pinning only
+`/home/roger/.starfur-c8l-test-evidence` in StarFur-Forge WSL as roger.
+Opened each directory component without following links on the same Linux
+filesystem; required a vacant name, then synchronized the new directory
+and its parent. Rechecked the linked identity, parent chain and empty
+directory. Pinned UID **1000**, device **2096**, inode **13634**, mode **0700**.
+This is test-only state, outside both the repo and disposable canary fixture.
+No charge receipt, deletion, fixture, or manager operation occurred.
+Reopen without following links and revalidate this independent pin at
+preflight. Drift or absence refuses; do not recreate or repin. Still need
+the independently reviewed launch-plan digest and verified terminal/cleanup
+evidence design before any native wiring or submission.
+
+C8af fixes a versioned receipt digest over the C8l approval label, test
+directory UID/device/inode and exact loader/launch-plan digests. The latter
+must independently cover the fixed fixture/controller source and unit/limit
+policy. Equality is not grant verification or freshness. Before integration
+choose and pin the stable Linux directory and the separately reviewed plan;
+reject restart drift rather than repinning from live observations. No
+directory creation, measurement, real charge, or canary submission here.
+
+C8ae implements the approved test-only charge receipt over a borrowed,
+already durable Linux directory. One fixed filename per approval prevents
+changing a run token from bypassing exclusivity. File and directory sync
+are required before return. A partial entry stays in place and refuses
+already-used charging; an uncertain failure is not permission to retry
+even if a crash later loses the entry. A future controller must independently
+bind the exact approval, preflight digest, and stable directory across
+restart. Absence, replacement, or reinstall cannot grant another attempt.
+No real receipt directory selected or changed; tests use disposable state.
+
+## C8ac startup before invocation binding — design review complete; no native run
+
+**Observed:** `private_worker_loader_smoke.main()` checks for a vacant unit
+name, invokes `systemd-run` with a four-second client timeout, then sets
+`binding` only after `check_unit()`. Its failure cleanup skips stopping the
+unit if binding is absent. The worker waits for a fixture-local `go` before
+supervising any canary, but waits indefinitely after publishing success.
+On both ordinary completion and bound failure the controller reads the
+invocation ID and separately calls `systemctl stop <name>`. The existing
+checks on unit properties test neither a lost start reply nor replacement
+between that final read and stop. No such event was observed in this review.
+
+**Decision for the proposed cooperative mode only:** use one start request,
+a gated worker which exits by itself, and read-only manager reconciliation.
+Do not reuse the indefinite post-result wait or call stop by name. Python's
+[client timeout](https://docs.python.org/3/library/subprocess.html#subprocess.run)
+does not cancel an already submitted manager job. The systemd
+[StopUnit interface](https://www.freedesktop.org/software/systemd/man/latest/org.freedesktop.systemd1.html)
+takes a name and job mode, not an expected invocation ID. The 10 s
+[runtime limit](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html#RuntimeMaxSec=)
+applies to an active service; it is not a bound on a queued start or proof
+that termination finished within the 2 s grace.
+
+| Controller checkpoint | Permitted outcome |
+|---|---|
+| Before sending start | Complete fresh preflight; reserve a unique case/fixture and record the one-shot attempt as charged **before** entering the submitting call. Preserve this boundary across controller interruption. Ambiguous recovery never replenishes approval. |
+| Start submitted, not fully bound | Timeout, nonzero return, malformed/missing manager evidence, late ready record or manager disconnect: terminal refusal. No go, second start, cancel, stop, kill, deletion or later adoption. Bounded read-only checks may report what is visible, but one not-found/absent sample cannot rule out a queued start. Keep the exact fixture for review; report startup/cleanup unverified. |
+| Successful start response, worker waiting for go | Require consistent nonzero invocation ID, manager properties, exact MainPID/pidfd, epoch, argv, uid, cgroup and verified limits plus fresh fixture binding before go. The worker must independently reject stale go using the same attempt identity and absolute monotonic expiry, not a fresh relative timeout after delayed activation. Publish go at most once; ambiguous publication counts as possibly delivered. |
+| Bound worker finishes or fails | New mode exits naturally after publishing a bounded terminal result, rather than waiting for name-based shutdown. Preserve independent watchdog and existing verified limits. Never adopt a replacement epoch or signal by number/name. A pidfd becoming readable proves exit, not successful status or tree cleanup. Require both exact case results, descendant-exit evidence, bound worker terminal evidence, unit collection, cgroup absence, unchanged parent and exact fixture cleanup before PASS. Lost evidence, expiry, or name reuse refuses; no auto-retry. |
+
+**Fake gate (C8ad):** review supplied observations for interruption before/after charging, delayed
+activation past expiry, missing then late ready, invalid/all-zero or changing
+epoch, manager disconnect before and after go, result followed by timeout,
+replacement before collection, and verified clean self-exit. Assert one
+start charge maximum and no stale/duplicate go in the fake lifecycle.
+No manager mutations or filesystem effects are callable; fixture removal is
+only a supplied observation after retirement. Keep fixture
+retention distinct from successful cleanup. A fake pass cannot demonstrate
+native timing, manager behavior or safe private dispatch. No new manager
+properties, service changes, legacy-mode retrofit, or broader cleanup grant.
+Durable charging, acquisition/verification of evidence, worker-side one-use
+consumption and actual orchestration remain separate.
+
+C8y provides a disconnected child slot contract over injected operations.
+It requires exactly the two transferred sources already isolated from other
+descriptors, then verifies 4/5 before returning. Refusal is terminal to a
+future caller even if cleanup was attempted. The real inventory adapter,
+native consuming wait, inventory acquisition and native wiring remain deferred.
+
+## C8x cooperative pre-exec and supervisor review — design complete; do not launch
+
+**Verdict.** Keep the C8w channel factory and the existing sealed root. Do not
+connect the exchanges to the old `stage()` case loop as written. It closes
+descriptors before the pre-exec gate, retains a decoy at fd 3, and uses
+`waitpid` for every case. Those are the older modes' contracts. The new
+case needs its own explicit selector, unit identity, two fixtures and
+success receipt. No production entry point. Nothing ran for this review.
+
+| Owner | Required handoff / refusal |
+|---|---|
+| Sealed namespace init (sole parent/reaper) | Preload an exact reviewed module set under the existing isolated Python invocation before root detachment (including lazy native imports); do not add a general module search path. Verify single thread, child-reaping disposition including no auto-reap, private proc mount, pinned sealed loader identity/4 KiB layout and all existing guards. Create fresh channels per case. Fork behind a distinct pre-exec gate; close the parent's child ends, bind the gated direct child and obtain outer pin acknowledgement before opening that gate. Never pass the supervisor socket or proc anchor to the fixture. |
+| Pre-exec child | Close opposite ends and control copies through their owners; consume and close the pre-exec gate first. Do not assume any allocated number, including 0–5, is free. Keep both source ends safe in distinct close-on-exec scratch slots above 5 before replacing either target; retire old owners before any number can be reused. Refuse unknown occupied targets. Only the release **reader** becomes blocking. Verify final identity, direction, blocking and inheritance on ready writer **4** and release reader **5**. The parent's ready reader and release writer remain nonblocking. |
+| Final exec inventory | Child checks its actual complete open set, not a supplied two-row list. Account for the inventory scan's own temporary descriptor(s) by construction; do not blindly ignore a third entry or every bad-fd error. Exactly 4 and 5 may remain: no stdio, fd 3, control socket, proc anchor, gate, or scratch descriptors. No concurrent fd mutation, subsequent imports or fd-opening callbacks before exact exec. A setup failure exits distinctly before fixture entry; it must not fall through or unwind stale numeric-fd owners. |
+| Positive / negative controls | Same fixed main, resident-request intermediate and measured loader; only positive has the leaf. Positive: ready byte then EOF, bounded validated map, one release, exact exit 42. Negative: empty ready EOF, never release, exact exit 127. No raw maps in receipts. A match concerns the pinned loader's file-backed pages at cooperative entry, not a kernel-held stop or general dependency closure. |
+| Cleanup / publication | One shared monotonic acceptance deadline; independent existing managed-unit timeout/kill backstop. Distinguish release attempted from accepted success. Give the sole supervisor ownership of the **consuming** pidfd wait in both cases; prefer a non-consuming negative observation followed by one supervised reap. Record consumption before checking status/deadline. No second reap by numeric PID, broad wait, repeat release, or automatic retry. Unknown startup/cleanup stays unknown; never stop by name without verified invocation identity. No PASS until both statuses, all pinned exits, unit/cgroup absence, fixture cleanup and unchanged parent state are verified. |
+
+**Why not wire it now?** C8z replaces the consuming negative wait with
+`observe_missing_leaf()` using WNOWAIT; a refusal cannot consume status.
+C8ab adds a disconnected consuming-wait contract. The future adapter must
+use the exact reserved pidfd and a nonblocking consuming wait. No status,
+unknown outcome and consumed status are distinct. Never repeat the
+acceptance wait; separately owned managed-scope cleanup is still required.
+No native waiter is connected.
+`capture_and_release()` checks time after its one-byte write. C8aa makes
+the sole parent preallocate one release record per positive case. It records
+the attempt before write and confirms the byte before that post-write fence.
+On failure consume neither a second byte nor a second record for that case;
+this is local bookkeeping, not child delivery or terminal success.
+`check_descriptor_split()` explicitly cannot see omitted descriptors.
+`close_except()` is a cleanup pass, not independent inventory evidence.
+These are integration blockers, not evidence of a failed native experiment.
+Linux documents the distinction between shared file status and per-fd flags
+in [dup(2)](https://man7.org/linux/man-pages/man2/dup.2.html) and between
+observation and consuming wait in [wait(2)](https://man7.org/linux/man-pages/man2/waitpid.2.html).
+
+**Implementation order.** (1) Disconnected child handoff with mock tests:
+overlapping/swapped slots, stdio holes, occupied targets, extra open fds,
+partial duplication/close failures, wrong blocking modes and stale-owner
+cleanup. (2) Single-owner reap and release accounting: expiry on either
+side of write/wait, unexpected exit/signal, no double action.
+(3) Fake end-to-end supervisor: both cases, pin-before-go, isolated imports,
+private maps denial, startup before epoch binding, timeout and incomplete
+cleanup. No host-proc fallback, tracing, capability or policy change.
+(4) Review the implemented wiring and fresh exact preflight before spending
+the single existing conditional attempt. No live smoke at this checkpoint.
+
+## C8u loader layout review — complete; C8v page policy approved
+
+The exact installed loader still hashes to the previously reviewed
+`c0b20d6e1ced12abfe0b1ef2b5b68017950beaaea3df69eb6949d73e0ecf7b40`.
+Read-only `readelf -lW` showed four PT_LOAD headers and one GNU_RELRO
+header; `getconf PAGESIZE` returned 4096. This is a static observation,
+not an atomic launch preflight or observed process map. No loader canary ran.
+
+Candidate file-backed coverage relative to the loader base:
+`0x00000..0x01000 r--p`, `0x01000..0x30000 r-xp`,
+`0x30000..0x3d000 r--p`, `0x3d000..0x3e000 rw-p`; file offsets match
+relative addresses for this ELF. Read-only coverage crosses the rodata /
+RELRO boundary at `0x3b000`. The anonymous BSS tail is not part of the
+file-backed loader identity comparison. Independently verify these
+expectations from the pinned artifact used for the attempt. See the
+[glibc RELRO protection code](https://github.com/bminor/glibc/blob/master/elf/dl-reloc.c)
+and [Linux VMA metadata](https://docs.kernel.org/mm/process_addrs.html).
+
+Roger approved cooperative-only comparison of exact 4 KiB page coverage.
+Normalize only
+adjacent columns of the same measured loader with equal permissions and
+contiguous addresses **and** file offsets. Deny gaps, overlaps, duplicate
+instances, alternate names/inodes, and any permission/offset difference.
+Keep the existing C8g/C8h strict comparator behavior for its callers.
+Neither option changes the fixture's threat model or proves arbitrary
+worker isolation. The one synthetic-run approval remains unused.
+
+## C8m fixed cooperative entry — completed; WSL verified
+
+Roger approved synthetic preparation and one actual attempt after review,
+tests and exact preflight. This slice produces fixed entry bytes in memory
+only: readiness byte and close, exact release byte, then relocated exit
+value. Invalid I/O refuses; no code path exposes these bytes to an existing
+runner. Fourteen focused tests passed in WSL. No launch, private maps read
+or process changes; approval unused.
+
+Next: review and prepare separately selected native descriptor/anchored
+maps/cleanup plumbing, including independent sealed-loader identity and
+page/RELRO shape. Verify unchanged constraints; do not infer that the byte
+tests establish post-load kernel behavior or authorize repeated attempts.
+
+## C8l native producer contract — design review completed; execution not approved
+
+**What exists.** In `private_worker_loader_smoke.stage()` the pre-exec
+gate is closed before exec; the current canary only retains its sealed
+decoy directory. The outer supervisor owns process handles, not an in-root
+release channel. The resource helper verifies a transient unit with a 10 s
+active runtime, 2 s stop grace, cgroup-wide kill, and no restart. Those
+settings are a backstop, not proof that a blocked read returned or a task
+was reaped. The fake C8k review observes only supplied data.
+
+**Proposed ownership.** Keep the pre-exec handshake distinct. For each
+case create fresh, private, initially close-on-exec anonymous pipes. Inside
+the sealed fixture, init keeps only the readiness reader and release
+writer; the exact child gets only the readiness writer and release reader
+of these pipes. Before exec close all opposite and duplicate ends and
+verify exact pipe identity, access direction, and descriptor inventory
+under the existing private proc anchor. Permit inheritance only for the
+two exact designated ends; do not inherit the control socket, proc handle,
+or outer watchdog handles. Parent and child ends must bind to the same
+two distinct pipes. No generic descriptor pass-through. Keep existing
+loader modes and their descriptor policy unchanged.
+
+**Ordering.** Positive: require exactly one readiness byte followed by
+EOF before opening maps; extra bytes, EOF before the marker, and lack of
+EOF by deadline all fail. The negative control must produce EOF without
+any marker and reap at 127; it never gets a release token. Only the
+trusted init can release the positive, once, after bounded read, stream
+close, map validation, and final task/deadline checks. A wrong token,
+broken pipe, EOF without a token, or any failed check is not release.
+The marker's meaning still depends on reviewing the exact fixture control
+flow and sealed dependencies; this protocol is not a kernel-enforced stop.
+See [Linux pipe byte-stream and EOF semantics](https://man7.org/linux/man-pages/man7/pipe.7.html).
+
+**Deadline and failure ownership.** One monotonic attempt deadline covers
+readiness, capture, release, and terminal wait, with the existing 64 KiB
+plus overflow probe and a stricter one-second capture acceptance interval.
+The outer controller and verified service-manager runtime/kill limits are
+independent of the potentially blocked init. A timeout closes the acceptance
+path immediately; kill only the exact managed test scope. If the kernel
+does not promptly release a blocked task, record unverified cleanup and stop,
+not a successful timeout or retry. Do not publish until both cases are
+reaped, process/cgroup/unit exit and fixture cleanup are verified, and
+parent state is unchanged. See
+[systemd runtime limits](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html#RuntimeMaxSec=)
+and [kill policy](https://www.freedesktop.org/software/systemd/man/latest/systemd.kill.html).
+
+**Remaining native eligibility gate.** An anchored proc directory does
+not grant access to maps; Linux applies its read credential check to the
+file. This review did not probe the post-drop fixture, derive the loader's
+page/RELRO layout, or review new fixture bytes. Refuse an unavailable
+private proc read; no host-proc fallback, privilege/dumpability change,
+or weakening of the tracing guard. Roger later approved preparation and
+one run conditioned on reviewed code, tests and exact preflight.
+See [proc_pid_maps(5)](https://man7.org/linux/man-pages/man5/proc_pid_maps.5.html).
+
+## C8k targeted design decision — no outer attach; proposed cooperative fixture
+
+**Verdict (2026-11-20).** No safe numeric attach follows from the existing
+topology. In `private_worker_loader_smoke.stage()` the namespace init forks,
+releases and waits for its child; `supervise()` is a different process outside
+that PID namespace. A pidfd pins an identity for pidfd operations, not the
+numeric argument to a later tracing call. An identity mismatch *after* attach
+cannot undo that attach. Reject the outer-tracer path; no permission probe,
+retry, privileged fallback, or change to the inherited in-root guard.
+
+**If a real trace stop is indispensable:** in principle a single direct
+parent that is itself the tracer could reserve its exact single-threaded
+child's PID while alive. It must control all waits and signal dispositions
+(no automatic reaping), never reap or reuse that numeric target before the
+last operation, operate only in a dedicated PID namespace, and have no
+replacement tracer on death. The dead owner cannot issue another attach;
+the watchdog must only cancel through previously owned handles. This is
+not the present topology: making the current guarded init a tracer violates
+its policy. No such redesign is approved. See
+[pidfd lifetime](https://man7.org/linux/man-pages/man2/pidfd_open.2.html)
+and [PID namespace scope and init loss](https://man7.org/linux/man-pages/man7/pid_namespaces.7.html).
+
+**Recommended for the actual experiment:** it needs to count resident-loader
+mappings *after loading* a fixed generated fixture, not certify that arbitrary
+worker code was forcibly stopped. Use a different evidence class: a
+cooperative interval with stable mappings. No ptrace, interrupts, process
+memory reads, or numeric process-control calls. This would not pass C8i's
+held-stop contract. Do not manufacture a C8h pause stamp; reuse only the
+supplied-map comparator and appropriate byte/time bounds.
+
+- The trusted namespace init creates two one-way anonymous pipes for its one
+  child. Only a fixed readiness marker can go out and a single release token
+  can go in. Those fixture-local ends are a **new descriptor exception**:
+  existing C8 uses only the sealed decoy directory across exec. Keep the
+  existing cases unchanged; no outside control socket or host descriptor
+  enters the generated program. Close all duplicate ends; EOF, short/wrong
+  tokens, timeout or interruption are failure, never release. See
+  [pipe lifetime and EOF](https://man7.org/linux/man-pages/man7/pipe.7.html).
+- Prove from the measured, single-threaded fixture and sealed dependencies
+  that the marker is reachable only at application entry after relocation,
+  and that from marker until release no path can change mappings, spawn,
+  exec, or invoke a handler that does so. The marker alone is not proof;
+  it may arrive before the child blocks. Unknown code or signal behavior
+  invalidates this design. It is not a sampling method for real workers.
+- Init is sole parent/reaper and sole release writer. Bind its directly
+  forked child and open its proc directory from the private proc mount
+  before exec under the no-reap invariant. Read bounded maps relative to
+  that handle after readiness, checking identity, lifetime, deadline and
+  independently measured sealed-loader identity/segment shape. No host PID
+  discovery for capture and no success if proc access is denied.
+- Abort on parent/child loss, broken channel, timeout, early exit or
+  uncertain cleanup; no automatic replay. Independent unit watchdog bounds
+  a blocked reader. A valid positive needs exact maps, then release and
+  expected exit 42; a separately bound missing-leaf case must exit 127
+  without readiness. Publish only after both reaps, exact unit/cgroup/fixture
+  cleanup and unchanged parent state. Even a pass concerns this synthetic
+  fixture only, not symbol binding, general dependency closure or private data.
+
+**Approved for fake preparation only.** The disconnected
+`scripts/private_worker_cooperative_review.py` reviews supplied event tuples,
+requiring distinct positive and missing-leaf cases, correct marker and EOF
+before capture, close before release, expected reaps and all cleanup claims.
+It checks the supplied capture interval and existing byte/layout comparator.
+No real pipe is created. A future producer must independently establish the
+observations, hold the release through read and validation, and fence total
+time including blocked I/O. Native wiring/materialization/run remain separate.
+
+## C8j native evidence review — completed; attachment design blocked
+
+**Observed in source.** In `scripts/private_worker_loader_smoke.py`,
+`stage()` creates the gated child and owns its ordinary `waitpid()`;
+`supervise()` owns a pidfd, then sends the release message. `pinned_child()`
+discovers and binds the child before release, but does not reserve its PID
+across exit and reaping. The existing helper never traces. C8h validates a
+bounded supplied maps snapshot; C8i validates a supplied transcript. Neither
+is a source of kernel-observed stop, lifetime, or cleanup evidence.
+
+**Security blocker.** Linux `PTRACE_SEIZE` takes a numeric task ID, not the
+pidfd. Holding the pidfd and rechecking it from either side of attach does not
+make the attach target atomic. If exit and reap permit PID reuse in between,
+even a rejected post-check is too late: attaching with EXITKILL can affect an
+unrelated task. Opening an anchored proc directory protects later acquisition
+from name rebinding; it does not change the attach ABI. Existing LSM, user
+namespace, credential and dumpability checks may also refuse the attach.
+An ancestor relationship on its own proves neither target continuity nor
+host permission. See [ptrace(2)](https://man7.org/linux/man-pages/man2/ptrace.2.html)
+and [pidfd_open(2)](https://man7.org/linux/man-pages/man2/pidfd_open.2.html).
+
+**Required design before code.** Prefer a bounded tracing topology in which
+the tracer cannot address unrelated host tasks and a trusted parent retains
+the exact child's task identity across the attach interval, including error,
+timeout, parent loss and namespace teardown. Neither a no-reap handshake on
+the success path nor a proc check after attach suffices. The design must name
+the single wait/event owner, ordinary parent/reaper, independent deadline and
+cleanup owner, and show what prevents a numeric action against a recycled
+task on every failure path. Keep the existing in-root ptrace denial and
+namespace/resource guards. If this cannot be shown without relaxing host
+policy or expanding the tracer's authority, remain unsupported.
+
+**Held-stop evidence after the attachment issue is solved.** Only the
+single tracing owner can resume the task. It must accept one expected exec
+and the exact generated application's post-relocation entry stop. In the
+explicit-loader path the exec event binds the loader invocation, not proof
+that the application entry ran. From the accepted entry stop through stream
+close and final comparison, the owner has no resume/detach path. Its
+watchdog can fence/terminate, never resume; death, unexpected wait status,
+deadline, unverified reap or owner loss suppress all success publication.
+An independently pinned layout, separately correlated missing-leaf control
+and complete unit/fixture/parent cleanup still gate publication. A stop
+poll, child report, or C8i transcript cannot supply these facts.
+
+**Next gate.** Targeted Astra review of the task identity/reservation and
+tracer/reaper topology, before writing a native adapter. No native attach,
+process probe, fixture generation or launch authorized by this review.
+
+## C8i held-stop supervisor — fake lifecycle verified; native pending
+
+The following is the prior proposed protocol. C8j supersedes the attach
+assumption: the existing pidfd and child gate are not sufficient.
+
+Use a dedicated, trusted outer tracer for the one generated x86-64 canary.
+Reuse the loader smoke's paused-before-exec gate and owned pidfd. Pin and
+cross-check the exact child, unit invocation, task identity, and OS start
+identity before attaching. Open an anchored proc directory while the same
+child is demonstrably alive; never rediscover it by name or reopen it by PID
+after capture starts. Target identity checks and tracing policy must fail
+closed on unsupported or ambiguous hosts. No sudo, policy changes, or
+relaxation of the existing in-root ptrace denial.
+
+1. Attach while the canary remains blocked on its trusted pre-exec gate.
+   Require Linux `PTRACE_SEIZE` with `PTRACE_O_TRACEEXEC` and
+   `PTRACE_O_EXITKILL`; correlate the expected exec event before permitting
+   progress to the post-load rendezvous. The generated canary has a fixed
+   entry trap after loader relocation. Require the reviewed trap classification
+   and instruction pointer from the measured fixture, not an app-supplied
+   marker or an arbitrary stop. An extra task, unexpected wait event,
+   unsupported register/signal evidence, or premature exit fails the run.
+2. One tracer owns the stop and capture interval. No resume, detach, signal
+   injection, or register/memory write during capture. A pair of stopped
+   observations (including SIGSTOP) is not evidence of uninterrupted pause.
+   Abort if the tracee dies or the stop/identity is lost; a successful read
+   alone is not success. This relies on a trusted host, not protection from
+   a privileged host or an untrusted process with equivalent control.
+3. From the pinned proc handle, acquire one bounded maps snapshot via C8h.
+   Keep the 64 KiB/one-second acceptance fence; a separate supervisor deadline
+   and cleanup owner are required because polling a deadline does not cancel
+   a blocked read. Derive expected segment layout, page rounding and RELRO
+   splits independently from pinned loader bytes and reviewed page size;
+   bind device/inode to its sealed image member. Require one expected mapped
+   instance, reject alternate/deleted paths, and independently establish
+   sealed namespace contents. Maps metadata alone is not executable identity.
+4. Use a separate missing-leaf negative control that exits without reaching
+   the post-load stop. Release no result until both controls and cleanup pass:
+   exact owned task exit/reap, unit/cgroup empty and fixture cleanup, unchanged
+   parent state. On failure kill only exact owned tasks through existing pidfds;
+   retain incomplete evidence and stop rather than retry. EXITKILL backs up
+   tracer loss; it does not prove cleanup on its own.
+
+The disconnected `scripts/private_worker_hold_lifecycle.py` checks a fixed
+synthetic transcript before returning the supplied bounded mapping summary.
+It requires separate positive/negative task stamps and cleanup claims. An
+incorrect event, reentry, early exit, or failed cleanup refuses; it cannot
+detect an omitted real event or measure continuity. Existing C8h stream
+bounds remain unchanged. Focused C8i/C8h WSL: 17 PASS. See C8j above for the
+unresolved attachment boundary.
+Live attach, fixture materialization, unit creation and execution require a
+later separately reviewed and authorized scope. No claim of actual loader
+reuse, private input eligibility, or production isolation.
+
+## C8h supplied snapshot capture — COMPLETED / WSL VERIFIED
+
+Require a trusted caller's exact PID/start/invocation/pause stamp equality
+before open and after comparison, 64 KiB plus overflow probe and one-second
+monotonic acceptance fence. Always close the owned stream; deadline checks
+cannot interrupt a blocked adapter. No PID lookup, OS adapter or process
+control. Future supervisor must actually own the stop, establish uninterrupted
+pause (not just matching PID or stopped state), bind pidfd, anchored proc
+handle and unit epoch, and independently supply measured loader identity and
+expected layout. Native materialization, wiring and execution remain gated.
+Focused 29 PASS; full 1,661 OK (one skip). Next implementation gate: review the
+supervisor-owned post-load pause protocol, anchored snapshot acquisition,
+independent mapped-file layout and identity, negative control and cleanup.
+Passing fakes does not establish that the process ever stopped.
+
+## C8g supplied-map observer — COMPLETED / WSL VERIFIED
+
+Match one exact mapped layout at one base with separately supplied device,
+inode and segment shape. Reject duplicate layouts, same-name shadows, deleted
+or alternate paths for that inode, malformed rows and shape drift. No proc
+acquisition or completeness proof. A future test needs an independently
+measured loader, reviewed layout including RELRO splits, stopped post-load
+canary binding and revalidation, bounded acquisition and complete sealed
+namespace evidence to rule out renamed code. Negative control and cleanup
+remain mandatory. Focused 23 PASS; full 1,655 OK (one skip). No live or
+materialization grant.
+
+## C8f inert resident-interpreter fixture — COMPLETED / WSL VERIFIED2026-11-19
+
+Only generated bytes: intermediate requires both the synthetic leaf and bare
+ld-linux-x86-64.so.2, with no search tags or imported loader symbols. C8e
+fixtures and helper behavior remain unchanged. Future native proposal needs
+fresh scope and must distinguish actual resident reuse from a second loader
+mapping: one measured interpreter, no library-path alias copy, exact observed
+mapping identity/count, and a negative control showing missing dependencies
+cannot silently pass. Exit status alone is not mapping evidence. No new unit
+or materialization allowed; no runtime/dlopen/CPU/private readiness change.
+Focused29 PASS; full1,651 OK with one expected skip. Next approval would cover
+preparation of a test-only observer and reviewed mapping instrumentation only;
+no native unit until exact observation, fixture, limits and cleanup are scoped.
+
 ## C8e NATIVE WSL PASS2026-11-19 — approval consumed
 
 Single authorized command exit0:

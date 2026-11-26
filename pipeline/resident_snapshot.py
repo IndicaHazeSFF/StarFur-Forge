@@ -12,6 +12,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from pipeline.resident_action import RESIDENT_ACTION_SOURCES, resident_action_kind
+
 
 RESIDENT_SNAPSHOT_SCHEMA_VERSION = 1
 _ACTIVITIES = frozenset({
@@ -34,6 +36,19 @@ def _bounded_mapping(value: object, *, allowed: frozenset[str]) -> dict[str, Any
     return {key: value[key] for key in allowed if key in value}
 
 
+def _resident_action_public(value: object) -> dict[str, str] | None:
+    kind = resident_action_kind(value)
+    if kind is None:
+        return None
+    result = {"kind": kind}
+    source = value.get("source")
+    if isinstance(source, str) and source in RESIDENT_ACTION_SOURCES:
+        result["source"] = source
+    if value.get("storage") == "restart_ephemeral":
+        result["storage"] = "restart_ephemeral"
+    return result
+
+
 def _bounded_route_trace(value: object) -> list[dict[str, object]]:
     if not isinstance(value, (list, tuple)):
         return []
@@ -44,9 +59,12 @@ def _bounded_route_trace(value: object) -> list[dict[str, object]]:
         fields = {key: item.get(key) for key in (
             "requested_task_id", "selected_task_id", "provider", "model", "fallback_used", "outcome",
         )}
-        if not all(isinstance(fields[key], str) and fields[key] for key in ("requested_task_id", "selected_task_id", "provider", "model")):
+        if not all(isinstance(fields[key], str) and 0 < len(fields[key]) <= 256
+                   for key in ("requested_task_id", "selected_task_id", "provider", "model")):
             continue
-        if len(fields["model"]) > 256 or not isinstance(fields["fallback_used"], bool) or fields["outcome"] not in _ROUTE_TRACE_OUTCOMES:
+        outcome = fields["outcome"]
+        if (not isinstance(fields["fallback_used"], bool)
+                or not isinstance(outcome, str) or outcome not in _ROUTE_TRACE_OUTCOMES):
             continue
         resource_profile = item.get("resource_profile")
         if isinstance(resource_profile, str) and resource_profile in {"interactive", "balanced", "background"}:
@@ -88,6 +106,20 @@ def _resident_focus_mode_public(value: object) -> dict[str, object]:
         "enabled": isinstance(value, Mapping) and value.get("enabled") is True,
         "storage": "session_ephemeral",
     }
+
+
+def _resident_candidate_count(value: object) -> int:
+    return value if type(value) is int and value >= 0 else 0
+
+
+def _resident_candidates_public(value: Mapping[str, object]) -> dict[str, object]:
+    candidates = _bounded_mapping(value, allowed=frozenset({
+        "ordinary_count", "mutation_count", "storage",
+    }))
+    for name in ("ordinary_count", "mutation_count"):
+        if name in candidates:
+            candidates[name] = _resident_candidate_count(candidates[name])
+    return candidates
 
 
 def _resident_sandbox_public(value: object) -> dict[str, object]:
@@ -147,7 +179,10 @@ def _resident_tool_status_public(value: object) -> dict[str, object]:
         "terminal_count": 0,
         "storage": "session_ephemeral",
     }
-    if not isinstance(value, Mapping) or value.get("schema_version") != 1:
+    if not isinstance(value, Mapping):
+        return default
+    version = value.get("schema_version")
+    if type(version) is not int or version != 1:
         return default
     names = (
         "total_count", "pending_review_count", "approved_count", "queued_count",
@@ -236,16 +271,16 @@ class ResidentSnapshot:
     def activity(self) -> str:
         provider_configured = self.provider.get("configured") is True
         resident_action = self.persona.get("resident_action") if isinstance(self.persona, Mapping) else None
-        action_kind = resident_action.get("kind") if isinstance(resident_action, Mapping) else None
+        action_kind = resident_action_kind(resident_action)
         return derive_resident_activity(
             provider_lifecycle=self.lifecycle,
             provider_configured=provider_configured,
             adventure_turn_active=self.turn.get("active") is True,
-            ordinary_candidate_count=int(self.candidates.get("ordinary_count", 0)),
-            mutation_candidate_count=int(self.candidates.get("mutation_count", 0)),
+            ordinary_candidate_count=_resident_candidate_count(self.candidates.get("ordinary_count")),
+            mutation_candidate_count=_resident_candidate_count(self.candidates.get("mutation_count")),
             roleplay_active=self.roleplay.get("active") is True,
             adventure_mounted=self.adventure.get("mounted") is True,
-            explicit_resident_action=isinstance(action_kind, str) and action_kind != "idle",
+            explicit_resident_action=action_kind not in (None, "idle"),
         )
 
     def public_dict(self) -> dict[str, object]:
@@ -254,8 +289,11 @@ class ResidentSnapshot:
         if isinstance(self.persona, Mapping):
             persona = _bounded_mapping(self.persona, allowed=frozenset({
                 "persona_id", "display_name", "dynamic_traits", "momentary_state",
-                "development", "real_world_relationship_count", "resident_action", "storage",
+                "development", "real_world_relationship_count", "storage",
             }))
+            action = _resident_action_public(self.persona.get("resident_action"))
+            if action is not None:
+                persona["resident_action"] = action
         return {
             "object": "starfur.resident_snapshot",
             "schema_version": RESIDENT_SNAPSHOT_SCHEMA_VERSION,
@@ -287,9 +325,7 @@ class ResidentSnapshot:
                 "active", "title", "storage",
             })),
             "adventure_turn": _resident_turn_public(self.turn),
-            "candidate_inbox": _bounded_mapping(self.candidates, allowed=frozenset({
-                "ordinary_count", "mutation_count", "storage",
-            })),
+            "candidate_inbox": _resident_candidates_public(self.candidates),
             "routing": _resident_routing_public(self.routing),
             "focus_mode": _resident_focus_mode_public(self.focus_mode),
             "sandbox_execution": _resident_sandbox_public(self.sandbox_execution),

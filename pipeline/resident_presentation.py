@@ -11,6 +11,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from pipeline.resident_action import resident_action_kind
+
 
 _VISUAL_BY_ACTIVITY = {
     "idle": "idle",
@@ -91,7 +93,7 @@ class ResidentPresentationPlan:
         # A real provider/session activity always wins. A resident action can
         # affect visual idle behavior only while Core reports no busier state.
         resident_action = persona.get("resident_action") if isinstance(persona, Mapping) else None
-        action_kind = resident_action.get("kind") if isinstance(resident_action, Mapping) else None
+        action_kind = resident_action_kind(resident_action)
         visual_state = (
             _VISUAL_BY_RESIDENT_ACTION[action_kind]
             if activity == "idle" and action_kind in _VISUAL_BY_RESIDENT_ACTION

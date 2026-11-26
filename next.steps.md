@@ -1,80 +1,32 @@
-# Rotating development handoff
+# StarFur Forge handoff
 
-Updated2026-11-19: C8e NATIVE WSL PASS; one approval consumed, no repeat.
+## Resume here
 
-## Local commits versus verified remote backup
+**Checkpoint:** Five H1 read-model slices complete; 67 focused and 74 shared regression tests passed. Native C8l stays parked with no revised cleanup contract.
 
-Latest local commit4fd221da1906c0e04ebbe77f08fd601a688fba93 (preparation/blocker).
-Earlier local d6e1bdbd89074a6f36c0b04b734d8c01cc513d29 also unpushed.
-GitHub last independently verified4e8f48d69990df7200d8a4be7117d2d48150007f.
-GitHub mutations remain held; no push. Windows index separate/stale.
-All20 accumulated paths below remain remotely unbacked, do not rotate/clear.
-Current outcome records locally uncommitted; exact8 documentation sync verified.
-Counter10 preparation gates +1 native=11; no filler, duplicates or rotation.
+**Next:** choose the next bounded independent slice. H1 art packages, scheduling and native work remain pending. Do not wire native manager/cleanup or spend C8l; see the [verification plan](docs/private_annotation_verification.plan.md).
 
-## Completed scope and evidence
+## Live authorizations, blockers and checks — never rotate out
 
-C8e preparation focused38 PASS(0.049s), full1,649 OK/one expected skip(26.036s).
-Initial test exception mismatch corrected, same focused gate counted once.
-Old bda779...cec14 loader pin refused preflight without native attempt.
-Roger accepted new exact SHA256 on2026-11-19 after read-only package consistency
-review; that review is NOT package authentication or proved update cause:
-c0b20d6e1ced12abfe0b1ef2b5b68017950beaaea3df69eb6949d73e0ecf7b40.
-Fresh coupled8-source/8-doc/actual-loader/controller/registry preflight PASS.
-Single approved native command exit0, intended42/decoy13/direct-missing127/
-transitive-missing127. Six pidfd/epoch/argv/uid/cgroup bindings, kernel caps,
-root/binfmt/socket/cwd prerequisites, all exits and complete unit/cgroup/fixture
-cleanup verified; parent state unchanged. No failed fixture or lingering helper.
-No vendor/model/GPU/private/Windows data, host network workload, package/
-service/config or GitHub mutation. Native approval CONSUMED; no automatic retry.
+- **C8l managed canary: one conditional attempt, UNUSED.** Requires reviewed fixed synthetic fixture/supervisor, exact source/loader/plan pins and passing fresh preflight. Same existing 1 CPU / 256 MiB / no swap / 16 tasks / 10 s + 2 s envelope. Test-only receipt anchor `/home/roger/.starfur-c8l-test-evidence`, UID 1000, device 2096, inode 13634, mode 0700, last verified empty. Refuse rather than recreate, repin, reset or adopt; charge durably before submission. No retry, name-based stop, tracing, host fallback, privilege/config changes or private input. Ambiguous start withholds go and retains evidence. C8e managed lookup and C8al disposable capability grants were separately **consumed**, not reusable.
+- **Private processing disabled.** A synthetic pass would not establish actual worker/plugin or dlopen closure, CPU-only behavior, descendant-exec enforcement, deployment freshness, private IPC/admission or per-job consent. C1/C2/C7a denials remain. C8e's accepted loader digest and detailed synthetic outcome are recorded in the verification plan/worker sprint; historical pins are not fresh preflight. Murr's apartment is not gated by this track.
+- **No manual smoke due.** Disposable annotation operator workflow passed; Fortnite coexistence failed previously and its frame-time recheck is pending. Real approved-result walkthrough is blocked until processing exists. [Operator notes](user.smokes.md) govern distinct acceptance, not the development counter.
+- **Run limits:** latest run: five slices maximum on Sol Medium, stop at 10% five-hour remaining or earlier gate. Leave WSL lifecycle alone. No commit or GitHub mutation authorized by this run.
 
-## Next dependency / authority
+## Verification and backup — never clear on recap rotation
 
-This is fixed synthetic direct-loader/transitive lookup evidence only.
-Resident-interpreter SONAME reuse, actual runner/plugin compatibility, runtime
-code/dlopen closure, CPU-only behavior, descendant-exec enforcement and private
-IPC/admission/image freshness remain unresolved; C1/C2/C7a denial unchanged.
-C8c/C8d unresolved requirements cannot be cleared by this fixture pass.
-Next may propose/prepare a narrow resident-loader reuse fixture under ordinary
-inert source/test authority; no next native unit/materialization/execution
-without fresh exact scope. No production worker/private dispatch permission.
-Murr apartment remains first tangible goal, not gated on worker completion.
+- **WSL:** Five H1 slices hash-verified. [Copy queue and receipts](session.files.md).
+- **Counter:** 44 successful required runs; four follow-ups shared one run, cadence held.
+- **Local WSL:** `2ecaf347a50797b7ed5c8cf8d24bea9cddd2e409` unchanged. **GitHub:** verified `ce83a759a0b14517347051ff14d1938de971b2f2` adds only the pre-distillation RAR; reconcile before any later authorized push, no force. [Exact unbacked paths](development.unbacked.md).
 
-## Operator / quota / lifecycle
+## Last five completed slices (newest first)
 
-No manual smoke now; preserve user.smokes.md. Prior Fortnite coexistence
-acceptance remains failed/pending visual frame-time recheck, not solved here.
-Latest requested cutoff10% five-hour remaining, stop earlier at safety/scope
-gates. User active: leave distro lifecycle alone; test unit/fixtures cleaned.
-Local verified commits allowed at clean stop; GitHub push held until clarified.
-No blanket service/WSL configuration or distribution lifecycle authority.
+1. **H1 tool aggregate version** — exact integer schema label.
+2. **H1 candidate summary** — valid counts alone drive review.
+3. **H1 route trace** — bounded labels and malformed-record rejection.
+4. **H1 visual mapper** — malformed optional action falls back to idle.
+5. **H1 action projection** — bounded fields and recognized zero-provider cues (67 WSL PASS).
 
-## Copy / test / commit / push status
+The four follow-ups passed the shared 74-test WSL gate.
 
-All source/test checkpoints verified; native result verified.
-Current exact8 outcome documents copied/hash verified. Local commit due;
-no push or remote-backed rotation. Counter11 retained until verified backup.
-Unrelated COMMANDS/bytecode/runtime untouched.
-
-## Exact accumulated remote-unbacked allowlist
-
-- AGENTS.md
-- CHANGELOG.md
-- ROADMAP.md
-- next.steps.md
-- session.files.md
-- 2026-11-01.annotation-worker-design.sprint.md
-- docs/private_annotation_verification.plan.md
-- user.smokes.md
-- pipeline/document_job_worker_member_binding.py
-- tests/test_document_job_worker_member_binding.py
-- pipeline/document_job_worker_search_form.py
-- tests/test_document_job_worker_search_form.py
-- pipeline/document_job_worker_launch_profile.py
-- tests/test_document_job_worker_launch_profile.py
-- pipeline/document_job_worker_lookup_requirements.py
-- tests/test_document_job_worker_lookup_requirements.py
-- scripts/private_worker_loader_smoke.py
-- tests/test_private_worker_loader_smoke.py
-- scripts/private_worker_lookup_fixture.py
-- tests/test_private_worker_lookup_fixture.py
+Durable evidence: [CHANGELOG.md](CHANGELOG.md), the [worker sprint](2026-11-01.annotation-worker-design.sprint.md), [distillation record](2026-11-26.handoff-distillation.sprint.md), and the exact copy receipts. Older routine recaps belong there, not here. LittleBit, recurrent-depth and HybridAgent remain deferred research, not immediate dependencies.

@@ -7,6 +7,7 @@ until a reviewed resident-continuity policy exists.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 
@@ -14,6 +15,12 @@ RESIDENT_ACTION_KINDS = frozenset({
     "idle", "resting", "reading", "working", "waiting", "chatting", "adventuring",
 })
 RESIDENT_ACTION_SOURCES = frozenset({"core_default", "explicit_core"})
+
+
+def resident_action_kind(value: object) -> str | None:
+    """Read a recognized visual action without interpreting other fields."""
+    kind = value.get("kind") if isinstance(value, Mapping) else None
+    return kind if isinstance(kind, str) and kind in RESIDENT_ACTION_KINDS else None
 
 
 @dataclass(frozen=True)
@@ -41,4 +48,4 @@ class ResidentAction:
         return {"kind": self.kind, "source": self.source, "storage": "restart_ephemeral"}
 
 
-__all__ = ["RESIDENT_ACTION_KINDS", "ResidentAction"]
+__all__ = ["RESIDENT_ACTION_KINDS", "ResidentAction", "resident_action_kind"]

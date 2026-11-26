@@ -104,6 +104,14 @@ Initial benchmark families:
 
 Add a small-model scaling benchmark that holds the surrounding StarFur architecture constant while varying model size/quantization. Report memory/retrieval performance separately from reasoning, instruction following, persona quality, and prose quality; the goal is to identify the minimum viable model capacity for reliable resident-assistant behavior.
 
+**LATER / OPTIONAL — LittleBit and sub-1-bit inference.** Evaluate [LittleBit-2](https://proceedings.mlr.press/v306/lee26y.html) as a replaceable local provider experiment, not a Core or resident-apartment dependency. Start with the current Qwen3 8B route, a conventional ~4B quant, and a compatible LittleBit 8B checkpoint using the same held-out synthetic history, StarFur context and output limits. Start with low-stakes resident dialogue; leave structured adventure, research and annotation routes unchanged until separate quality gates pass. Pin and review the checkpoint, loader and runtime; do not assume Ollama/GGUF compatibility or bundle noncommercial research artifacts with Steam.
+
+**Stretch target: a much larger FP16-source model, compressed for a 12 GB GPU.** Treat 12 GB as a measured peak GPU-memory budget at a declared, useful context length, including weights, uncompressed tensors, KV cache, temporary buffers and runtime overhead. Report actual CPU/RAM offload separately; a small file or a run that only fits by spilling to RAM is not a fully GPU-resident pass. Record quality deltas, cold/warm time to first token, decode throughput, and GPU/RAM peaks against a realistic 4-bit baseline. Test game frame times separately with foreground headroom; a model that fills a 12 GB card on its own has not passed gaming coexistence. Pursue larger checkpoints only if the smaller pilot meets its quality and resource goals. No change to the immediate implementation order.
+
+**LATER / OPTIONAL — recurrent-depth small models.** Investigate whether a small model trained to reuse the same layer block across multiple internal passes, as in [GLM-5.4's Loop Transformer](https://z.ai/blog/glm-5.4), makes better use of StarFur's external memory. If a compatible small checkpoint is available, compare it with a conventional model of similar size at comparable quantization, using the same held-out history, retrieval, context and output limits. Include raw-model and StarFur-assisted runs; report task accuracy separately from latency, throughput and peak VRAM/RAM (including KV cache). Shared weights reduce the need for additional weight storage, not the compute cost of a second pass. Do not assume untrained layer repetition or support in the current runtime. Optional provider research only; no Core, apartment or release dependency.
+
+**LATER / OPTIONAL — hybrid latent reasoning (HybridAgent).** Benchmark the [released HybridAgent 8B](https://huggingface.co/togethercomputer/HybridAgent-8B-Agentic) against a text-reasoning Qwen3 8B baseline before considering StarFur integration or custom training. This tests latent steps between generation passes, not recurrent layer depth. Use a reviewed standalone runner with latent mode verified, no live tools or private data, the same held-out synthetic history and retrieved context, and comparable quantization and hardware. Record runner differences, KV precision and CPU offload; measure time to a correct answer, time to first visible reply, structured proposal validity and peak VRAM/RAM. If the released model earns a meaningful win, consider a replaceable provider adapter and then a small supervised pilot on a pretrained checkpoint. Core still owns tool authority and durable memory; latent working state is neither. No dependency for annotation, the apartment or release.
+
 Later add ablation runs that disable individual cognition components and compare full StarFur against those configurations and a raw-model baseline. Benchmark outputs should support local regression checks, technical validation, grant applications, and a public engineering portfolio without retaining unrestricted private conversations by default.
 ## The Persona Runtime
 
@@ -913,6 +921,12 @@ Acceptance includes slider/reset/persistence, minimum/maximum sizes,
 mixed-DPI/multi-monitor transitions, roaming bounds and accurate hit targets at
 each size, and unchanged passive game input. Visual/game checks remain user-run.
 
+**H1 resident action projection COMPLETED (2026-11-26; 67 WSL tests passed).**
+The public snapshot strips extra action fields and rejects unknown kinds without masking zero-provider status. No scheduler or action authority added.
+
+**H1 read-model follow-ups COMPLETED (2026-11-26; 74 WSL tests passed).**
+Malformed actions fall back to idle visuals, route labels are bounded, review counts validated, and tool aggregates require an integer schema label. No native presentation or scheduling change.
+
 #### Ambient Presence (planned; cross-cutting resident capability)
 
 Ambient Presence is the optional, low-friction way for a configured character to
@@ -1380,6 +1394,162 @@ Dependency-driven deviation: a concise user.smokes.md and disposable one-command
 Retention/deadline corrections, advisory metadata bounds and the disposable CLI helper were reviewed against source/tests. Independent repeat validation passed 53 focused tests (one expected platform skip); 24 exact relevant Windows/WSL hashes matched. No blocking defect found in that limited scope; operator acceptance and trusted deployment/consent review remain pending. Declared manifest identity needs release-specific decoder semantics, not assumed whole-file/GGUF equality. Earlier same-chat unbacked foundation files are now explicitly in the accumulated backup scope. No runtime behavior or stage ordering changed; no new commit/push. Audit repetitions do not advance the 8/10 required-run counter. Evidence: `2026-10-31.sol-recovery-review.sprint.md`.
 
 ### COMPLETED W1 / WSL-VERIFIED — private-worker wire foundation (2026-11-05)
+
+**C8ap IDENTITY-BOUND RETIREMENT REVIEW COMPLETED (2026-11-26); native C8l parked.**
+The named fixture cannot exclude later consumers or bind removal to an unchanged entry. No revised contract accepted. Reopen only with a design that proves exclusive fixture lifetime; no change to apartment priorities.
+
+**C8ao MANAGER CONTINUITY DESIGN REVIEW COMPLETED (2026-11-26); native C8l remains blocked.**
+Neither name snapshots nor systemd notifications prove uninterrupted invocation identity. No manager adapter or approval change. [Review and next design decision](docs/private_annotation_verification.plan.md#c8ao--managerinvocation-continuity-review-design-complete-native-gate-closed).
+
+**C8an POST-ACK SUPERVISOR COMPOSITION COMPLETED / WSL VERIFIED (2026-11-25):**
+21 focused tests passed. Keep the exact pinned handle through reply, exit and verified retirement.
+Native pre-go acquisition, result/cleanup adapters and launcher stay pending.
+
+**C8am BORROWED PIDFD EXIT READER COMPLETED / WSL VERIFIED (2026-11-24):**
+19 focused tests passed.
+One query after readiness on a caller-bound worker descriptor; no launcher
+or authority to act on the worker.
+
+**C8al DISPOSABLE WSL POST-REAP CAPABILITY COMPLETED (2026-11-24):**
+One approved synthetic non-parent observation passed on WSL. No managed
+canary result or private processing evidence; actual launch pins and
+supervisor wiring remain pending.
+
+**C8ak PIDFD EXIT BUFFER COMPLETED / WSL VERIFIED (2026-11-24):**
+14 focused tests passed. Supplied-byte decoder only; native ABI and post-reap support unverified.
+
+**C8aj FAKE TERMINAL EVIDENCE COMPLETED / WSL VERIFIED (2026-11-24):**
+11 focused tests passed. Retirement checks bound exit and cleanup independently. No ABI
+adapter, pidfd query or managed launch.
+
+**C8ai SELF-EXIT EVIDENCE REVIEW COMPLETED (2026-11-23):** Require exact
+bound worker exit status independently of unit collection. Supplied-evidence
+tests, native support verification and actual launch pins remain pending.
+
+**C8ah LAUNCH MANIFEST EQUALITY COMPLETED / WSL VERIFIED (2026-11-23):**
+8 focused tests passed. Pure declared manifest contract. Actual closure, measurement and terminal
+evidence still pending before native submission.
+
+**C8ag TEST EVIDENCE ANCHOR COMPLETED / WSL VERIFIED (2026-11-23):**
+Exact approved directory created, synchronized and pinned empty. Receipt,
+reviewed launch scope and native supervisor wiring remain pending.
+
+**C8af RECEIPT SCOPE BINDING COMPLETED / WSL VERIFIED (2026-11-23):**
+10 focused tests passed. Pure equality over supplied approval/anchor/preflight pins; acquisition,
+independent expected scope and native wiring remain gated.
+
+**C8ae EXCLUSIVE CHARGE RECEIPT COMPLETED / WSL VERIFIED (2026-11-22):**
+14 focused tests passed. Borrowed test-only directory, fixed basename, no reset. Stable
+anchor acquisition, binding to approval/preflight, and native wiring pending.
+
+**C8ad FAKE STARTUP LIFECYCLE COMPLETED / WSL VERIFIED (2026-11-22):**
+24 focused tests passed. Supplied-observation review only; no durable
+charge, native manager, or cleanup adapter.
+
+**C8ac STARTUP IDENTITY REVIEW COMPLETED (2026-11-22):** Cooperative mode
+must refuse ambiguous startup and self-exit without name-based stop.
+Next: fake supervisor lifecycle tests, then native wiring review and preflight;
+this is not an executed or deployed worker.
+
+**C8ab CONSUMING-WAIT ACCOUNTING COMPLETED / WSL VERIFIED (2026-11-22):**
+One exact pidfd wait via an injected adapter; consuming status does not mean
+the exit is accepted. 16 focused tests passed; integration still pending.
+
+**C8aa ONE-SHOT RELEASE ACCOUNTING COMPLETED / WSL VERIFIED (2026-11-22):**
+The disconnected positive exchange records no write, uncertain write, or a
+confirmed local byte write without implying acceptance. 23 focused tests passed. The consuming wait
+and supervisor remain pending.
+
+**C8z NON-REAPING NEGATIVE CONTROL COMPLETED / WSL VERIFIED (2026-11-22):**
+Observes without consuming exit status; 21 focused tests passed. Supervisor release/reap accounting
+and native wiring remain pending.
+
+**C8y DISCONNECTED CHILD SLOT HANDOFF COMPLETED / WSL VERIFIED (2026-11-22):**
+Fixed slot handoff over injected operations only; 16 focused tests passed. No native inventory scanner
+or caller; single-owner release/reap accounting remains next.
+
+**C8x COOPERATIVE HANDOFF DESIGN REVIEW COMPLETED (2026-11-22):**
+Exact child descriptor inventory and a single owner for release/reap outcomes
+are prerequisites to native wiring. Next: disconnected child handoff and
+failure tests. No launch; see the [verification plan](docs/private_annotation_verification.plan.md#c8x-cooperative-pre-exec-and-supervisor-review--design-complete-do-not-launch).
+
+**C8w COOPERATIVE CHANNEL OWNERSHIP COMPLETED / WSL VERIFIED (2026-11-22):**
+Own the private pipes and split role copies; 12 focused tests passed.
+Exact pre-exec inventory and native caller remain pending.
+
+**C8v COOPERATIVE PAGE COVERAGE COMPLETED / WSL VERIFIED (2026-11-22):**
+Approved exact page coverage tolerates equivalent row splits in this path only.
+40 focused tests passed; native supervisor and preflight remain gated.
+
+**C8u LOADER LAYOUT REVIEW COMPLETED (2026-11-22):** Digest, load headers and
+page size matched read-only expectations.
+
+**C8t COOPERATIVE MISSING-LEAF CONTROL COMPLETED / WSL VERIFIED (2026-11-22):**
+Empty readiness and exact-child exit 127; 20 focused tests passed.
+Native lifecycle not wired.
+
+**C8s COOPERATIVE RELEASE GATE COMPLETED / WSL VERIFIED (2026-11-22):**
+Unwired positive exchange using already-owned channels; 17 focused tests
+passed. Native lifecycle and negative control remain pending.
+
+**C8r PAIRED CHILD HANDLE SCOPE COMPLETED / WSL VERIFIED (2026-11-22):**
+Disconnected pairing from the sole parent's fork result and verified private
+proc root; 22 focused tests passed. Live caller, release fencing and native
+preflight remain pending.
+
+**C8q COOPERATIVE CHILD EXIT FENCE COMPLETED / WSL VERIFIED (2026-11-21):**
+Non-reaping pidfd checks before and after capture; 18 focused tests passed.
+Trusted production of the exact paired handles remains gated.
+
+**C8p ANCHORED COOPERATIVE MAP READER COMPLETED / WSL VERIFIED (2026-11-21):**
+Fixed-name bounded capture and comparison only; 16 focused tests passed.
+Live task ownership and isolated access remain gated.
+
+**C8o OWNED DESCRIPTOR READER COMPLETED / WSL VERIFIED (2026-11-21):**
+Read-only exact-handle metadata; 8 focused tests passed. No producer or caller.
+
+**C8n SUPPLIED DESCRIPTOR REVIEW COMPLETED / WSL VERIFIED (2026-11-21):**
+Compare exact parent/child pipe identities and inheritance flags. Trusted
+live acquisition, complete inventory and anchored capture remain pending.
+18 focused tests passed across this check, fixture, and fake review.
+
+**C8m FIXED COOPERATIVE ENTRY COMPLETED / WSL VERIFIED (2026-11-21):**
+14 focused tests passed across the fixture and fake cooperative reviewer.
+Inert bytes only. Supervision, fixed layout review and exact preflight
+still gate the single conditionally approved synthetic run.
+
+**C8l NATIVE PRODUCER DESIGN REVIEW COMPLETED (2026-11-21):** Exact pipe
+ownership, deadline and cleanup rules documented. Roger approved synthetic
+preparation and one conditional run; private maps access and measured fixture
+identity/layout remain verification gates. No production/runtime change.
+
+**C8k FAKE PREPARATION COMPLETED / WSL VERIFIED (2026-11-20):**
+Roger approved fake-only preparation of a tracer-free synthetic mapping
+test, not a kernel-enforced stop claim. 24 focused tests passed with the
+prior mapping/held-stop tests. Native producer review remains a separate gate.
+
+**C8j NATIVE EVIDENCE REVIEW COMPLETED / NATIVE ADAPTER BLOCKED (2026-11-20):**
+The existing pidfd does not bind numeric attach across exit and PID reuse.
+Targeted security review must show exact-task lifetime and wait/cleanup
+ownership before implementation. No execution or private-dispatch authority.
+
+**C8i FAKE LIFECYCLE COMPLETED / WSL VERIFIED (2026-11-20):** Require the
+exact supplied hold/capture sequence, both controls and cleanup before
+returning a mapping summary. 17 focused tests passed with the C8h observer.
+Native evidence acquisition, attach and execution remain separately gated. See the
+[private annotation verification plan](docs/private_annotation_verification.plan.md#c8i-held-stop-supervisor--fake-lifecycle-verified-native-pending).
+
+**C8h COMPLETED / WSL VERIFIED:** Disconnected paused-canary capture seam.
+Focused 29/full 1,661 OK (one skip). Live supervisor binding and native
+verification remain pending and separately scoped.
+
+**C8g COMPLETED / WSL VERIFIED (2026-11-19):** Test-only supplied map comparison.
+Focused 23/full 1,655 OK (one skip). Bounded live acquisition, exact process
+binding and a separately approved native test remain pending.
+
+**C8f COMPLETED / WSL VERIFIED (2026-11-19):** Inert transitive resident-interpreter
+fixture; focused29/full1,651 OK (one expected skip). Native reuse verification
+is not authorized; exact mapping evidence still needed. C8e evidence unchanged.
 
 **C8e COMPLETED / NATIVE WSL PASS (2026-11-19):** Single approved attempt exit0,
 accepted c0b20d6e...0ecf7b40 loader. Intended42/decoy13/direct-missing127/

@@ -47,6 +47,15 @@ class ResidentPresentationTests(unittest.TestCase):
         self.assertEqual(busy.public_dict()["animation_slot"], "resident.murr.thinking")
         self.assertEqual(busy.public_dict()["activity_label"], "Thinking")
 
+    def test_malformed_action_kind_leaves_the_idle_cue_intact(self):
+        for kind in (["reading"], {"kind": "reading"}, "unknown", None):
+            with self.subTest(kind=kind):
+                plan = ResidentPresentationPlan.from_resident_snapshot({
+                    "activity": "idle",
+                    "persona": {"persona_id": "murr", "resident_action": {"kind": kind}},
+                })
+                self.assertEqual(plan.public_dict()["animation_slot"], "resident.murr.idle")
+
 
 if __name__ == "__main__":
     unittest.main()
